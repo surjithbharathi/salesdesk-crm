@@ -1,5 +1,11 @@
 # Salesdesk CRM
 
+**Continuing on another computer? Start with [HANDOFF.md](HANDOFF.md).** It contains setup, deployment state, Android signing caveats, completed work and outstanding acceptance checks. No runtime database, private screenshots or secrets are included in this public repository.
+
+Latest Android v0.8.3 improves the five native screens and introduces event-triggered business call sync (20-second settle delay, recording retries, minute fallback while active). Web call views now refresh changed synced-call data every three seconds without interrupting forms/audio. All 42 CRM tests and Android assemble/lint pass. The APK was installed; final device UI/latency checks remain incomplete after USB disconnected. See [design-qa.md](design-qa.md). The user confirmed actual mobile login/background SIM calling before this UI pass; this is not verification of every call/recording/device scenario.
+
+The paragraphs below preserve feature history. Current status/limitations in HANDOFF.md, WHATSAPP.md, CLICK_TO_CALL.md and design-qa.md supersede older test counts or earlier unverified/no-dialing boundaries.
+
 v0.8.1 adds an opt-in Android background SIM call bridge with a **Salesdesk is running** notification. Lead → Call on my phone routes an authenticated, expiring, non-retried request to the same user's ready phone. App screen need not stay visible, but service/network/permissions are required; actual background dialing remains unverified. See [CLICK_TO_CALL.md](CLICK_TO_CALL.md). Older boundaries below claiming no dialing are superseded by this opt-in bridge, not by a guarantee of always-on calling.
 
 v0.8 adds native Android Home, Leads, Calls, Tasks and Settings, with the same company/user login as web CRM. Shared sessions enforce user-scoped data and automatic call ownership; administrators create logins for existing CRM users. Call sync remains opt-in. The 30 automated tests pass; real-user login, live-phone recording sync and visual parity are not yet verified. See [MOBILE_SYNC.md](MOBILE_SYNC.md) and [MOBILE_REFERENCE.md](MOBILE_REFERENCE.md).

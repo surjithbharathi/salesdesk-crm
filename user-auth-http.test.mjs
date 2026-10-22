@@ -6,6 +6,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { once } from "node:events";
+import { DatabaseSync } from "node:sqlite";
+import { createUserAuth } from "./user-auth.mjs";
 
 test("shared company login protects browser and mobile data with user scoping", async (t) => {
   const dir = await mkdtemp(join(tmpdir(), "salesdesk-auth-http-"));
@@ -327,4 +329,56 @@ test("shared company login protects browser and mobile data with user scoping", 
   );
   assert.equal((await request(mobile, "/v1/workspace", "GET", undefined, auth)).status, 401);
   assert.equal((await request(mobile, "/v1/targets", "GET", undefined, auth)).status, 401);
+  const recoveryDb = new DatabaseSync(join(dir, "test.sqlite"));
+  const recoveryAuth = createUserAuth({
+    db: recoveryDb,
+    getUser: (id) => {
+      const row = recoveryDb
+        .prepare("SELECT body FROM records WHERE kind='users' AND id=?")
+        .get(id);
+      return row ? JSON.parse(row.body) : null;
+    },
+  });
+  const recovery = recoveryAuth.issuePasswordReset(memberCredentials.username);
+  recoveryDb.close();
+  const changedPassword = "a freshly selected private password";
+  assert.equal(
+    (await web("auth/reset", "POST", { token: recovery.token, password: changedPassword })).status,
+    403,
+  );
+  assert.equal(
+    (
+      await web(
+        "auth/reset",
+        "POST",
+        { token: recovery.token, password: changedPassword },
+        { Origin: base },
+      )
+    ).status,
+    200,
+  );
+  assert.equal(
+    (
+      await web(
+        "auth/reset",
+        "POST",
+        { token: recovery.token, password: changedPassword },
+        { Origin: base },
+      )
+    ).status,
+    401,
+  );
+  assert.equal((await web("state", "GET", undefined, memberCookie)).status, 401);
+  assert.equal((await web("auth/login", "POST", memberCredentials, { Origin: base })).status, 401);
+  assert.equal(
+    (
+      await web(
+        "auth/login",
+        "POST",
+        { ...memberCredentials, password: changedPassword },
+        { Origin: base },
+      )
+    ).status,
+    200,
+  );
 });
