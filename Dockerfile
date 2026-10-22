@@ -1,4 +1,5 @@
 FROM node:22-bookworm-slim
+LABEL org.opencontainers.image.source=https://github.com/surjithbharathi/salesdesk-crm
 ENV NODE_ENV=production
 WORKDIR /app
 COPY package.json package-lock.json ./

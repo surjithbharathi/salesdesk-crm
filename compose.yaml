@@ -1,8 +1,7 @@
 services:
   salesdesk:
-    build:
-      context: https://github.com/surjithbharathi/salesdesk-crm.git#main
-    pull_policy: build
+    image: ghcr.io/surjithbharathi/salesdesk-crm:latest
+    pull_policy: always
     restart: unless-stopped
     init: true
     environment:
