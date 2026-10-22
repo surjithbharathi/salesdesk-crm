@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Salesdesk CRM</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <aside>
+      <a class="brand" href="#dashboard"><span>S</span> salesdesk<span class="dot">●</span></a>
+      <div class="workspace">
+        <span class="avatar">D</span>
+        <div><b>Demo workspace</b><small>Sales workspace</small></div>
+      </div>
+      <nav id="nav" aria-label="Main navigation"></nav>
+      <footer>
+        <span class="green">●</span> Local workspace<small>SQLite storage · single operator</small>
+      </footer>
+    </aside>
+    <main>
+      <header>
+        <div>
+          <button id="menu" aria-label="Toggle navigation">☰</button
+          ><span class="muted">Workspace</span><span class="divider">/</span
+          ><b id="breadcrumb">Dashboard</b>
+        </div>
+        <div>
+          <span class="demo">DEMO DATA</span><span id="today"></span><span class="avatar">SD</span>
+        </div>
+      </header>
+      <div class="page">
+        <div id="heading"></div>
+        <div id="content" aria-live="polite">Loading your workspace…</div>
+        <p class="footnote">
+          Local development workspace · manual activity logging · no live telephony or messaging
+          connected
+        </p>
+      </div>
+    </main>
+    <dialog id="modal"><div id="modal-content"></div></dialog>
+    <div id="toast" role="status" hidden></div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
