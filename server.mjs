@@ -573,6 +573,8 @@ const files = {
   "/reports.js": ["public/reports.js", "text/javascript"],
   "/lead-views.js": ["public/lead-views.js", "text/javascript"],
   "/auth.js": ["public/auth.js", "text/javascript"],
+  "/reset-password.html": ["public/reset-password.html", "text/html"],
+  "/reset-password.js": ["public/reset-password.js", "text/javascript"],
   "/style.css": ["public/style.css", "text/css"],
 };
 const server = http.createServer(async (req, res) => {
@@ -640,6 +642,11 @@ const server = http.createServer(async (req, res) => {
         const result = userAuth[action](await body(req));
         cookie(result.token);
         send(200, { user: result.user, company: result.company });
+        return;
+      }
+      if (action === "reset" && req.method === "POST") {
+        sameOrigin();
+        send(200, userAuth.resetPassword(await body(req)));
         return;
       }
       if (!identity) bad("Login required", 401);

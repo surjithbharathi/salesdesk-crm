@@ -11,7 +11,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export function createUserAuth({ db, getUser, now = () => Date.now() }) {
   db.exec(`CREATE TABLE IF NOT EXISTS auth_accounts(user_id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, salt TEXT NOT NULL, password_hash TEXT NOT NULL, role TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS auth_sessions(token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires_at INTEGER NOT NULL, device_id TEXT);
-    CREATE TABLE IF NOT EXISTS auth_settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);`);
+    CREATE TABLE IF NOT EXISTS auth_settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS auth_resets(token_hash TEXT PRIMARY KEY,user_id TEXT NOT NULL,expires_at INTEGER NOT NULL);`);
   const failures = new Map();
   let globalFailures = [];
   const configured = () => Boolean(db.prepare("SELECT 1 FROM auth_accounts LIMIT 1").get());
@@ -138,5 +139,69 @@ export function createUserAuth({ db, getUser, now = () => Date.now() }) {
         active: Boolean(getUser(account.user_id)?.active),
       }));
   }
-  return { configured, bootstrap, createAccount, login, authenticate, revoke, listAccounts };
+  // Recovery tokens are issued only by an operator with database/console access,
+  // never through an unauthenticated HTTP "forgot password" endpoint.
+  function issuePasswordReset(username) {
+    const account = db
+      .prepare("SELECT * FROM auth_accounts WHERE username=?")
+      .get(usernameOf(username));
+    const user = publicUser(account),
+      token = randomBytes(32).toString("base64url"),
+      expiresAt = now() + 10 * 60 * 1000;
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      db.prepare("DELETE FROM auth_resets WHERE user_id=? OR expires_at<=?").run(user.id, now());
+      db.prepare("INSERT INTO auth_resets VALUES(?,?,?)").run(digest(token), user.id, expiresAt);
+      db.exec("COMMIT");
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
+    return { token, expiresAt, user };
+  }
+  function resetPassword({ token, password } = {}) {
+    if (typeof token !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(token))
+      fail("Reset link is invalid or expired", 401);
+    if (typeof password !== "string" || password.length < 12 || password.length > 200)
+      fail("Password must be 12–200 characters");
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      const reset = db.prepare("SELECT * FROM auth_resets WHERE token_hash=?").get(digest(token));
+      if (!reset || reset.expires_at <= now()) fail("Reset link is invalid or expired", 401);
+      const account = db.prepare("SELECT * FROM auth_accounts WHERE user_id=?").get(reset.user_id);
+      publicUser(account);
+      const salt = randomBytes(32).toString("hex"),
+        hash = scryptSync(password, salt, 64).toString("hex");
+      db.prepare("UPDATE auth_accounts SET salt=?,password_hash=? WHERE user_id=?").run(
+        salt,
+        hash,
+        reset.user_id,
+      );
+      db.prepare("DELETE FROM auth_sessions WHERE user_id=?").run(reset.user_id);
+      db.prepare("DELETE FROM auth_resets WHERE user_id=?").run(reset.user_id);
+      if (db.prepare("SELECT 1 FROM sqlite_master WHERE name='call_receiver'").get())
+        db.prepare("UPDATE call_receiver SET armed=0 WHERE user_id=?").run(reset.user_id);
+      if (db.prepare("SELECT 1 FROM sqlite_master WHERE name='call_commands'").get())
+        db.prepare(
+          "UPDATE call_commands SET status='Cancelled' WHERE user_id=? AND status='Pending'",
+        ).run(reset.user_id);
+      db.exec("COMMIT");
+      failures.delete(account.username);
+      return { ok: true };
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+  return {
+    configured,
+    bootstrap,
+    createAccount,
+    login,
+    authenticate,
+    revoke,
+    listAccounts,
+    issuePasswordReset,
+    resetPassword,
+  };
 }

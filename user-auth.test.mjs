@@ -4,6 +4,38 @@ import { DatabaseSync } from "node:sqlite";
 import { createUserAuth } from "./user-auth.mjs";
 
 const password = "a sufficiently long password";
+test("Recovery token is hashed, one-use and revokes all existing sessions", (t) => {
+  const { auth, db, bootstrap } = fixture(t);
+  const old = bootstrap();
+  const recovery = auth.issuePasswordReset("manager@example.com");
+  assert.ok(
+    !JSON.stringify(db.prepare("SELECT * FROM auth_resets").all()).includes(recovery.token),
+  );
+  assert.throws(() => auth.resetPassword({ token: recovery.token, password: "short" }));
+  assert.deepEqual(
+    auth.resetPassword({ token: recovery.token, password: "a new private password" }),
+    { ok: true },
+  );
+  assert.throws(() => auth.authenticate(old.token));
+  assert.throws(() => auth.login({ username: "manager@example.com", password }));
+  assert.equal(
+    auth.login({ username: "manager@example.com", password: "a new private password" }).user.id,
+    "u1",
+  );
+  assert.throws(() =>
+    auth.resetPassword({ token: recovery.token, password: "another long password" }),
+  );
+});
+test("Recovery replacement and expiration invalidate older tokens", (t) => {
+  const { auth, bootstrap, advance } = fixture(t);
+  bootstrap();
+  const old = auth.issuePasswordReset("manager@example.com"),
+    fresh = auth.issuePasswordReset("manager@example.com");
+  assert.throws(() => auth.resetPassword({ token: old.token, password }));
+  advance(600001);
+  assert.throws(() => auth.resetPassword({ token: fresh.token, password }));
+  assert.throws(() => auth.issuePasswordReset("unknown-user"));
+});
 function fixture(t) {
   const db = new DatabaseSync(":memory:");
   t.after(() => db.close());
