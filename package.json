@@ -1,12 +1,12 @@
 {
   "name": "salesdesk-crm",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
-    "check": "node --check server.mjs && node --check extensions.mjs && node --check whatsapp.mjs && node --check whatsapp-auth.mjs && node --check public/app.js && node --check public/csv.js && node --check public/reports.js && node --check public/lead-views.js",
-    "test": "node --test server.test.mjs extensions.test.mjs csv.test.mjs reports.test.mjs lead-views.test.mjs whatsapp.test.mjs"
+    "check": "node --check server.mjs && node --check mobile-sync.mjs && node --check extensions.mjs && node --check whatsapp.mjs && node --check whatsapp-auth.mjs && node --check public/app.js && node --check public/csv.js && node --check public/reports.js && node --check public/lead-views.js",
+    "test": "node --test server.test.mjs extensions.test.mjs csv.test.mjs reports.test.mjs lead-views.test.mjs whatsapp.test.mjs mobile-sync.test.mjs mobile-http.test.mjs"
   },
   "dependencies": {
     "baileys": "7.0.0-rc14",

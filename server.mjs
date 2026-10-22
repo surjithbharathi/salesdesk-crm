@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { createExtensions } from "./extensions.mjs";
 import { encryptedAuth } from "./whatsapp-auth.mjs";
 import { createWhatsApp, phoneDigits } from "./whatsapp.mjs";
+import { createMobileSync, MAX_AUDIO } from "./mobile-sync.mjs";
 
 const port = Number(process.env.PORT || 3100);
 await mkdir(new URL("./data/", import.meta.url), { recursive: true });
@@ -262,6 +263,68 @@ async function body(req) {
 }
 const extensions = createExtensions({ all, get, put, tx, stamp, log, bad });
 kinds.push(...extensions.kinds);
+const mobile = createMobileSync({
+  db,
+  all,
+  get,
+  put,
+  stamp,
+  tx,
+  log,
+  keyPath:
+    (process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname) + ".mobile-key",
+});
+// Separate device-only listener: never proxies the unauthenticated web/admin app.
+const mobilePort = Number(process.env.MOBILE_PORT || port + 1);
+const mobileServer = http.createServer(async (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  const reply = (status, value) => {
+    res.writeHead(status, { "Content-Type": "application/json" });
+    res.end(JSON.stringify(value));
+  };
+  try {
+    if (req.headers.origin) bad("Browser access is not supported on the device API", 403);
+    const device = mobile.authenticate(req.headers.authorization);
+    const url = new URL(req.url, "http://localhost");
+    if (req.method === "GET" && url.pathname === "/v1/targets") {
+      reply(200, mobile.targets(device));
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/v1/calls") {
+      if (req.headers["content-type"]?.split(";")[0] !== "application/json")
+        bad("JSON required", 415);
+      reply(200, mobile.call(device, await body(req)));
+      return;
+    }
+    const match = /^\/v1\/calls\/([a-f0-9-]{36})\/recording$/.exec(url.pathname);
+    if (req.method === "PUT" && match) {
+      let size = 0;
+      const chunks = [];
+      for await (const chunk of req) {
+        size += chunk.length;
+        if (size > MAX_AUDIO) bad("Recording too large", 413);
+        chunks.push(chunk);
+      }
+      reply(
+        200,
+        mobile.recording(device, match[1], Buffer.concat(chunks), {
+          mode: req.headers["x-match-mode"],
+          duration: req.headers["x-audio-duration"],
+          modified: req.headers["x-file-modified"],
+        }),
+      );
+      return;
+    }
+    bad("Not found", 404);
+  } catch (e) {
+    reply(e.status || 500, { error: e.status ? e.message : "Device sync failed" });
+  }
+});
+mobileServer.requestTimeout = 60000;
+mobileServer.listen(mobilePort, "127.0.0.1", () =>
+  console.log(`Device sync API: http://127.0.0.1:${mobilePort}`),
+);
 function waConversation(leadId) {
   let conversation = all("conversations").find(
     (c) => c.leadId === leadId && c.channel === "WhatsApp" && c.provider === "baileys",
@@ -393,7 +456,38 @@ const server = http.createServer(async (req, res) => {
         bad("JSON content type required", 415);
     }
     if (url.pathname === "/api/state" && req.method === "GET") {
-      send(200, Object.fromEntries(kinds.map((k) => [k, all(k)])));
+      send(200, {
+        ...Object.fromEntries(kinds.map((k) => [k, all(k)])),
+        mobileCalls: all("mobileCalls"),
+      });
+      return;
+    }
+    if (url.pathname === "/api/mobile/devices" && req.method === "GET") {
+      send(200, mobile.devices());
+      return;
+    }
+    if (url.pathname === "/api/mobile/devices" && req.method === "POST") {
+      if (!["http://localhost:" + port, "http://127.0.0.1:" + port].includes(req.headers.origin))
+        bad("Local same-origin request required", 403);
+      send(200, mobile.issue(await body(req)));
+      return;
+    }
+    const revokeDevice = /^\/api\/mobile\/devices\/([a-f0-9-]{36})\/revoke$/.exec(url.pathname);
+    if (revokeDevice && req.method === "POST") {
+      if (!["http://localhost:" + port, "http://127.0.0.1:" + port].includes(req.headers.origin))
+        bad("Local same-origin request required", 403);
+      mobile.revoke(revokeDevice[1]);
+      send(200, { revoked: true });
+      return;
+    }
+    const recording = /^\/api\/mobile\/recordings\/([a-f0-9-]{36})$/.exec(url.pathname);
+    if (recording && req.method === "GET") {
+      const audio = mobile.playback(recording[1]);
+      send(200, audio.bytes, {
+        "Content-Type": audio.mime,
+        "Content-Length": audio.bytes.length,
+        "Content-Disposition": "inline",
+      });
       return;
     }
     if (url.pathname === "/api/whatsapp/status" && req.method === "GET") {
@@ -596,6 +690,7 @@ const server = http.createServer(async (req, res) => {
 server.listen(port, "127.0.0.1", () => console.log(`Salesdesk CRM: http://localhost:${port}`));
 for (const signal of ["SIGINT", "SIGTERM"])
   process.on(signal, () => {
+    mobileServer.close();
     whatsapp.stop();
     server.close(() => {
       db.close();

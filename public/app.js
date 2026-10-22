@@ -177,6 +177,7 @@ async function api(path, method = "GET", body) {
 async function refresh() {
   state = await api("state");
   waStatus = await api("whatsapp/status");
+  mobileDevices = await api("mobile/devices");
   render();
 }
 async function change(kind, id, body) {
@@ -568,7 +569,7 @@ function activityFeed(items) {
     ? items
         .map(
           (a) =>
-            `<div class="activity-item"><span class="avatar">${{ Call: "↗", Note: "≡", Message: "▢", Visit: "⌖", System: "⟳" }[a.type]}</span><div>${leadButton(a.leadId)}<p>${esc(a.text)}</p><small>${esc(a.type)} · ${date(a.createdAt)}</small></div></div>`,
+            `<div class="activity-item"><span class="avatar">${{ Call: "↗", Note: "≡", Message: "▢", Visit: "⌖", System: "⟳" }[a.type]}</span><div>${leadButton(a.leadId)}<p>${esc(a.text)}</p>${a.recordingId ? `<audio controls preload="none" src="/api/mobile/recordings/${esc(a.recordingId)}"></audio>` : ""}<small>${esc(a.type)} · ${date(a.occurredAt || a.createdAt)}</small></div></div>`,
         )
         .join("")
     : '<div class="empty">No activity to show yet.</div>';
@@ -849,6 +850,31 @@ function distribution() {
   );
 }
 let waStatus = { state: "disconnected", qr: null, error: "", unmatched: 0 };
+let mobileDevices = [];
+function mobilePanel() {
+  return panel(
+    "Android call & recording sync",
+    `<div class="panel-body"><p>Companion app reads existing call logs and your selected recording folder. Only one matching active lead assigned to the device owner can receive a call. No microphone recording, personal-call uploads or automatic grants.</p><p class="warning-box">Create a separate token per phone. Device API is separate on loopback port 3101; use USB reverse for debug or a privately deployed HTTPS proxy for the device API only. Do not publish the local CRM/admin port.</p><form id="mobile-device"><label>Device label<input name="name" required maxlength="100" placeholder="Business Android phone"></label><label>Assigned CRM owner<select name="owner" required>${opts(
+      state.users.filter((u) => u.active).map((u) => [u.id, u.name]),
+      "",
+      "Choose owner",
+    )}</select></label><label><input type="checkbox" required> I authorize this device to sync this owner's business call metadata and consented recordings.</label><button class="primary" type="submit">Create device token</button></form>${table(
+      ["Device", "Owner", "Access", "Action"],
+      mobileDevices.map(
+        (d) =>
+          `<tr><td>${esc(d.name)}</td><td>${esc(user(d.owner))}</td><td>${d.revoked ? "Revoked" : "Active"}</td><td>${d.revoked ? "—" : `<button data-action="mobile-revoke" data-device="${esc(d.id)}">Revoke device</button>`}</td></tr>`,
+      ),
+    )}<h3>Synced phone calls</h3>${table(
+      ["Lead", "Started", "Direction", "Duration", "Recording"],
+      (state.mobileCalls || [])
+        .slice(0, 100)
+        .map(
+          (c) =>
+            `<tr><td>${leadButton(c.leadId)}</td><td>${esc(date(new Date(c.startedAt).toISOString()))}</td><td>${esc(c.direction)}</td><td>${Number(c.duration)}s</td><td>${c.recordingId ? `<audio controls preload="none" src="/api/mobile/recordings/${esc(c.recordingId)}"></audio><small>${esc(c.matchMode)} match</small>` : "Waiting for file / review"}</td></tr>`,
+        ),
+    )}</div>`,
+  );
+}
 function waStatusHtml() {
   return `<p><b>${esc(waStatus.state)}</b></p>${waStatus.error ? `<p class="warning-box">${esc(waStatus.error)}</p>` : ""}${waStatus.qr ? `<img src="${esc(waStatus.qr)}" alt="Private WhatsApp pairing QR" width="280" height="280"><p>On your dedicated phone: WhatsApp → Linked devices → Link a device. Do not share this QR.</p>` : ""}<small>Unmatched incoming texts this session: ${Number(waStatus.unmatched || 0)}. Only new individual text messages matching exactly one active lead's full international number are stored; groups, history and media are ignored.</small>`;
 }
@@ -876,6 +902,7 @@ setInterval(async () => {
 }, 3000);
 function integrations() {
   return (
+    mobilePanel() +
     panel(
       "WhatsApp · Baileys",
       `<div class="panel-body"><div class="warning-box">Unofficial WhatsApp linked-device client, not Meta's Business API. Account restriction is possible: use a dedicated test number. Incoming matching text is stored in this local CRM. This single-operator app has no production sign-in.</div><div id="wa-status">${waStatusHtml()}</div><label><input type="checkbox" id="wa-consent"> I understand the unofficial-client risk and allow this local CRM to store my linked session and matching incoming text.</label><div class="row"><button data-action="wa-connect">Connect / resume</button><button data-action="wa-disconnect">Pause connection</button></div><p>Pairing is your action. Pause keeps the encrypted session; revoke it from WhatsApp's Linked devices screen to unlink. No messages are sent automatically.</p><form id="wa-send"><h3>Send one WhatsApp text</h3><label>Recipient lead<select name="leadId" required>${opts(
@@ -1044,7 +1071,7 @@ function showLead(id, tab = "Timeline") {
     tasks = state.tasks.filter((t) => t.leadId === id);
   let body = "";
   if (tab === "Timeline")
-    body = `<div class="row"><button data-action="lead-activity">＋ Log activity</button><button data-action="lead-task">◷ Schedule follow-up</button></div><div class="timeline">${acts.map((a) => `<div class="event"><b>${esc(a.type)}</b> · ${esc(a.text)}${a.type === "Call" ? `<small>${esc(a.direction)} · ${esc(a.outcome)} · ${a.duration}s</small>` : ""}<small>${date(a.createdAt)}</small></div>`).join("")}</div>`;
+    body = `<div class="row"><button data-action="lead-activity">＋ Log activity</button><button data-action="lead-task">◷ Schedule follow-up</button></div><div class="timeline">${acts.map((a) => `<div class="event"><b>${esc(a.type)}</b> · ${esc(a.text)}${a.type === "Call" ? `<small>${esc(a.direction)} · ${esc(a.outcome)} · ${a.duration}s</small>` : ""}${a.recordingId ? `<audio controls preload="none" src="/api/mobile/recordings/${esc(a.recordingId)}"></audio>` : ""}<small>${date(a.occurredAt || a.createdAt)}</small></div>`).join("")}</div>`;
   if (tab === "Details")
     body = `<div class="form-grid">${[
       ["Phone", l.phone],
@@ -1151,6 +1178,11 @@ document.addEventListener("click", async (e) => {
       return;
     }
     const a = b.dataset.action;
+    if (a === "mobile-revoke") {
+      await api(`mobile/devices/${b.dataset.device}/revoke`, "POST", {});
+      await refresh();
+      toast("Device token revoked; existing CRM records retained");
+    }
     if (a === "wa-connect" || a === "wa-disconnect") {
       if (a === "wa-connect" && !$("#wa-consent")?.checked)
         throw Error("Please acknowledge the WhatsApp risks and local storage first.");
@@ -1382,6 +1414,15 @@ document.addEventListener("submit", async (e) => {
   if (button) button.disabled = true;
   try {
     const p = Object.fromEntries(new FormData(f));
+    if (f.id === "mobile-device") {
+      const device = await api("mobile/devices", "POST", p);
+      await refresh();
+      modal(
+        "Private device token · shown once",
+        `<p>Copy into the Android companion. This token grants access to the selected owner's business-call sync. Do not share it or paste it into chat.</p><label>Device token<input readonly value="${esc(device.token)}"></label><p>USB debug endpoint: http://127.0.0.1:3101. Revoke the device if this token is lost.</p>`,
+      );
+      return;
+    }
     if (f.id === "wa-send") {
       const fingerprint = JSON.stringify([p.leadId, p.text]);
       if (f.dataset.fingerprint !== fingerprint) {
