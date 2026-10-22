@@ -878,3 +878,51 @@ progress::-moz-progress-bar {
     flex-wrap: wrap;
   }
 }
+/* Collaboration workspace */
+.ticket-board {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  padding: 16px 0;
+  align-items: flex-start;
+}
+.ticket-column {
+  flex: 0 0 290px;
+  padding: 16px;
+}
+.ticket-column h2 {
+  font-size: 15px;
+  margin: 0 0 16px;
+}
+.message-record {
+  border: 1px solid #e1e6ed;
+  border-radius: 8px;
+  padding: 12px;
+  margin: 12px 0;
+  background: #fff;
+  overflow-wrap: anywhere;
+}
+.message-record h3 {
+  font-size: 14px;
+  margin: 0 0 8px;
+}
+.message-record p {
+  white-space: pre-wrap;
+}
+.document-preview {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 60vh;
+  overflow: auto;
+}
+.report-bar {
+  display: grid;
+  grid-template-columns: minmax(90px, 1fr) minmax(100px, 3fr) minmax(70px, 1fr);
+  align-items: center;
+  gap: 12px;
+  margin: 14px;
+}
+.report-bar progress {
+  width: 100%;
+  accent-color: #5b55ce;
+}

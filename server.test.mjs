@@ -110,6 +110,19 @@ test("CRM lifecycle, transaction rollback, validation, and persistent storage", 
     assert.equal(s.leads.find((l) => l.id === id).disposition, "Won");
     assert.equal(s.tasks.find((t) => t.id === task.id).status, "Done");
     assert.ok(s.activities.some((a) => a.leadId === id && a.type === "Call"));
+    const secondDeal = await request("deals", "POST", {
+      leadId: id,
+      title: "Second opportunity",
+      owner,
+      value: 1000,
+      closeDate: "2026-11-02",
+      stage: "Proposal",
+    });
+    assert.equal(secondDeal.status, 200);
+    await request("deals/" + deal.id, "PATCH", { stage: "Won" });
+    assert.equal((await request("state")).data.leads.find((l) => l.id === id).stage, "Opportunity");
+    await request("deals/" + secondDeal.data.id, "PATCH", { stage: "Lost" });
+    assert.equal((await request("state")).data.leads.find((l) => l.id === id).disposition, "Won");
     assert.equal((await request("leads/" + id, "PATCH", { stage: "Unknown" })).status, 400);
     assert.equal(
       (
@@ -149,12 +162,94 @@ test("CRM lifecycle, transaction rollback, validation, and persistent storage", 
       ],
     });
     assert.deepEqual(imported.data, { added: 1, skipped: 1 });
+    const reply = await request("autoReplies", "POST", {
+      name: "Conversation welcome",
+      trigger: "Conversation opened",
+      text: "Welcome — local draft",
+      enabled: true,
+    });
+    assert.equal(reply.status, 200);
+    const conversation = await request("conversations", "POST", {
+      leadId: id,
+      owner,
+      subject: "QA enquiry",
+      channel: "WhatsApp",
+    });
+    assert.equal(conversation.status, 200);
+    s = (await request("state")).data;
+    assert.equal(
+      s.messages.filter((m) => m.ruleId === reply.data.id && m.status === "Draft").length,
+      1,
+    );
+    const channel = await request("teamChannels", "POST", {
+      name: "Sales team",
+      memberIds: [owner],
+    });
+    assert.equal(channel.status, 200);
+    assert.equal(
+      (
+        await request("teamMessages", "POST", {
+          channelId: channel.data.id,
+          userId: owner,
+          text: "QA handoff",
+        })
+      ).status,
+      200,
+    );
+    const ticket = await request("tickets", "POST", {
+      leadId: id,
+      subject: "Service enquiry",
+      owner,
+      category: "Service",
+      priority: "High",
+    });
+    assert.equal(ticket.status, 200);
+    assert.equal(
+      (await request("tickets/" + ticket.data.id, "PATCH", { status: "Service Scheduled" })).status,
+      200,
+    );
+    const doc = await request("documents", "POST", {
+      leadId: id,
+      name: "requirements.txt",
+      content: "தமிழ் requirements\nSecond line",
+      mime: "text/plain",
+    });
+    assert.equal(doc.status, 200);
+    const download = await fetch(base + "/api/documents/" + doc.data.id + "/download");
+    assert.equal(await download.text(), "தமிழ் requirements\nSecond line");
+    assert.match(download.headers.get("content-disposition"), /^attachment;/);
+    assert.equal(
+      (
+        await request("attendance", "POST", {
+          userId: owner,
+          date: "2026-10-22",
+          checkIn: "2026-10-22T03:30:00Z",
+        })
+      ).status,
+      200,
+    );
+    assert.equal(
+      (
+        await request("savedReports", "POST", {
+          name: "Calls by outcome",
+          entity: "calls",
+          groupBy: "outcome",
+          measure: "count",
+          days: 7,
+        })
+      ).status,
+      200,
+    );
+    assert.equal((await fetch(base + "/csv.js")).status, 200);
     await stop();
     await start();
     s = (await request("state")).data;
     assert.ok(s.leads.some((l) => l.id === id));
     assert.ok(s.payments.some((p) => p.dealId === deal.id));
     assert.equal(s.leads.length, count + 1);
+    assert.ok(s.teamMessages.some((m) => m.channelId === channel.data.id));
+    assert.equal(s.tickets.find((t) => t.id === ticket.data.id).status, "Service Scheduled");
+    assert.ok(s.documents.some((d) => d.id === doc.data.id));
   } finally {
     await stop();
     await rm(dir, { recursive: true, force: true });

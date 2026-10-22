@@ -2,6 +2,7 @@ import http from "node:http";
 import { readFile, mkdir } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
 import { randomUUID } from "node:crypto";
+import { createExtensions } from "./extensions.mjs";
 
 const port = Number(process.env.PORT || 3100);
 await mkdir(new URL("./data/", import.meta.url), { recursive: true });
@@ -146,6 +147,7 @@ const ref = (kind, v, optional = false) => {
   return v;
 };
 function validate(kind, p, old = {}) {
+  if (extensions.kinds.includes(kind)) return extensions.validate(kind, p, old);
   const v = { ...old },
     field = (k, fn, def) => {
       v[k] = k in p ? fn(p[k]) : (v[k] ?? def);
@@ -256,9 +258,13 @@ async function body(req) {
   if (!p || typeof p !== "object" || Array.isArray(p)) bad("Expected object");
   return p;
 }
+const extensions = createExtensions({ all, get, put, tx, stamp, log, bad });
+kinds.push(...extensions.kinds);
 const files = {
   "/": ["public/index.html", "text/html"],
   "/app.js": ["public/app.js", "text/javascript"],
+  "/csv.js": ["public/csv.js", "text/javascript"],
+  "/reports.js": ["public/reports.js", "text/javascript"],
   "/style.css": ["public/style.css", "text/css"],
 };
 const server = http.createServer(async (req, res) => {
@@ -268,9 +274,9 @@ const server = http.createServer(async (req, res) => {
     "Content-Security-Policy",
     "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
   );
-  const send = (status, v) => {
-    res.writeHead(status, { "Content-Type": "application/json" });
-    res.end(JSON.stringify(v));
+  const send = (status, v, headers) => {
+    res.writeHead(status, headers || { "Content-Type": "application/json" });
+    res.end(headers ? v : JSON.stringify(v));
   };
   try {
     const url = new URL(req.url, "http://localhost");
@@ -308,6 +314,7 @@ const server = http.createServer(async (req, res) => {
           const l = stamp({ ...v, firstTouchAt: null });
           put("leads", l);
           log(l.id, "System", "Lead imported");
+          extensions.onEvent("Lead created", { leadId: l.id, eventId: l.id });
           if (phone) phones.add(phone);
           added++;
         }
@@ -316,9 +323,9 @@ const server = http.createServer(async (req, res) => {
       send(200, result);
       return;
     }
-    const match = url.pathname.match(
-      /^\/api\/(leads|activities|tasks|deals|payments|products|users|lists)(?:\/([a-zA-Z0-9-]+))?$/,
-    );
+    if (await extensions.handle(req, url, body, send)) return;
+    const match = url.pathname.match(/^\/api\/([a-zA-Z]+)(?:\/([a-zA-Z0-9-]+))?$/);
+    if (match && !kinds.includes(match[1])) bad("Not found", 404);
     if (match && ["POST", "PATCH"].includes(req.method)) {
       const [, kind, id] = match;
       if ((req.method === "POST" && id) || (req.method === "PATCH" && !id))
@@ -353,6 +360,12 @@ const server = http.createServer(async (req, res) => {
             l.stage = "Prospecting";
           l.updatedAt = now();
           put("leads", l);
+          if (type === "Call") {
+            extensions.onEvent("Call outcome", { leadId, eventId: a.id });
+            if (extra.outcome === "No answer" && extra.direction === "Incoming")
+              extensions.onEvent("Missed call", { leadId, eventId: a.id });
+          }
+          if (type === "Visit") extensions.onEvent("Visit recorded", { leadId, eventId: a.id });
           return a;
         }
         const old = id ? get(kind, id) : null;
@@ -361,6 +374,24 @@ const server = http.createServer(async (req, res) => {
           record = id ? { ...v, updatedAt: now() } : stamp(v);
         if (kind === "leads" && !id) record.firstTouchAt = null;
         put(kind, record);
+        const eventId = randomUUID();
+        const event = (trigger, leadId = record.leadId) =>
+          extensions.onEvent(trigger, { leadId, eventId });
+        if (kind === "leads") {
+          if (!old) event("Lead created", record.id);
+          if (record.owner && record.owner !== old?.owner) event("Lead assigned", record.id);
+          if (record.repeat && !old?.repeat) event("Repeat enquiry", record.id);
+          if (record.stage === "Closed" && old?.stage !== "Closed") event("Lead closed", record.id);
+        }
+        if (kind === "tasks" && !old) event("Task created");
+        if (kind === "tasks" && record.status === "Done" && old?.status !== "Done")
+          event("Task completed");
+        if (kind === "deals" && record.stage !== old?.stage) event("Deal stage changed");
+        if (kind === "payments" && !old)
+          event("Payment received", get("deals", record.dealId)?.leadId);
+        if (kind === "conversations" && !old) event("Conversation opened");
+        if (kind === "conversations" && record.status === "Resolved" && old?.status !== "Resolved")
+          event("Conversation resolved");
         if (kind === "leads")
           log(record.id, "System", old ? "Lead details updated" : "Lead created");
         if (kind === "tasks" && record.leadId)
@@ -371,11 +402,24 @@ const server = http.createServer(async (req, res) => {
           );
         if (kind === "deals") {
           log(record.leadId, "System", `Deal ${record.stage}: ${record.title}`);
-          const l = get("leads", record.leadId);
-          l.stage = ["Won", "Lost"].includes(record.stage) ? "Closed" : "Opportunity";
-          l.disposition = ["Won", "Lost"].includes(record.stage) ? record.stage : "";
-          l.updatedAt = now();
-          put("leads", l);
+          for (const leadId of new Set([record.leadId, old?.leadId].filter(Boolean))) {
+            const l = get("leads", leadId),
+              related = all("deals").filter((d) => d.leadId === leadId),
+              previous = l.stage;
+            if (related.some((d) => !["Won", "Lost"].includes(d.stage))) {
+              l.stage = "Opportunity";
+              l.disposition = "";
+            } else if (related.length) {
+              l.stage = "Closed";
+              l.disposition = related.some((d) => d.stage === "Won") ? "Won" : "Lost";
+            } else {
+              l.stage = "Prospecting";
+              l.disposition = "";
+            }
+            l.updatedAt = now();
+            put("leads", l);
+            if (l.stage === "Closed" && previous !== "Closed") event("Lead closed", leadId);
+          }
         }
         return record;
       });

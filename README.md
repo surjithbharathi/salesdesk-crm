@@ -17,7 +17,7 @@ npm run check
 npm test
 ```
 
-Tests use a separate temporary SQLite database and port 3199. They cover lead creation, call logging, task completion, deal closure, payment recording, validation, cross-origin write rejection, atomic import rollback, duplicate detection, and persistence after restart.
+The 12 tests use isolated fixtures plus a temporary SQLite database and port 3199. They cover lead creation, call logging, task completion, multi-deal closure, payments, tickets, channels, documents, attendance, event drafts, report joins/date windows, CSV parsing, validation, cross-origin write rejection, import rollback, deduplication, and persistence after restart.
 
 ## Implemented
 
@@ -34,15 +34,22 @@ Tests use a separate temporary SQLite database and port 3199. They cover lead cr
 - Team lead-position report, activity metrics and source performance reports.
 - Full-workspace JSON and spreadsheet-safe lead CSV exports.
 - Server-side SQLite persistence, validation, same-origin write checks and content security policy.
+- Local lead/email conversation records, received messages, outgoing drafts and conversation resolution.
+- Internal team channels and membership-validated message histories.
+- Service ticket board with category, priority, contact, assignee and eight observed service stages (plus a generic Resolved state).
+- List campaigns prepared into deduplicated local drafts; event rules generate drafts for implemented lead/call/task/deal/payment/conversation events.
+- Plain-text documents with preview/download; manual attendance check-in/out.
+- Source assignment rules with system follow-ups; five report chart presets, saved grouping definitions, chart/table views and report CSV.
+- CSV paste/file loading, JSON file loading and a downloadable import template.
 
 ## Storage and migration
 
 The database is `data/crm.sqlite`, with SQLite WAL files alongside it. This directory is ignored by Git. Export records from the Data exports page; stop the server before copying the entire database directory as a backup. JSON lead import imports lead records only and is not a full workspace restore mechanism.
 
-First startup creates fictional sample records. The browser-verified sample named “Demo verification lead” and its demo note may be present in this local database. Existing v0.1 browser localStorage (`salesdesk.v1`) is left intact; it is not automatically migrated into the SQLite database. No real Salesmax records are imported.
+First startup creates fictional sample records. Browser verification adds clearly named demo lead, CSV and service-ticket records to the local database. Existing v0.1 browser localStorage (`salesdesk.v1`) is left intact; it is not automatically migrated into the SQLite database. No real Salesmax records are imported.
 
 ## Boundaries
 
-This is a single-operator local application, not a production Salesmax replacement. Team roles organize records but do not enforce access controls. Authentication, multiple isolated workspaces, real-time collaboration, phone/SIM calling, automatic call capture, recordings, WhatsApp delivery/shared inbox, provider webhooks, AI processing, live location, attendance, document uploads, automated source rules, and broadcast campaigns are not implemented. The Integrations page states these requirements explicitly and does not claim a connected service.
+This is a single-operator local application, not a production Salesmax replacement. Team roles organize records but do not enforce access controls. Authentication, multiple isolated workspaces, real-time collaboration, phone/SIM calling, automatic call capture/recording, live WhatsApp/email/SMS delivery, provider webhooks, AI processing, GPS, binary document uploads and campaign dispatch are not implemented. Attendance is manual, source rules execute on request, and all outgoing messages remain drafts. The Feature status and Integrations screens state these boundaries explicitly.
 
-Read [RESEARCH.md](RESEARCH.md) for observed UI evidence and the limits of the research. Only the signed-in dashboard and active lead grid were inspected; other implemented flows use standard CRM behavior inferred from the public descriptions and navigation.
+Read [FEATURE_PARITY.md](FEATURE_PARITY.md) for the current evidence ledger, verification and every remaining gap. [RESEARCH.md](RESEARCH.md) preserves the initial inspection. Subsequent read-only browser inspection covered ticket forms, auto-messaging categories, lead/team inbox grids and the report chart library; internal implementation remains unknown.

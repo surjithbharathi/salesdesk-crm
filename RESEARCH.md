@@ -1,5 +1,7 @@
 # Salesmax observed workflows
 
+This document preserves the initial inspection. See [FEATURE_PARITY.md](FEATURE_PARITY.md) for subsequent observations and the current implementation status.
+
 Observed read-only in the user's signed-in browser on 22 October 2026. No records were changed or exported. Customer data is deliberately excluded from this document.
 
 ## Dashboard

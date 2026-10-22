@@ -1,0 +1,5 @@
+{
+  "env": { "node": true },
+  "rules": { "no-undef": "error" },
+  "overrides": [{ "files": ["public/**/*.js"], "env": { "browser": true } }]
+}

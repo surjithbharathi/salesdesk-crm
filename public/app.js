@@ -1,3 +1,5 @@
+import { parseLeadCsv } from "./csv.js";
+import { summarizeReport } from "./reports.js";
 const $ = (s) => document.querySelector(s);
 const esc = (s) =>
   String(s ?? "").replace(
@@ -32,8 +34,7 @@ let state,
   page = 1,
   scope = "",
   selected = new Set(),
-  detailId,
-  detailTab = "Timeline";
+  detailId;
 const titles = {
   dashboard: "Dashboard",
   leads: "Active leads",
@@ -56,6 +57,17 @@ const titles = {
   products: "Products & inventory",
   integrations: "Integrations",
   exports: "Data exports",
+  inbox: "Lead inbox",
+  teamInbox: "Team inbox",
+  mailbox: "Mailbox",
+  tickets: "Support tickets",
+  campaigns: "Campaigns",
+  rules: "Automatic distribution",
+  documents: "Documents",
+  attendance: "Attendance",
+  customReports: "Custom reports",
+  featureStatus: "Feature status",
+  autoReplies: "Auto reply drafts",
 };
 const groups = [
   [
@@ -110,6 +122,22 @@ const groups = [
     ],
   ],
 ];
+groups.push([
+  "Collaboration",
+  [
+    ["inbox", "▢"],
+    ["teamInbox", "♧"],
+    ["mailbox", "✉"],
+    ["tickets", "☷"],
+    ["campaigns", "◉"],
+    ["autoReplies", "↩"],
+    ["rules", "⇄"],
+    ["documents", "▤"],
+    ["attendance", "◷"],
+    ["customReports", "▥"],
+    ["featureStatus", "ⓘ"],
+  ],
+]);
 $("#nav").innerHTML = groups
   .map(
     ([label, links]) =>
@@ -151,7 +179,7 @@ async function change(kind, id, body) {
 }
 const user = (id) => state.users.find((x) => x.id === id)?.name || "Unassigned";
 const lead = (id) => state.leads.find((x) => x.id === id);
-const leadName = (id) => lead(id)?.name || "Ad-hoc task";
+const leadName = (id) => lead(id)?.name || "No linked lead";
 const openTasks = () => state.tasks.filter((t) => t.status !== "Done");
 const leadTasks = (id) =>
   openTasks()
@@ -188,7 +216,9 @@ const pill = (s) =>
       .replace(/[^a-z]/g, ""),
   )}">${esc(s)}</span>`;
 const leadButton = (id) =>
-  `<button class="name-btn" data-lead="${esc(id)}">${esc(leadName(id))}</button>`;
+  id
+    ? `<button class="name-btn" data-lead="${esc(id)}">${esc(leadName(id))}</button>`
+    : '<span class="muted">No linked lead</span>';
 const panel = (title, body, extra = "") =>
   `<section class="panel"><div class="panel-head"><h2>${title}</h2>${extra}</div>${body}</section>`;
 const table = (headers, rows) =>
@@ -232,6 +262,17 @@ function render() {
     products: productsPage,
     integrations: integrations,
     exports: exportsPage,
+    inbox: collaborationPage,
+    teamInbox: collaborationPage,
+    mailbox: collaborationPage,
+    tickets: collaborationPage,
+    campaigns: collaborationPage,
+    rules: collaborationPage,
+    documents: collaborationPage,
+    attendance: collaborationPage,
+    customReports: collaborationPage,
+    featureStatus: collaborationPage,
+    autoReplies: collaborationPage,
   };
   $("#content").innerHTML = (screens[view] || dashboard)();
 }
@@ -678,7 +719,7 @@ function listsPage() {
 function importPage() {
   return panel(
     "Bulk import",
-    `<div class="panel-body"><p class="note">Paste a JSON array of up to 500 leads. Phone duplicates are skipped. The whole import is validated before any records are saved.</p><form id="import-form"><label>Lead records<textarea name="records" rows="12" required placeholder='[{"name":"Sample contact","company":"Example business","phone":"+919000001234","source":"Website","value":10000}]'></textarea></label><label>Assign imported leads to<select name="owner">${ownerOptions()}</select></label><div class="actions"><button class="primary">Validate & import</button></div></form></div>`,
+    `<div class="panel-body"><p class="note">Paste or load up to 500 leads as CSV or a JSON array. Phone duplicates are skipped. All records are validated before saving. Loading a file does not import it.</p><form id="import-form"><label>Format<select name="format"><option value="csv">CSV</option><option value="json">JSON array</option></select></label><label>Load a local file<input id="import-file" type="file" accept=".csv,.json,text/csv,application/json"></label><p id="import-filename" aria-live="polite">No file selected</p><label>Lead records<textarea name="records" rows="12" required placeholder="name,company,phone,source,value"></textarea></label><label>Assign imported leads to<select name="owner">${ownerOptions()}</select></label><div class="actions"><button type="button" data-module="csv-template">Download CSV template</button><button class="primary">Validate & import</button></div></form></div>`,
   );
 }
 function distribution() {
@@ -851,7 +892,6 @@ function showLead(id, tab = "Timeline") {
   const l = lead(id);
   if (!l) return;
   detailId = id;
-  detailTab = tab;
   const acts = state.activities.filter((a) => a.leadId === id),
     tasks = state.tasks.filter((t) => t.leadId === id);
   let body = "";
@@ -1127,8 +1167,13 @@ document.addEventListener("submit", async (e) => {
   try {
     const p = Object.fromEntries(new FormData(f));
     if (f.id === "record-form") {
-      for (const k of ["value", "duration", "amount", "price", "stock"])
+      for (const k of ["value", "duration", "amount", "price", "stock", "followupHours", "days"])
         if (k in p) p[k] = Number(p[k]);
+      if ("enabled" in p) p.enabled = p.enabled === "true";
+      if (f.dataset.kind === "teamChannels")
+        p.memberIds = Array.from(f.querySelector('[name="memberIds"]').selectedOptions).map(
+          (o) => o.value,
+        );
       if (f.dataset.kind === "leads") p.repeat = f.elements.repeat.checked;
       if (p.due) p.due = new Date(p.due).toISOString();
       await change(f.dataset.kind, f.dataset.id, p);
@@ -1144,9 +1189,9 @@ document.addEventListener("submit", async (e) => {
     if (f.id === "import-form") {
       let rows;
       try {
-        rows = JSON.parse(p.records);
-      } catch {
-        throw Error("Enter a valid JSON array");
+        rows = p.format === "csv" ? parseLeadCsv(p.records) : JSON.parse(p.records);
+      } catch (error) {
+        throw Error(p.format === "csv" ? error.message : "Enter a valid JSON array");
       }
       if (!Array.isArray(rows)) throw Error("Enter a JSON array");
       const r = await api("import", "POST", { leads: rows.map((l) => ({ ...l, owner: p.owner })) });
@@ -1157,6 +1202,542 @@ document.addEventListener("submit", async (e) => {
     toast(err.message, true);
   } finally {
     if (button) button.disabled = false;
+  }
+});
+let inboxOwner = "",
+  ticketQuery = "",
+  ticketOwner = "";
+let reportDisplay = "Chart",
+  reportPreset = "sources";
+const reportTemplates = {
+  sources: {
+    name: "Leads by source · last 7 days",
+    entity: "leads",
+    groupBy: "source",
+    measure: "count",
+    days: 7,
+  },
+  funnel: {
+    name: "Active deal funnel · count",
+    entity: "deals",
+    groupBy: "stage",
+    measure: "count",
+    days: 0,
+    active: true,
+  },
+  funnelValue: {
+    name: "Active deal funnel · value",
+    entity: "deals",
+    groupBy: "stage",
+    measure: "value",
+    days: 0,
+    active: true,
+  },
+  calls: {
+    name: "Call outcomes · last 7 days",
+    entity: "calls",
+    groupBy: "outcome",
+    measure: "count",
+    days: 7,
+  },
+  payments: {
+    name: "Payments by owner · last 30 days",
+    entity: "payments",
+    groupBy: "owner",
+    measure: "value",
+    days: 30,
+  },
+};
+function reportRows(r) {
+  return summarizeReport(state, r);
+}
+function reportCard(r, key) {
+  const rows = reportRows(r),
+    max = Math.max(1, ...rows.map((x) => x[1]));
+  const content =
+    reportDisplay === "Table"
+      ? table(
+          [esc(r.groupBy), r.measure === "value" ? "Recorded value" : "Records"],
+          rows.map(
+            ([k, v]) =>
+              `<tr><td>${esc(k)}</td><td>${r.measure === "value" ? money(v) : v}</td></tr>`,
+          ),
+        )
+      : rows.length
+        ? rows
+            .map(
+              ([k, v]) =>
+                `<div class="report-bar"><span>${esc(k)}</span><progress max="${max}" value="${v}" aria-label="${esc(k)}: ${v}"></progress><strong>${r.measure === "value" ? money(v) : v}</strong></div>`,
+            )
+            .join("")
+        : '<p class="empty">No recorded data in this period.</p>';
+  return panel(
+    esc(r.name),
+    `<p>Local ${esc(r.entity || "leads")} records · ${r.days ? `last ${r.days} days` : "all time"}</p>${content}${moduleButton("export-report", "Export CSV", key)}`,
+  );
+}
+const ticketStages = [
+  "Open",
+  "Payment Pending",
+  "Service Scheduled",
+  "In progress",
+  "Spare Paid",
+  "Issue Solved",
+  "Spare Sent",
+  "Closed",
+  "Resolved",
+];
+const records = (kind) => state[kind] || [];
+const moduleButton = (action, label, id = "") =>
+  `<button data-module="${action}" data-record="${esc(id)}">${esc(label)}</button>`;
+function collaborationPage() {
+  const add = (kind, label) => `<div class="actions">${moduleButton("new-" + kind, label)}</div>`;
+  if (view === "teamInbox")
+    return (
+      "<p>Internal channel records in this workspace. Staff notifications are not connected.</p>" +
+      add("teamChannels", "Create team channel") +
+      table(
+        ["Channel name", "Last message time", "Last message by", "Last message", "Actions"],
+        records("teamChannels").map((c) => {
+          const last = records("teamMessages")
+            .filter((m) => m.channelId === c.id)
+            .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt))
+            .at(-1);
+          return `<tr><td>${esc(c.name)}</td><td>${esc(date(last?.createdAt))}</td><td>${last ? esc(user(last.userId)) : "—"}</td><td>${esc(last?.text || "No messages")}</td><td>${moduleButton("team-channel", "Open channel", c.id)}</td></tr>`;
+        }),
+      )
+    );
+  if (view === "autoReplies")
+    return (
+      '<p class="warning-box">Enabled rules create local drafts when the selected event occurs. No messages are delivered.</p>' +
+      add("autoReplies", "Create auto reply draft rule") +
+      table(
+        ["Name", "Event", "Draft text", "Enabled"],
+        records("autoReplies").map(
+          (r) =>
+            `<tr><td>${esc(r.name)}</td><td>${esc(r.trigger)}</td><td>${esc(r.text)}</td><td>${moduleButton("toggle-reply", r.enabled ? "Enabled — disable" : "Disabled — enable", r.id)}</td></tr>`,
+        ),
+      )
+    );
+  if (["inbox", "teamInbox", "mailbox"].includes(view)) {
+    const conversations = records("conversations").filter(
+      (c) =>
+        (!inboxOwner || c.owner === inboxOwner) && (view !== "mailbox" || c.channel === "Email"),
+    );
+    return (
+      `<p class="warning-box">Messages are local records and drafts. No email, SMS or WhatsApp delivery is connected.</p><label>Assigned user<select id="inbox-owner">${ownerOptions(inboxOwner, "All users")}</select></label>` +
+      add("conversations", "New conversation") +
+      stats([
+        ["Conversations", conversations.length],
+        ["Open", conversations.filter((c) => c.status === "Open").length],
+        ["Resolved", conversations.filter((c) => c.status === "Resolved").length],
+      ]) +
+      table(
+        ["Subject", "Lead", "Channel", "Owner", "Status", "Actions"],
+        conversations.map(
+          (c) =>
+            `<tr><td>${esc(c.subject)}</td><td>${leadButton(c.leadId)}</td><td>${esc(c.channel)}</td><td>${esc(user(c.owner))}</td><td>${pill(c.status)}</td><td>${moduleButton("conversation", "Open", c.id)}</td></tr>`,
+        ),
+      )
+    );
+  }
+  if (view === "tickets") {
+    const tickets = records("tickets").filter(
+      (t) =>
+        (!ticketOwner || t.owner === ticketOwner) &&
+        `${t.subject} ${t.description} ${t.category} ${leadName(t.leadId)}`
+          .toLowerCase()
+          .includes(ticketQuery.toLowerCase()),
+    );
+    return (
+      add("tickets", "Create ticket") +
+      `<div class="row"><label>Search tickets<input id="ticket-search" value="${esc(ticketQuery)}" placeholder="Subject, description, category or contact"></label><label>Assignee<select id="ticket-owner">${ownerOptions(ticketOwner, "All users")}</select></label></div><div class="ticket-board">` +
+      ticketStages
+        .map(
+          (status) =>
+            `<section class="panel ticket-column"><h2>${esc(status)} (${tickets.filter((t) => t.status === status).length})</h2>${
+              tickets
+                .filter((t) => t.status === status)
+                .map(
+                  (t) =>
+                    `<article class="message-record"><h3>${esc(t.subject)}</h3><p>${esc(t.description)}</p><p>${esc(t.category || "Service")} · ${esc(t.priority)}</p><p>${leadButton(t.leadId)} · ${esc(user(t.owner))}</p>${moduleButton("ticket", "Update ticket", t.id)}</article>`,
+                )
+                .join("") || '<p class="empty">No tickets</p>'
+            }</section>`,
+        )
+        .join("") +
+      "</div>"
+    );
+  }
+  if (view === "campaigns")
+    return (
+      `<p class="warning-box">Preparation creates local message drafts only. Nothing is sent.</p>` +
+      add("campaigns", "Create campaign") +
+      table(
+        ["Campaign", "Status", "Actions"],
+        records("campaigns").map(
+          (c) =>
+            `<tr><td>${esc(c.name)}</td><td>${pill(c.status)}</td><td>${moduleButton("prepare", "Prepare local drafts", c.id)}</td></tr>`,
+        ),
+      )
+    );
+  if (view === "rules")
+    return (
+      `<p>Rules assign unowned leads matching an exact source. Run explicitly to apply enabled rules.</p>` +
+      add("automationRules", "Create rule") +
+      moduleButton("run-rules", "Run enabled rules") +
+      table(
+        ["Name", "Source", "Assigned owner", "Follow-up hours", "Enabled"],
+        records("automationRules").map(
+          (r) =>
+            `<tr><td>${esc(r.name)}</td><td>${esc(r.source)}</td><td>${esc(user(r.owner))}</td><td>${esc(r.followupHours)}</td><td>${moduleButton("toggle-rule", r.enabled ? "Enabled — disable" : "Disabled — enable", r.id)}</td></tr>`,
+        ),
+      )
+    );
+  if (view === "documents")
+    return (
+      `<p>Attach plain text documents up to 100 KB. Downloads preserve the recorded text.</p>` +
+      add("documents", "Attach text document") +
+      table(
+        ["Name", "Lead", "Actions"],
+        records("documents").map(
+          (d) =>
+            `<tr><td>${esc(d.name)}</td><td>${leadButton(d.leadId)}</td><td>${moduleButton("document", "Preview", d.id)} <a href="/api/documents/${encodeURIComponent(d.id)}/download">Download</a></td></tr>`,
+        ),
+      )
+    );
+  if (view === "attendance")
+    return (
+      `<p>Manual attendance records. Location tracking is not connected.</p>` +
+      add("attendance", "Check in") +
+      table(
+        ["User", "Date", "Check in", "Check out", "Actions"],
+        records("attendance").map(
+          (a) =>
+            `<tr><td>${esc(user(a.userId))}</td><td>${esc(a.date)}</td><td>${esc(date(a.checkIn))}</td><td>${esc(date(a.checkOut))}</td><td>${a.checkOut ? "Complete" : moduleButton("checkout", "Check out", a.id)}</td></tr>`,
+        ),
+      )
+    );
+  if (view === "customReports")
+    return (
+      `<p>Chart library based on recorded local data. Date windows use record creation dates.</p><div class="row"><label>Chart library<select id="report-preset">${opts(
+        Object.entries(reportTemplates).map(([k, r]) => [k, r.name]),
+        reportPreset,
+      )}</select></label><label>Display<select id="report-display">${opts(["Chart", "Table"], reportDisplay)}</select></label></div>` +
+      add("savedReports", "Save custom report") +
+      reportCard(reportTemplates[reportPreset], "preset") +
+      records("savedReports")
+        .map((r) => reportCard(r, r.id))
+        .join("")
+    );
+  return panel(
+    "Feature availability",
+    table(
+      ["Feature", "Status"],
+      [
+        ["Lead, deal, task, product and payment records", "Available locally"],
+        ["Inboxes, tickets, document text and attendance", "Available locally"],
+        [
+          "Campaign preparation and source assignment rules",
+          "Local drafts and explicit rule execution",
+        ],
+        ["Calling, WhatsApp, SMS and email delivery", "Provider connection required"],
+        ["Authentication, shared workspaces and permissions", "Not connected"],
+        ["AI summaries, transcription, GPS and external integrations", "Not connected"],
+      ].map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`),
+    ),
+  );
+}
+const textField = (name, label, value = "") =>
+  `<label class="full">${esc(label)}<textarea name="${name}" required maxlength="100000">${esc(value)}</textarea></label>`;
+function moduleForm(kind, record = {}) {
+  let fields = "";
+  const linked = selectField("leadId", "Lead", leadOptions(record.leadId));
+  const assigned = selectField("owner", "Owner", ownerOptions(record.owner));
+  if (kind === "teamChannels")
+    fields =
+      field("name", "Channel name", "", "text", true) +
+      textField("description", "Description") +
+      `<label>Members<select name="memberIds" multiple required>${opts(state.users.map((u) => [u.id, u.name]))}</select><small>Select channel participants.</small></label>`;
+  if (kind === "autoReplies")
+    fields =
+      field("name", "Rule name", "", "text", true) +
+      selectField(
+        "trigger",
+        "Event",
+        opts([
+          "Lead created",
+          "Lead assigned",
+          "Repeat enquiry",
+          "Lead closed",
+          "Call outcome",
+          "Missed call",
+          "Visit recorded",
+          "Task created",
+          "Task completed",
+          "Deal stage changed",
+          "Payment received",
+          "Conversation opened",
+          "Conversation resolved",
+        ]),
+      ) +
+      textField("text", "Local draft text") +
+      '<input type="hidden" name="enabled" value="false">';
+  if (kind === "conversations")
+    fields =
+      field("subject", "Subject", "", "text", true) +
+      linked +
+      assigned +
+      selectField("channel", "Channel", opts(["WhatsApp", "Email", "SMS"])) +
+      '<input type="hidden" name="status" value="Open">';
+  if (kind === "tickets")
+    fields =
+      field("subject", "Subject", record.subject, "text", true) +
+      linked +
+      assigned +
+      textField("description", "Description", record.description) +
+      field("category", "Category", record.category || "Service", "text", true) +
+      selectField(
+        "priority",
+        "Priority",
+        opts(["Low", "Normal", "High", "Urgent"], record.priority || "Normal"),
+      ) +
+      selectField("status", "Status", opts(ticketStages, record.status || "Open"));
+  if (kind === "campaigns")
+    fields =
+      field("name", "Name", "", "text", true) +
+      selectField("listId", "Lead list", opts(records("lists").map((l) => [l.id, l.name]))) +
+      textField("text", "Draft message") +
+      '<input type="hidden" name="status" value="Draft">';
+  if (kind === "automationRules")
+    fields =
+      field("name", "Name", "", "text", true) +
+      field("source", "Exact lead source", "", "text", true) +
+      assigned +
+      field("followupHours", "Follow-up delay in hours (0 disables)", 24, "number") +
+      '<input type="hidden" name="enabled" value="true">';
+  if (kind === "documents")
+    fields =
+      linked +
+      field("name", "Filename", "note.txt", "text", true) +
+      textField("content", "Plain text content") +
+      '<input type="hidden" name="mime" value="text/plain">';
+  if (kind === "attendance")
+    fields =
+      selectField("userId", "User", opts(state.users.map((u) => [u.id, u.name]))) +
+      field("date", "Date", today(), "date", true) +
+      `<input type="hidden" name="checkIn" value="${new Date().toISOString()}">`;
+  if (kind === "savedReports")
+    fields =
+      field("name", "Report name", "", "text", true) +
+      selectField("entity", "Records", opts(["leads", "deals", "calls", "payments"])) +
+      selectField("measure", "Measure", opts(["count", "value"])) +
+      field("days", "Creation window in days (0 = all time)", 0, "number") +
+      selectField(
+        "groupBy",
+        "Group by",
+        opts(["source", "owner", "stage", "direction", "outcome"]),
+      ) +
+      selectField(
+        "stage",
+        "Linked lead stage",
+        opts(["New", "Prospecting", "Opportunity", "Closed"], "", "All stages"),
+      );
+  const labels = {
+    teamChannels: "team channel",
+    autoReplies: "reply draft rule",
+    conversations: "conversation",
+    tickets: "ticket",
+    campaigns: "campaign",
+    automationRules: "distribution rule",
+    documents: "text document",
+    attendance: "attendance record",
+    savedReports: "custom report",
+  };
+  form(
+    kind,
+    fields,
+    record.id || "",
+    (record.id ? "Update " : "Add ") + (labels[kind] || "record"),
+  );
+}
+document.addEventListener("change", (e) => {
+  if (
+    e.target.name === "entity" &&
+    e.target.closest("#record-form")?.dataset.kind === "savedReports"
+  ) {
+    const form = e.target.closest("form"),
+      isCalls = e.target.value === "calls";
+    form.elements.groupBy.innerHTML = opts(
+      isCalls ? ["source", "owner", "stage", "direction", "outcome"] : ["source", "owner", "stage"],
+    );
+    form.elements.measure.innerHTML = opts(isCalls ? ["count"] : ["count", "value"]);
+  }
+  if (e.target.id === "report-preset") {
+    reportPreset = e.target.value;
+    render();
+  }
+  if (e.target.id === "report-display") {
+    reportDisplay = e.target.value;
+    render();
+  }
+  if (e.target.id === "inbox-owner") {
+    inboxOwner = e.target.value;
+    render();
+  }
+  if (e.target.id === "ticket-owner") {
+    ticketOwner = e.target.value;
+    render();
+  }
+});
+document.addEventListener("change", async (e) => {
+  if (e.target.id !== "import-file") return;
+  const file = e.target.files?.[0];
+  if (!file) return;
+  try {
+    if (file.size > 1048576) throw Error("Choose a file no larger than 1 MiB");
+    const content = await file.text(),
+      f = $("#import-form");
+    f.elements.records.value = content;
+    f.elements.format.value = file.name.toLowerCase().endsWith(".json") ? "json" : "csv";
+    $("#import-filename").textContent =
+      `${file.name} loaded locally. Click Validate & import to save.`;
+  } catch (error) {
+    toast(error.message, true);
+  }
+});
+document.addEventListener("input", (e) => {
+  if (e.target.id === "ticket-search") {
+    const position = e.target.selectionStart;
+    ticketQuery = e.target.value;
+    render();
+    const input = $("#ticket-search");
+    input.focus();
+    input.setSelectionRange(position, position);
+  }
+});
+document.addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-module]");
+  if (!b) return;
+  const action = b.dataset.module,
+    id = b.dataset.record;
+  try {
+    if (action === "export-report") {
+      const r =
+        id === "preset"
+          ? reportTemplates[reportPreset]
+          : records("savedReports").find((r) => r.id === id);
+      const csvCell = (value) =>
+        '"' +
+        String(value)
+          .replace(/^[=+@\-\t\r]/, "'$&")
+          .replaceAll('"', '""') +
+        '"';
+      download(
+        "report.csv",
+        [["Group", "Value"], ...reportRows(r)]
+          .map((row) => row.map(csvCell).join(","))
+          .join("\r\n"),
+        "text/csv;charset=utf-8",
+      );
+    }
+    if (action === "csv-template")
+      download(
+        "lead-import-template.csv",
+        "name,company,phone,email,source,stage,value\nSample contact,Example business,+919000001234,sample@example.com,Website,New,10000\n",
+        "text/csv;charset=utf-8",
+      );
+    if (action.startsWith("new-")) moduleForm(action.slice(4));
+    if (action === "team-channel") {
+      const c = records("teamChannels").find((c) => c.id === id);
+      modal(
+        c.name,
+        `<p>${esc(c.description)}</p><p>Local channel history. No notifications are sent.</p>` +
+          records("teamMessages")
+            .filter((m) => m.channelId === id)
+            .map(
+              (m) =>
+                `<article class="message-record"><strong>${esc(user(m.userId))} · ${esc(date(m.createdAt))}</strong><p>${esc(m.text)}</p></article>`,
+            )
+            .join("") +
+          moduleButton("team-message", "Record team message", id),
+      );
+    }
+    if (action === "team-message") {
+      const c = records("teamChannels").find((c) => c.id === id);
+      form(
+        "teamMessages",
+        `<input type="hidden" name="channelId" value="${esc(id)}">` +
+          selectField(
+            "userId",
+            "Recorded author",
+            opts(state.users.filter((u) => c.memberIds.includes(u.id)).map((u) => [u.id, u.name])),
+          ) +
+          textField("text", "Message (local record)"),
+        "",
+        "Record channel message",
+      );
+    }
+    if (action === "ticket")
+      moduleForm(
+        "tickets",
+        records("tickets").find((t) => t.id === id),
+      );
+    if (action === "prepare") {
+      await api(`campaigns/${id}/prepare`, "POST", {});
+      await refresh();
+      toast("Local drafts prepared; no messages sent");
+    }
+    if (action === "run-rules") {
+      await api("rules/run", "POST", {});
+      await refresh();
+      toast("Enabled rules applied");
+    }
+    if (action === "toggle-rule")
+      await change("automationRules", id, {
+        enabled: !records("automationRules").find((r) => r.id === id).enabled,
+      });
+    if (action === "toggle-reply")
+      await change("autoReplies", id, {
+        enabled: !records("autoReplies").find((r) => r.id === id).enabled,
+      });
+    if (action === "checkout")
+      await change("attendance", id, { checkOut: new Date().toISOString() });
+    if (action === "document") {
+      const d = records("documents").find((d) => d.id === id);
+      modal(d.name, `<pre class="document-preview">${esc(d.content)}</pre>`);
+    }
+    if (action === "resolve") {
+      await change("conversations", id, { status: "Resolved" });
+      $("#modal").close();
+    }
+    if (action === "conversation") {
+      const c = records("conversations").find((c) => c.id === id);
+      modal(
+        c.subject,
+        `<p>Local records only. No delivery is connected.</p>` +
+          records("messages")
+            .filter((m) => m.conversationId === id)
+            .map(
+              (m) =>
+                `<article class="message-record"><strong>${esc(m.direction)} · ${esc(m.status)}</strong><p>${esc(m.text)}</p></article>`,
+            )
+            .join("") +
+          moduleButton("record-incoming", "Record received message", id) +
+          moduleButton("draft-message", "Compose local draft", id) +
+          moduleButton("resolve", "Resolve conversation", id),
+      );
+    }
+    if (["record-incoming", "draft-message"].includes(action))
+      form(
+        "messages",
+        `<input type="hidden" name="conversationId" value="${esc(id)}"><input type="hidden" name="direction" value="${action === "record-incoming" ? "Incoming" : "Outgoing"}"><input type="hidden" name="status" value="${action === "record-incoming" ? "Recorded" : "Draft"}">` +
+          textField("text", "Message text (local only)"),
+        "",
+        "Record message locally",
+      );
+  } catch (error) {
+    toast(error.message, true);
   }
 });
 try {
