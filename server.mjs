@@ -9,6 +9,7 @@ import { createMobileSync, MAX_AUDIO } from "./mobile-sync.mjs";
 import { createUserAuth } from "./user-auth.mjs";
 import { scopedState } from "./user-scope.mjs";
 import { createClickToCall } from "./click-to-call.mjs";
+import { bridgeConfig, createAutomationBridge } from "./automation-bridge.mjs";
 
 const port = Number(process.env.PORT || 3100);
 const publicOrigin = process.env.PUBLIC_ORIGIN || "";
@@ -290,6 +291,11 @@ const mobile = createMobileSync({
     (process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname) + ".mobile-key",
 });
 const userAuth = createUserAuth({ db, getUser: (id) => get("users", id) });
+const automation = createAutomationBridge({
+  db,
+  getUser: (id) => get("users", id),
+  config: bridgeConfig(),
+});
 if (publicOrigin && !userAuth.configured())
   throw Error(
     "Public deployment requires an existing company account database; refusing unauthenticated setup",
@@ -611,6 +617,18 @@ const server = http.createServer(async (req, res) => {
         identity = userAuth.authenticate(sessionToken(req));
       } catch {}
     }
+    if (url.pathname === "/api/automation/consume" && req.method === "POST") {
+      if (req.headers.origin) bad("Browser access is not supported here", 403);
+      send(200, automation.consume((await body(req)).ticket));
+      return;
+    }
+    if (url.pathname.startsWith("/automation/")) {
+      if (!identity) bad("Sign in to CRM first", 401);
+      if (!["GET", "HEAD"].includes(req.method) && !allowedOrigins.includes(req.headers.origin))
+        bad("Same-origin request required", 403);
+      automation.proxy(req, res, identity);
+      return;
+    }
     const sameOrigin = () => {
       if (!allowedOrigins.includes(req.headers.origin))
         bad("Same-origin browser request required", 403);
@@ -679,6 +697,21 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname.startsWith("/api/") && userAuth.configured()) {
       if (!identity) bad("Login required", 401);
       if (!["GET", "HEAD"].includes(req.method)) sameOrigin();
+    }
+    if (url.pathname.startsWith("/api/automation/")) {
+      if (!identity) bad("Set up company login first", 401);
+      if (url.pathname === "/api/automation/status" && req.method === "GET")
+        send(200, automation.status(identity.user.id));
+      else if (url.pathname === "/api/automation/access" && req.method === "GET")
+        send(200, automation.accessList(identity.user.id));
+      else if (url.pathname === "/api/automation/access" && req.method === "POST") {
+        sameOrigin();
+        send(200, automation.setAccess(identity.user.id, await body(req)));
+      } else if (url.pathname === "/api/automation/ticket" && req.method === "POST") {
+        sameOrigin();
+        send(200, automation.issue(identity, sessionToken(req), (await body(req)).browserId));
+      } else bad("Not found", 404);
+      return;
     }
     const member = identity && identity.user.role !== "admin";
     if (member) {

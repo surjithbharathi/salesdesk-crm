@@ -44,6 +44,7 @@ let state,
   selected = new Set(),
   detailId;
 const titles = {
+  automation: "Automation",
   dashboard: "Dashboard",
   leads: "Active leads",
   archived: "Already worked leads",
@@ -126,6 +127,7 @@ const groups = [
     "Workspace tools",
     [
       ["integrations", "⊞"],
+      ["automation", "⇄"],
       ["exports", "↓"],
     ],
   ],
@@ -180,6 +182,12 @@ async function refresh() {
   state = await api("state");
   waStatus = await api("whatsapp/status");
   mobileDevices = await api("mobile/devices");
+  try {
+    automationStatus = await api("automation/status");
+    automationAccounts = automationStatus.canManageAccess ? await api("automation/access") : [];
+  } catch {
+    automationStatus = { enabled: false };
+  }
   render();
 }
 async function change(kind, id, body) {
@@ -240,6 +248,8 @@ function heading(title, description, actions = "") {
 }
 function render() {
   if (!state) return;
+  document.querySelector('[data-nav="automation"]').hidden =
+    !automationStatus.canAccess && !automationStatus.canManageAccess;
   $("#breadcrumb").textContent = titles[view] || "Dashboard";
   document
     .querySelectorAll("[data-nav]")
@@ -251,6 +261,7 @@ function render() {
   );
   $("#heading").innerHTML = base;
   const screens = {
+    automation: automationPage,
     dashboard: dashboard,
     leads: leadsPage,
     archived: leadsPage,
@@ -1195,10 +1206,53 @@ document.querySelectorAll("[data-nav]").forEach((a) =>
     if (location.hash === a.getAttribute("href")) render();
   }),
 );
+let automationStatus = { enabled: false };
+let automationAccounts = [];
+function automationPage() {
+  return panel(
+    "Automation workspace",
+    `<div class="panel-body"><p>Create and run workflows inside Salesdesk using the source-built n8n editor and engine.</p><p class="note">Only users explicitly selected by an administrator can access Automation. Access is off by default, including for administrators.</p>${!automationStatus.canAccess ? '<div class="warning-box">Automation access has not been granted to your account.</div>' : automationStatus.enabled ? '<button class="primary" data-action="automation-open">Open workflow builder</button>' : '<div class="warning-box">The source-built runtime is not enabled on this server. An administrator must complete the private runtime setup.</div>'}${automationStatus.canManageAccess ? `<h3>User access</h3><p>Allow only the users who need workflows. Revoking access closes their current workspace connections.</p>${automationAccounts.map((u) => `<div class="row"><span>${esc(u.name)}${u.active ? "" : " (inactive)"}</span><button data-automation-user="${esc(u.userId)}" data-automation-allow="${!u.allowed}" ${!u.active && !u.allowed ? "disabled" : ""}>${u.allowed ? "Revoke access" : "Allow access"}</button></div>`).join("")}` : ""}<p>Powered by n8n, modified for Salesdesk. External-customer access and paid features require a separate license review.</p></div>`,
+  );
+}
+async function openAutomation(button) {
+  button.disabled = true;
+  try {
+    let browserId = localStorage.getItem("n8n-browserId");
+    if (!browserId) {
+      browserId = crypto.randomUUID();
+      localStorage.setItem("n8n-browserId", browserId);
+    }
+    const handoff = await api("automation/ticket", "POST", { browserId });
+    const response = await fetch("/automation/rest/salesdesk/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "browser-id": browserId },
+      credentials: "same-origin",
+      body: JSON.stringify({ ticket: handoff.ticket }),
+    });
+    if (!response.ok)
+      throw Error(
+        "Automation login could not complete. Check the private runtime, employee access and MFA policy.",
+      );
+    location.assign("/automation/");
+  } finally {
+    button.disabled = false;
+  }
+}
 document.addEventListener("click", async (e) => {
   const b = e.target.closest("button");
   if (!b) return;
   try {
+    if (b.dataset.automationUser) {
+      const enabled = b.dataset.automationAllow === "true";
+      if (!confirm(`${enabled ? "Allow" : "Revoke"} Automation access for this user?`)) return;
+      await api("automation/access", "POST", { userId: b.dataset.automationUser, enabled });
+      await refresh();
+      return;
+    }
+    if (b.dataset.action === "automation-open") {
+      await openAutomation(b);
+      return;
+    }
     if (b.dataset.lead) {
       showLead(b.dataset.lead);
       return;
