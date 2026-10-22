@@ -45,6 +45,7 @@ async function prepare() {
 }
 async function setup(step) {
   verify();
+  applySourcePatch();
   if (Number(process.versions.node.split(".")[0]) < 24)
     throw Error(
       "The pinned source needs Node 24. Keep the CRM runtime unchanged; use the isolated build tools.",
@@ -70,10 +71,23 @@ async function setup(step) {
   });
   if (code !== 0) process.exitCode = typeof code === "number" ? code : 1;
 }
+function applySourcePatch() {
+  verify();
+  const patch = resolve(root, "automation/source.patch");
+  try {
+    run("git", ["apply", "--reverse", "--check", patch]);
+    return;
+  } catch {}
+  run("git", ["apply", "--check", patch]);
+  run("git", ["apply", patch]);
+}
 try {
   if (command === "prepare") await prepare();
   else if (command === "status") console.log(JSON.stringify(verify(), null, 2));
-  else if (["install", "build"].includes(command)) await setup(command);
+  else if (command === "patch") {
+    applySourcePatch();
+    console.log("Salesdesk source patch is applied");
+  } else if (["install", "build"].includes(command)) await setup(command);
   else
     throw Error(
       "Use prepare, status, install or build. This tool does not deploy or start an editor.",

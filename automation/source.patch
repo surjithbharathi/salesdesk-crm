@@ -1,0 +1,481 @@
+diff --git a/packages/@n8n/config/src/index.ts b/packages/@n8n/config/src/index.ts
+index e5cfe9fc..221ac078 100644
+--- a/packages/@n8n/config/src/index.ts
++++ b/packages/@n8n/config/src/index.ts
+@@ -5,6 +5,7 @@ import { AgentsConfig } from './configs/agents.config';
+ import { AiAssistantConfig } from './configs/ai-assistant.config';
+ import { AiBuilderConfig } from './configs/ai-builder.config';
+ import { AiGatewayConfig } from './configs/ai-gateway.config';
++import { SalesdeskConfig } from './configs/salesdesk.config';
+ import { AiConfig } from './configs/ai.config';
+ import { AuthConfig } from './configs/auth.config';
+ import { CacheConfig } from './configs/cache.config';
+@@ -223,6 +224,9 @@ export class GlobalConfig {
+ 	@Nested
+ 	aiGateway: AiGatewayConfig;
+ 
++	@Nested
++	salesdesk: SalesdeskConfig;
++
+ 	@Nested
+ 	aiBuilder: AiBuilderConfig;
+ 
+diff --git a/packages/cli/src/server.ts b/packages/cli/src/server.ts
+index b6412840..b57f2202 100644
+--- a/packages/cli/src/server.ts
++++ b/packages/cli/src/server.ts
+@@ -34,6 +34,7 @@ import * as requestPath from '@/utils/request-path';
+ import '@/controllers/active-workflows.controller';
+ import '@/controllers/annotation-tags.controller.ee';
+ import '@/controllers/auth.controller';
++import '@/controllers/salesdesk.controller';
+ import '@/controllers/binary-data.controller';
+ import '@/controllers/change-email.controller';
+ import '@/controllers/ai.controller';
+diff --git a/packages/cli/src/workflow-runner.ts b/packages/cli/src/workflow-runner.ts
+index 1307a0be..7cf4959b 100644
+--- a/packages/cli/src/workflow-runner.ts
++++ b/packages/cli/src/workflow-runner.ts
+@@ -2,7 +2,7 @@
+ 
+ import { Logger } from '@n8n/backend-common';
+ import { EventService } from '@n8n/backend-services';
+-import { ExecutionsConfig } from '@n8n/config';
++import { ExecutionsConfig, GlobalConfig } from '@n8n/config';
+ import { Time } from '@n8n/constants';
+ import { ExecutionRepository } from '@n8n/db';
+ import type { IExecutionResponse } from '@n8n/db';
+@@ -70,6 +70,9 @@ import { EngineV2Dispatcher } from '@/services/engine-v2-dispatcher.service';
+ import { StreamingWebhookResponseHeartbeat } from '@/webhooks/streaming-webhook-response-heartbeat';
+ import * as WorkflowExecuteAdditionalData from '@/workflow-execute-additional-data';
+ import { WorkflowStaticDataService } from '@/workflows/workflow-static-data.service';
++import { SalesdeskAccessService } from '@/services/salesdesk-access.service';
++import { OwnershipService } from '@/services/ownership.service';
++import { ForbiddenError } from '@n8n/errors';
+ 
+ /** How long to keep rechecking the execution status after a max-stalled-count error before failing the run */
+ const MAX_STALLED_COUNT_GRACE_WINDOW_MS = 30 * Time.seconds.toMilliseconds;
+@@ -408,6 +411,14 @@ export class WorkflowRunner {
+ 		existingExecution?: ResumableExecution,
+ 		responsePromise?: IDeferredPromise<IExecuteResponsePromiseData>,
+ 	): Promise<string> {
++		// Modified for Salesdesk. Check the current CRM grant before each new run.
++		if (Container.get(GlobalConfig).salesdesk.enabled) {
++			const ownership = Container.get(OwnershipService);
++			const project = await ownership.getWorkflowProjectCached(data.workflowData.id);
++			const owner = await ownership.getPersonalProjectOwnerCached(project.id);
++			if (!owner) throw new ForbiddenError('CRM workflows need a personal owner');
++			await Container.get(SalesdeskAccessService).assertAllowed(owner.id);
++		}
+ 		// The engine v2 path owns the whole run: it keeps no control-plane
+ 		// execution row, so everything below here does not apply to it.
+ 		if (this.engineV2Dispatcher.routesToEngineV2(data, existingExecution)) {
+diff --git a/packages/frontend/@n8n/i18n/src/locales/en.json b/packages/frontend/@n8n/i18n/src/locales/en.json
+index cdaf6e4b..fafdce93 100644
+--- a/packages/frontend/@n8n/i18n/src/locales/en.json
++++ b/packages/frontend/@n8n/i18n/src/locales/en.json
+@@ -1,4 +1,8 @@
+ {
++	"salesdesk.navigation": "Salesdesk workspace navigation",
++	"salesdesk.back": "Back to CRM",
++	"salesdesk.title": "Salesdesk Automation",
++	"salesdesk.attribution": "Internal workspace · powered by n8n · modified for Salesdesk",
+ 	"_reusableBaseText": {
+ 		"cancel": "Cancel",
+ 		"codeNodeEditor": {
+diff --git a/packages/frontend/editor-ui/src/app/App.vue b/packages/frontend/editor-ui/src/app/App.vue
+index e1695b9b..7cfa4e95 100644
+--- a/packages/frontend/editor-ui/src/app/App.vue
++++ b/packages/frontend/editor-ui/src/app/App.vue
+@@ -1,6 +1,7 @@
+ <script setup lang="ts">
+ import BaseLayout from '@/app/layouts/BaseLayout.vue';
+ import AppBanners from '@/app/components/app/AppBanners.vue';
++import SalesdeskWorkspace from '@/app/components/app/SalesdeskWorkspace.vue';
+ import AppModals from '@/app/components/app/AppModals.vue';
+ import AppCommandBar from '@/app/components/app/AppCommandBar.vue';
+ import AppLayout from '@/app/components/app/AppLayout.vue';
+@@ -136,6 +137,7 @@ useExposeCssVar('--ask-assistant--floating-button--margin-bottom', askAiFloating
+ 	<LoadingView v-if="loading" />
+ 	<BaseLayout v-else id="n8n-app" :class="$style.app">
+ 		<template #banners>
++			<SalesdeskWorkspace />
+ 			<AppBanners />
+ 		</template>
+ 		<AppLayout @mounted="setLayoutRef">
+diff --git a/turbo.json b/turbo.json
+index cad6b844..c45d8870 100644
+--- a/turbo.json
++++ b/turbo.json
+@@ -19,7 +19,7 @@
+ 		"n8n-editor-ui#build": {
+ 			"dependsOn": ["^build"],
+ 			"outputs": ["dist/**"],
+-			"env": ["RELEASE"]
++			"env": ["RELEASE", "VITE_SALESDESK_INTERNAL"]
+ 		},
+ 		"n8n-editor-ui#build:unchecked": {
+ 			"dependsOn": ["^build:unchecked"],
+diff --git a/packages/@n8n/config/src/configs/salesdesk.config.ts b/packages/@n8n/config/src/configs/salesdesk.config.ts
+new file mode 100644
+index 00000000..d560a282
+--- /dev/null
++++ b/packages/@n8n/config/src/configs/salesdesk.config.ts
+@@ -0,0 +1,14 @@
++// Modified for the internal Salesdesk integration. Upstream license terms apply.
++import { Config, Env } from '../decorators';
++
++@Config
++export class SalesdeskConfig {
++	@Env('SALESDESK_BRIDGE_ENABLED')
++	enabled: boolean = false;
++
++	@Env('SALESDESK_CRM_INTERNAL_ORIGIN')
++	crmOrigin: string = 'http://127.0.0.1:3100';
++
++	@Env('SALESDESK_AUTOMATION_BRIDGE_SECRET')
++	bridgeSecret: string = '';
++}
+diff --git a/packages/cli/src/controllers/__tests__/salesdesk.controller.test.ts b/packages/cli/src/controllers/__tests__/salesdesk.controller.test.ts
+new file mode 100644
+index 00000000..3eb1f461
+--- /dev/null
++++ b/packages/cli/src/controllers/__tests__/salesdesk.controller.test.ts
+@@ -0,0 +1,78 @@
++import { GlobalConfig } from '@n8n/config';
++import { UserRepository, type User } from '@n8n/db';
++import type { Response } from 'express';
++import { mock } from 'vitest-mock-extended';
++import { AuthService } from '@/auth/auth.service';
++import { MfaService } from '@/mfa/mfa.service';
++import type { AuthlessRequest } from '@/requests';
++import { PasswordUtility } from '@/services/password.utility';
++import { SalesdeskAccessService } from '@/services/salesdesk-access.service';
++import { SalesdeskController } from '../salesdesk.controller';
++
++describe('SalesdeskController', () => {
++	const config = mock<GlobalConfig>({
++		salesdesk: { enabled: true, crmOrigin: 'http://127.0.0.1:3100', bridgeSecret: 'x'.repeat(64) },
++	});
++	const access = mock<SalesdeskAccessService>();
++	const users = mock<UserRepository>();
++	const passwords = mock<PasswordUtility>();
++	const auth = mock<AuthService>();
++	const mfa = mock<MfaService>();
++	const controller = new SalesdeskController(config, access, users, passwords, auth, mfa);
++	const id = 'aaaaaaaa-aaaa-5aaa-8aaa-aaaaaaaaaaaa';
++	const req = mock<AuthlessRequest>({
++		body: { ticket: 'a'.repeat(43) },
++		browserId: 'browser',
++		headers: { 'x-salesdesk-engine-user': id },
++	});
++	const res = mock<Response>();
++	beforeEach(() => {
++		vi.resetAllMocks();
++		config.salesdesk.enabled = true;
++		access.consume.mockResolvedValue({ engineUserId: id, name: 'Employee', browserId: 'browser' });
++		users.findOne.mockResolvedValue(
++			mock<User>({
++				id,
++				email: `${id}@crm.internal.invalid`,
++				role: { slug: 'global:member' },
++				disabled: false,
++				mfaEnabled: false,
++			}),
++		);
++	});
++	it('issues the native member cookie after CRM authorization', async () => {
++		await expect(controller.login(req, res)).resolves.toEqual({ ready: true });
++		expect(access.assertAllowed).toHaveBeenCalledWith(id);
++		expect(auth.issueCookie).toHaveBeenCalledWith(
++			res,
++			expect.objectContaining({ id }),
++			false,
++			'browser',
++		);
++	});
++	it('does not issue cookies for a mismatched browser or gateway identity', async () => {
++		access.consume.mockResolvedValue({
++			engineUserId: id,
++			name: 'Employee',
++			browserId: 'different',
++		});
++		await expect(controller.login(req, res)).rejects.toThrow('not accepted');
++		access.consume.mockResolvedValue({
++			engineUserId: 'bbbbbbbb-bbbb-5bbb-8bbb-bbbbbbbbbbbb',
++			name: 'Employee',
++			browserId: 'browser',
++		});
++		await expect(controller.login(req, res)).rejects.toThrow('does not match');
++		expect(auth.issueCookie).not.toHaveBeenCalled();
++	});
++	it('keeps instance MFA and native role rules', async () => {
++		mfa.isMFAEnforced.mockResolvedValue(true);
++		await expect(controller.login(req, res)).rejects.toThrow('MFA');
++		mfa.isMFAEnforced.mockResolvedValue(false);
++		users.findOne.mockResolvedValue(
++			mock<User>({ id, email: `${id}@crm.internal.invalid`, role: { slug: 'global:owner' } }),
++		);
++		await expect(controller.login(req, res)).rejects.toThrow('not available');
++		expect(auth.issueCookie).not.toHaveBeenCalled();
++	});
++});
+diff --git a/packages/cli/src/controllers/salesdesk.controller.ts b/packages/cli/src/controllers/salesdesk.controller.ts
+new file mode 100644
+index 00000000..e482c77f
+--- /dev/null
++++ b/packages/cli/src/controllers/salesdesk.controller.ts
+@@ -0,0 +1,90 @@
++// Modified for the internal Salesdesk integration. Upstream license terms apply.
++import { GlobalConfig } from '@n8n/config';
++import { UserRepository } from '@n8n/db';
++import { Post, RestController } from '@n8n/decorators';
++import { ForbiddenError, BadRequestError } from '@n8n/errors';
++import { isRecord } from '@n8n/utils/is-record';
++import type { Response } from 'express';
++import { randomBytes } from 'node:crypto';
++
++import { AuthService } from '@/auth/auth.service';
++import { MfaService } from '@/mfa/mfa.service';
++import type { AuthlessRequest } from '@/requests';
++import { PasswordUtility } from '@/services/password.utility';
++import { SalesdeskAccessService } from '@/services/salesdesk-access.service';
++
++@RestController('/salesdesk')
++export class SalesdeskController {
++	constructor(
++		private readonly config: GlobalConfig,
++		private readonly access: SalesdeskAccessService,
++		private readonly users: UserRepository,
++		private readonly passwords: PasswordUtility,
++		private readonly auth: AuthService,
++		private readonly mfa: MfaService,
++	) {}
++
++	@Post('/login', { skipAuth: true, ipRateLimit: { limit: 60 } })
++	async login(req: AuthlessRequest, res: Response) {
++		if (!this.config.salesdesk.enabled) throw new ForbiddenError('CRM integration is not enabled');
++		const input: unknown = req.body;
++		if (
++			!isRecord(input) ||
++			typeof input.ticket !== 'string' ||
++			!/^[A-Za-z0-9_-]{43}$/.test(input.ticket)
++		) {
++			throw new BadRequestError('A valid CRM handoff is required');
++		}
++		const identity = await this.access.consume(input.ticket);
++		if (
++			!isRecord(identity) ||
++			typeof identity.engineUserId !== 'string' ||
++			!/^[a-f0-9-]{36}$/.test(identity.engineUserId) ||
++			typeof identity.name !== 'string' ||
++			typeof identity.browserId !== 'string' ||
++			identity.browserId !== req.browserId
++		) {
++			throw new ForbiddenError('CRM handoff was not accepted');
++		}
++		if (req.headers['x-salesdesk-engine-user'] !== identity.engineUserId)
++			throw new ForbiddenError('CRM identity does not match');
++		await this.access.assertAllowed(identity.engineUserId);
++		if (await this.mfa.isMFAEnforced())
++			throw new ForbiddenError('Complete the instance MFA policy before using this integration');
++		const email = `${identity.engineUserId}@crm.internal.invalid`;
++		let user = await this.users.findOne({
++			where: { id: identity.engineUserId },
++			relations: ['role'],
++		});
++		if (!user) {
++			try {
++				({ user } = await this.users.createUserWithProject({
++					id: identity.engineUserId,
++					email,
++					firstName: identity.name.slice(0, 32) || 'Employee',
++					lastName: 'CRM',
++					password: await this.passwords.hash(randomBytes(48).toString('base64url')),
++					role: { slug: 'global:member' },
++					disabled: false,
++				}));
++			} catch {
++				user = await this.users.findOne({
++					where: { id: identity.engineUserId },
++					relations: ['role'],
++				});
++			}
++		}
++		if (
++			!user ||
++			user.email !== email ||
++			user.role.slug !== 'global:member' ||
++			user.disabled ||
++			user.mfaEnabled
++		) {
++			throw new ForbiddenError('Employee automation account is not available');
++		}
++		// Keep native signature, expiry, browser binding, MFA and quota checks.
++		this.auth.issueCookie(res, user, false, req.browserId);
++		return { ready: true };
++	}
++}
+diff --git a/packages/cli/src/services/__tests__/salesdesk-access.service.test.ts b/packages/cli/src/services/__tests__/salesdesk-access.service.test.ts
+new file mode 100644
+index 00000000..9cd76611
+--- /dev/null
++++ b/packages/cli/src/services/__tests__/salesdesk-access.service.test.ts
+@@ -0,0 +1,46 @@
++import { OutboundHttp } from '@n8n/backend-network';
++import { GlobalConfig } from '@n8n/config';
++import { mock } from 'vitest-mock-extended';
++import { SalesdeskAccessService } from '../salesdesk-access.service';
++
++describe('SalesdeskAccessService', () => {
++	const config = mock<GlobalConfig>({
++		salesdesk: { enabled: true, crmOrigin: 'http://127.0.0.1:3100', bridgeSecret: 'x'.repeat(64) },
++	});
++	const outbound = mock<OutboundHttp>();
++	const http = mock<ReturnType<OutboundHttp['requests']>>();
++	const service = new SalesdeskAccessService(config, outbound);
++	beforeEach(() => {
++		vi.resetAllMocks();
++		config.salesdesk.enabled = true;
++		config.salesdesk.crmOrigin = 'http://127.0.0.1:3100';
++		config.salesdesk.bridgeSecret = 'x'.repeat(64);
++		outbound.requests.mockReturnValue(http);
++	});
++	it('accepts only an affirmative CRM grant', async () => {
++		http.request.mockResolvedValue({ allowed: true });
++		await expect(service.assertAllowed('member')).resolves.toBeUndefined();
++		expect(http.request).toHaveBeenCalledWith(
++			expect.objectContaining({
++				url: 'http://127.0.0.1:3100/api/automation/authorize',
++				body: { engineUserId: 'member' },
++				headers: { authorization: `Bearer ${'x'.repeat(64)}` },
++			}),
++		);
++		http.request.mockResolvedValue({ allowed: false });
++		await expect(service.assertAllowed('member')).rejects.toThrow('CRM Automation access');
++	});
++	it('fails closed when CRM is unavailable or the operator configuration is invalid', async () => {
++		http.request.mockRejectedValue(new Error('network error'));
++		await expect(service.assertAllowed('member')).rejects.toThrow('CRM Automation access');
++		config.salesdesk.crmOrigin = 'https://example.com';
++		await expect(service.consume('ticket')).rejects.toThrow('CRM handoff was not accepted');
++		config.salesdesk.bridgeSecret = '';
++		await expect(service.assertAllowed('member')).rejects.toThrow('not configured');
++	});
++	it('does not change the upstream standalone mode', async () => {
++		config.salesdesk.enabled = false;
++		await service.assertAllowed('member');
++		expect(http.request).not.toHaveBeenCalled();
++	});
++});
+diff --git a/packages/cli/src/services/salesdesk-access.service.ts b/packages/cli/src/services/salesdesk-access.service.ts
+new file mode 100644
+index 00000000..50f169c8
+--- /dev/null
++++ b/packages/cli/src/services/salesdesk-access.service.ts
+@@ -0,0 +1,71 @@
++// Modified for the internal Salesdesk integration. Upstream license terms apply.
++import { OutboundHttp } from '@n8n/backend-network';
++import { GlobalConfig } from '@n8n/config';
++import { Service } from '@n8n/di';
++import { ForbiddenError } from '@n8n/errors';
++import { isRecord } from '@n8n/utils/is-record';
++
++@Service()
++export class SalesdeskAccessService {
++	constructor(
++		private readonly config: GlobalConfig,
++		private readonly outbound: OutboundHttp,
++	) {}
++
++	private origin() {
++		const origin = new URL(this.config.salesdesk.crmOrigin);
++		if (
++			origin.protocol !== 'http:' ||
++			!['127.0.0.1', 'localhost', 'salesdesk'].includes(origin.hostname) ||
++			origin.username ||
++			origin.password ||
++			origin.pathname !== '/' ||
++			origin.search ||
++			origin.hash
++		) {
++			throw new ForbiddenError('CRM internal origin is not valid');
++		}
++		return origin.origin;
++	}
++
++	async consume(ticket: string): Promise<unknown> {
++		try {
++			// The operator fixes this private address. Workflow inputs cannot change it.
++			return await this.outbound.requests({ useDefaultSsrfPolicy: 'unsafe' }).request({
++				method: 'POST',
++				url: `${this.origin()}/api/automation/consume`,
++				body: { ticket },
++				json: true,
++				timeout: 5000,
++				disableFollowRedirect: true,
++				maxResponseBodyBytes: 8192,
++			});
++		} catch {
++			throw new ForbiddenError('CRM handoff was not accepted');
++		}
++	}
++
++	async assertAllowed(engineUserId: string) {
++		if (!this.config.salesdesk.enabled) return;
++		if (this.config.salesdesk.bridgeSecret.length < 43)
++			throw new ForbiddenError('CRM authorization is not configured');
++		let result: unknown;
++		try {
++			// This is a fixed, private control-plane call, not a user-selected node URL.
++			result = await this.outbound.requests({ useDefaultSsrfPolicy: 'unsafe' }).request({
++				method: 'POST',
++				url: `${this.origin()}/api/automation/authorize`,
++				headers: { authorization: `Bearer ${this.config.salesdesk.bridgeSecret}` },
++				body: { engineUserId },
++				json: true,
++				timeout: 5000,
++				disableFollowRedirect: true,
++				maxResponseBodyBytes: 8192,
++			});
++		} catch {
++			throw new ForbiddenError('CRM Automation access is not available');
++		}
++		if (!isRecord(result) || result.allowed !== true)
++			throw new ForbiddenError('CRM Automation access is not available');
++	}
++}
+diff --git a/packages/frontend/editor-ui/src/app/components/app/SalesdeskWorkspace.vue b/packages/frontend/editor-ui/src/app/components/app/SalesdeskWorkspace.vue
+new file mode 100644
+index 00000000..e2674899
+--- /dev/null
++++ b/packages/frontend/editor-ui/src/app/components/app/SalesdeskWorkspace.vue
+@@ -0,0 +1,27 @@
++<script setup lang="ts">
++// Modified for the internal Salesdesk integration. Upstream license terms apply.
++import { useI18n } from '@n8n/i18n';
++const i18n = useI18n();
++const enabled = import.meta.env.VITE_SALESDESK_INTERNAL === 'true';
++</script>
++
++<template>
++	<nav v-if="enabled" :class="$style.workspace" :aria-label="i18n.baseText('salesdesk.navigation')">
++		<a href="/#dashboard">{{ i18n.baseText('salesdesk.back') }}</a>
++		<strong>{{ i18n.baseText('salesdesk.title') }}</strong>
++		<span>{{ i18n.baseText('salesdesk.attribution') }}</span>
++	</nav>
++</template>
++
++<style module lang="scss">
++.workspace {
++	display: flex;
++	align-items: center;
++	gap: var(--spacing--md);
++	padding: var(--spacing--sm) var(--spacing--md);
++	background: var(--color--background--light-2);
++	border-bottom: var(--border-base);
++	color: var(--color--text--shade-1);
++	flex-wrap: wrap;
++}
++</style>
+

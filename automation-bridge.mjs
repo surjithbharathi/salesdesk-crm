@@ -1,5 +1,5 @@
 import http from "node:http";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 
 const hash = (value) => createHash("sha256").update(value).digest("hex");
 const fail = (message, status = 400) => {
@@ -25,7 +25,7 @@ export function bridgeConfig(env = process.env) {
     target.hash
   )
     throw Error("Automation runtime must be a private, bare HTTP origin");
-  return { enabled, target: target.origin };
+  return { enabled, target: target.origin, secret: env.SALESDESK_AUTOMATION_BRIDGE_SECRET || "" };
 }
 export function createAutomationBridge({ db, getUser, config, now = () => Date.now() }) {
   const streams = new Map();
@@ -89,6 +89,24 @@ export function createAutomationBridge({ db, getUser, config, now = () => Date.n
       Boolean(db.prepare("SELECT user_id FROM auth_accounts WHERE user_id=?").get(userId))
     );
   }
+  function authorize(req, input) {
+    const expected = Buffer.from(config.secret || "");
+    const supplied = Buffer.from((req.headers.authorization || "").replace(/^Bearer /, ""));
+    if (
+      req.headers.origin ||
+      !config.enabled ||
+      expected.length < 43 ||
+      supplied.length !== expected.length ||
+      !timingSafeEqual(expected, supplied)
+    )
+      fail("Unauthorized runtime", 401);
+    if (typeof input?.engineUserId !== "string") fail("Engine user required");
+    const account = db
+      .prepare("SELECT user_id FROM auth_accounts")
+      .all()
+      .find((row) => engineUserId(row.user_id) === input.engineUserId);
+    return { allowed: Boolean(account && allowed(account.user_id)) };
+  }
   function issue(identity, session, browserId) {
     if (!config.enabled) fail("Automation runtime is not enabled", 503);
     if (!identity?.user?.id || !sessionAlive(hash(session || ""), identity.user.id))
@@ -143,7 +161,12 @@ export function createAutomationBridge({ db, getUser, config, now = () => Date.n
       const claim = JSON.parse(Buffer.from(parts[1], "base64url").toString());
       // The engine validates the signature. This gate also prevents account switching
       // from reusing a different employee's otherwise valid engine session.
-      if (claim.id !== engineUserId(userId) || claim.exp * 1000 <= now()) return "";
+      if (
+        claim.id !== engineUserId(userId) ||
+        !Number.isFinite(claim.exp) ||
+        claim.exp * 1000 <= now()
+      )
+        return "";
       return "n8n-auth=" + cookie;
     } catch {
       return "";
@@ -177,9 +200,11 @@ export function createAutomationBridge({ db, getUser, config, now = () => Date.n
       "forwarded",
       "connection",
       "upgrade",
+      "x-salesdesk-engine-user",
     ])
       delete headers[key];
     if (cookie) headers.cookie = cookie;
+    headers["x-salesdesk-engine-user"] = engineUserId(identity.user.id);
     // Retain same-origin validation in CRM. The private runtime sees its own origin.
     if (headers.origin) headers.origin = config.target;
     const upstream = http.request(
@@ -204,7 +229,7 @@ export function createAutomationBridge({ db, getUser, config, now = () => Date.n
         if (out["set-cookie"])
           out["set-cookie"] = out["set-cookie"]
             .filter((c) => c.startsWith("n8n-auth="))
-            .map((c) => c.replace(/;\s*Path=[^;]*/i, "") + "; Path=/automation/");
+            .map((c) => c.replace(/;\s*(?:Path|Domain)=[^;]*/gi, "") + "; Path=/automation/");
         res.writeHead(response.statusCode || 502, out);
         response.pipe(res);
       },
@@ -217,12 +242,19 @@ export function createAutomationBridge({ db, getUser, config, now = () => Date.n
     const active = streams.get(identity.user.id) || new Set();
     streams.set(identity.user.id, active);
     active.add(close);
+    const session = /(?:^|;\s*)salesdesk_session=([^;]+)/.exec(req.headers.cookie || "")?.[1];
+    const sessionHash = session ? hash(session) : "";
+    const guard = setInterval(() => {
+      if (!allowed(identity.user.id) || !sessionAlive(sessionHash, identity.user.id)) close();
+    }, 5000);
+    guard.unref();
     upstream.on("error", () => {
       if (!res.headersSent) res.writeHead(503, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "Automation runtime unavailable" }));
     });
     req.on("aborted", () => upstream.destroy());
     res.on("close", () => {
+      clearInterval(guard);
       active.delete(close);
       if (!active.size) streams.delete(identity.user.id);
       if (!res.writableEnded) upstream.destroy();
@@ -234,6 +266,7 @@ export function createAutomationBridge({ db, getUser, config, now = () => Date.n
     consume,
     proxy,
     cookieFor,
+    authorize,
     accessList,
     setAccess,
     status: (userId) => ({

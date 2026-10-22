@@ -622,6 +622,10 @@ const server = http.createServer(async (req, res) => {
       send(200, automation.consume((await body(req)).ticket));
       return;
     }
+    if (url.pathname === "/api/automation/authorize" && req.method === "POST") {
+      send(200, automation.authorize(req, await body(req)));
+      return;
+    }
     if (url.pathname.startsWith("/automation/")) {
       if (!identity) bad("Sign in to CRM first", 401);
       if (!["GET", "HEAD"].includes(req.method) && !allowedOrigins.includes(req.headers.origin))

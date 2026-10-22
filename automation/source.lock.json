@@ -4,8 +4,8 @@
   "commit": "b58d9e89d60e9a3485bb511c5091d8be0d9511e4",
   "node": "24.22.1",
   "pnpm": "12.4.2",
-  "audience": "internal-employees-only",
+  "audience": "selected-internal-users-only",
   "license": "Sustainable Use License; enterprise files have separate terms",
   "integration": "source-based-editor-and-engine",
-  "status": "source-build-preparation-not-integrated"
+  "status": "local-save-and-run-verified-production-image-pending"
 }

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { createHash } from "node:crypto";
 import { createAutomationBridge } from "./automation-bridge.mjs";
+import { engineUserId } from "./automation-bridge.mjs";
 
 function fixture(t) {
   const db = new DatabaseSync(":memory:");
@@ -27,13 +28,32 @@ function fixture(t) {
   const bridge = createAutomationBridge({
     db,
     getUser: (id) => users.get(id),
-    config: { enabled: true, target: "http://127.0.0.1:5681" },
+    config: { enabled: true, target: "http://127.0.0.1:5681", secret: "x".repeat(64) },
   });
   const issue = (id) =>
     bridge.issue({ user: users.get(id) }, id, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
   return { db, users, bridge, issue };
 }
 const forbidden = (e) => e.status === 403;
+
+test("The private runtime checks the current user grant without exposing CRM data", (t) => {
+  const { bridge } = fixture(t);
+  const req = { headers: { authorization: `Bearer ${"x".repeat(64)}` } };
+  const body = { engineUserId: engineUserId("selected") };
+  assert.deepEqual(bridge.authorize(req, body), { allowed: false });
+  bridge.setAccess("admin", { userId: "selected", enabled: true });
+  assert.deepEqual(bridge.authorize(req, body), { allowed: true });
+  bridge.setAccess("admin", { userId: "selected", enabled: false });
+  assert.deepEqual(bridge.authorize(req, body), { allowed: false });
+  assert.throws(
+    () => bridge.authorize({ headers: {} }, body),
+    (e) => e.status === 401,
+  );
+  assert.throws(
+    () => bridge.authorize({ headers: { ...req.headers, origin: "http://localhost:3100" } }, body),
+    (e) => e.status === 401,
+  );
+});
 
 test("Automation defaults to denied for every account, including administrators", (t) => {
   const { bridge, issue } = fixture(t);
