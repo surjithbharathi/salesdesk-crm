@@ -78,4 +78,12 @@ The source-only image is ghcr.io/surjithbharathi/salesdesk-crm:latest, also tagg
 
 ## Suggested continuation prompt
 
+## New work: source-based internal automation
+
+The requested feature must use the n8n source editor and engine inside Salesdesk. An external-instance connector or a separate employee portal does not meet the request. Use the Community source only for internal employees under its terms. Do not bypass paid feature gates or remove required notices.
+
+The official source is pinned to `n8n@2.44.6`, commit `b58d9e89d60e9a3485bb511c5091d8be0d9511e4`. The original Mac has a separate source checkout with dependencies installed using isolated Node 24.22.1 and pnpm 12.4.2. The CRM Node runtime and live deployment were not changed. `automation/source.lock.json` and `scripts/n8n-source.mjs` reproduce source setup on another computer. See `automation/README.md`.
+
+This is source/build preparation, **not a working inbuilt editor**. Editor integration, an original CRM identity adapter, per-employee workflow/credential ownership, Salesdesk nodes, engine isolation, execution tests and deployment are still required. Do not replace the requested source integration with a configured n8n URL. Do not report it as finished from a successful dependency install.
+
 Read HANDOFF.md, android-companion/UI_REDESIGN.md and MOBILE_SYNC.md. Continue from main. The web call-refresh update is deployed; v0.9.0 builds on the original Mac. Preserve all runtime data and the installed app. With the phone connected, verify signing compatibility, perform an in-place update and finish UI, automatic matching and latency acceptance. Ask before real calls, credential changes or destructive actions.

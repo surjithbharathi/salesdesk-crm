@@ -9,3 +9,4 @@ android-companion/local.properties
 *.keystore
 *.apk
 *.aab
+.automation-source/
