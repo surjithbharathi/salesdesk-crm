@@ -1,14 +1,17 @@
 # Salesdesk CRM
 
+v0.6 adds opt-in Baileys WhatsApp pairing, encrypted local auth storage, matched incoming text sync and explicit single-text sending. Read [WHATSAPP.md](WHATSAPP.md) before linking a dedicated number. Live pairing/delivery has not yet been verified.
+
 v0.5.1 adds drag-and-drop to the shared-filter lead Kanban board, with highlighted target lanes, cancellation, guarded saves, accessible stage selectors and stage-change timeline entries. Drag cards by their body (not their buttons or selectors). See [FRAPPE_REFERENCE.md](FRAPPE_REFERENCE.md) for the combined Salesmax/Twenty/Frappe direction and remaining integration boundaries.
 
 A working local CRM modeled on the Salesmax workflows observed in the user's signed-in dashboard and lead grid. Original implementation and branding; no proprietary source or customer records copied.
 
 ## Run
 
-Requires Node.js 22.13 or newer with `node:sqlite` (verified on 22.22.2). No npm packages are needed.
+Requires Node.js 22.13 or newer with `node:sqlite` (verified on 22.22.2). Install the pinned WhatsApp dependencies first.
 
 ```sh
+npm ci
 npm start
 ```
 
@@ -19,7 +22,7 @@ npm run check
 npm test
 ```
 
-The 13 tests use isolated fixtures plus a temporary SQLite database and port 3199. They cover saved lead views, lead creation, call logging, task completion, multi-deal closure, payments, tickets, channels, documents, attendance, event drafts, report joins/date windows, CSV parsing, validation, cross-origin write rejection, import rollback, deduplication, and persistence after restart.
+The 17 tests use isolated fixtures plus a temporary SQLite database and port 3199. They cover the core CRM, encrypted WhatsApp auth persistence, pairing events, stale-event isolation, incoming text parsing, send deduplication, uncertain sends, and same-origin API restrictions. WhatsApp transport tests use a fake socket: no live number is linked and no real message is sent by tests.
 
 ## Implemented
 
@@ -53,6 +56,6 @@ First startup creates fictional sample records. Browser verification adds clearl
 
 ## Boundaries
 
-This is a single-operator local application, not a production Salesmax replacement. Team roles organize records but do not enforce access controls. Authentication, multiple isolated workspaces, real-time collaboration, phone/SIM calling, automatic call capture/recording, live WhatsApp/email/SMS delivery, provider webhooks, AI processing, GPS, binary document uploads and campaign dispatch are not implemented. Attendance is manual, source rules execute on request, and all outgoing messages remain drafts. The Feature status and Integrations screens state these boundaries explicitly.
+This is a single-operator local application, not a production Salesmax replacement. Team roles organize records but do not enforce access controls. Authentication, multiple isolated workspaces, real-time collaboration, phone/SIM calling, automatic call capture/recording, live email/SMS delivery, provider webhooks, AI processing, GPS, binary document uploads and campaign dispatch are not implemented. Attendance is manual and source rules execute on request. Campaigns, auto replies and inbox composition remain drafts. v0.6 provides an opt-in Baileys WhatsApp adapter for matched incoming individual texts and explicit single-message sends from Integrations; it is not the official Business API. See [WHATSAPP.md](WHATSAPP.md) for setup, storage, risks and limitations. No WhatsApp number was linked during development.
 
 Read [FEATURE_PARITY.md](FEATURE_PARITY.md) for the current evidence ledger, verification and every remaining gap. [RESEARCH.md](RESEARCH.md) preserves the initial inspection. Subsequent read-only browser inspection covered ticket forms, auto-messaging categories, lead/team inbox grids and the report chart library; internal implementation remains unknown.

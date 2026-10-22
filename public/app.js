@@ -176,6 +176,7 @@ async function api(path, method = "GET", body) {
 }
 async function refresh() {
   state = await api("state");
+  waStatus = await api("whatsapp/status");
   render();
 }
 async function change(kind, id, body) {
@@ -847,14 +848,44 @@ function distribution() {
     )
   );
 }
+let waStatus = { state: "disconnected", qr: null, error: "", unmatched: 0 };
+function waStatusHtml() {
+  return `<p><b>${esc(waStatus.state)}</b></p>${waStatus.error ? `<p class="warning-box">${esc(waStatus.error)}</p>` : ""}${waStatus.qr ? `<img src="${esc(waStatus.qr)}" alt="Private WhatsApp pairing QR" width="280" height="280"><p>On your dedicated phone: WhatsApp → Linked devices → Link a device. Do not share this QR.</p>` : ""}<small>Unmatched incoming texts this session: ${Number(waStatus.unmatched || 0)}. Only new individual text messages matching exactly one active lead's full international number are stored; groups, history and media are ignored.</small>`;
+}
+setInterval(async () => {
+  if (
+    view === "inbox" &&
+    !$("#modal").open &&
+    !document.activeElement?.closest("input, textarea, select")
+  ) {
+    try {
+      await refresh();
+    } catch {
+      /* Keep existing records if the local server is unavailable. */
+    }
+    return;
+  }
+  if (view !== "integrations" || !$("#wa-status")) return;
+  try {
+    waStatus = await api("whatsapp/status");
+    if ($("#wa-status")) $("#wa-status").innerHTML = waStatusHtml();
+  } catch {
+    if ($("#wa-status"))
+      $("#wa-status").textContent = "Unable to reach the local WhatsApp service.";
+  }
+}, 3000);
 function integrations() {
   return (
-    '<div class="warning-box">External services are not connected. These are integration requirements, not active features.</div><br><div class="integration-grid">' +
+    panel(
+      "WhatsApp · Baileys",
+      `<div class="panel-body"><div class="warning-box">Unofficial WhatsApp linked-device client, not Meta's Business API. Account restriction is possible: use a dedicated test number. Incoming matching text is stored in this local CRM. This single-operator app has no production sign-in.</div><div id="wa-status">${waStatusHtml()}</div><label><input type="checkbox" id="wa-consent"> I understand the unofficial-client risk and allow this local CRM to store my linked session and matching incoming text.</label><div class="row"><button data-action="wa-connect">Connect / resume</button><button data-action="wa-disconnect">Pause connection</button></div><p>Pairing is your action. Pause keeps the encrypted session; revoke it from WhatsApp's Linked devices screen to unlink. No messages are sent automatically.</p><form id="wa-send"><h3>Send one WhatsApp text</h3><label>Recipient lead<select name="leadId" required>${opts(
+        state.leads.filter((l) => !l.archived).map((l) => [l.id, `${l.name} · ${l.phone}`]),
+        "",
+        "Choose a lead",
+      )}</select></label><label>Message<textarea name="text" maxlength="10000" required></textarea></label><label><input type="checkbox" name="confirmed" required> I have permission to contact this recipient and want to send this text now.</label><button type="submit" class="primary">Send WhatsApp text now</button><p>Sent means submitted to WhatsApp, not delivered or read. Unknown means the result is uncertain: check WhatsApp before retrying. This does not send inbox or campaign drafts.</p></form></div>`,
+    ) +
+    '<br><div class="warning-box">Other external integrations below are not connected.</div><br><div class="integration-grid">' +
     [
-      [
-        "WhatsApp Business",
-        "Shared inbox, message delivery, templates, and delivery receipts require a Meta Business account and API credentials.",
-      ],
       [
         "IndiaMART / TradeIndia",
         "Lead capture needs authorized lead API access and a verified ingestion endpoint.",
@@ -1120,6 +1151,19 @@ document.addEventListener("click", async (e) => {
       return;
     }
     const a = b.dataset.action;
+    if (a === "wa-connect" || a === "wa-disconnect") {
+      if (a === "wa-connect" && !$("#wa-consent")?.checked)
+        throw Error("Please acknowledge the WhatsApp risks and local storage first.");
+      b.disabled = true;
+      try {
+        waStatus = await api(`whatsapp/${a === "wa-connect" ? "connect" : "disconnect"}`, "POST", {
+          acknowledged: true,
+        });
+        $("#wa-status").innerHTML = waStatusHtml();
+      } finally {
+        b.disabled = false;
+      }
+    }
     if (a === "save-lead-view") {
       if (queue) throw Error("Clear the work-queue filter before saving a view.");
       const definition = {
@@ -1338,6 +1382,41 @@ document.addEventListener("submit", async (e) => {
   if (button) button.disabled = true;
   try {
     const p = Object.fromEntries(new FormData(f));
+    if (f.id === "wa-send") {
+      const fingerprint = JSON.stringify([p.leadId, p.text]);
+      if (f.dataset.fingerprint !== fingerprint) {
+        f.dataset.fingerprint = fingerprint;
+        f.dataset.requestId = crypto.randomUUID();
+      }
+      const result = await api("whatsapp/send", "POST", {
+        ...p,
+        confirmed: p.confirmed === "on",
+        requestId: f.dataset.requestId,
+      });
+      state = await api("state");
+      if (result.status === "Sent") {
+        f.reset();
+        delete f.dataset.fingerprint;
+        delete f.dataset.requestId;
+        toast("Text submitted to WhatsApp (not a delivery receipt)");
+      } else {
+        toast("Send result uncertain. Check WhatsApp before trying again.", true);
+      }
+      let notice = f.querySelector(".wa-send-result");
+      if (!notice) {
+        notice = document.createElement("p");
+        notice.className = "wa-send-result warning-box";
+        notice.setAttribute("role", "status");
+        f.append(notice);
+      }
+      notice.textContent =
+        result.status === "Sent"
+          ? "Submitted to WhatsApp. Delivery/read status is not tracked."
+          : "Result: " +
+            result.status +
+            ". Do not resend until you have checked WhatsApp; the message might have been sent.";
+      return;
+    }
     if (f.id === "record-form") {
       for (const k of ["value", "duration", "amount", "price", "stock", "followupHours", "days"])
         if (k in p) p[k] = Number(p[k]);
@@ -1498,7 +1577,7 @@ function collaborationPage() {
         (!inboxOwner || c.owner === inboxOwner) && (view !== "mailbox" || c.channel === "Email"),
     );
     return (
-      `<p class="warning-box">Messages are local records and drafts. No email, SMS or WhatsApp delivery is connected.</p><label>Assigned user<select id="inbox-owner">${ownerOptions(inboxOwner, "All users")}</select></label>` +
+      `<p class="warning-box">Local records and drafts, plus Baileys text messages when paired. Drafts are never sent from this inbox; use Integrations for a single explicit WhatsApp send. Email and SMS are not connected.</p><label>Assigned user<select id="inbox-owner">${ownerOptions(inboxOwner, "All users")}</select></label>` +
       add("conversations", "New conversation") +
       stats([
         ["Conversations", conversations.length],
@@ -1614,7 +1693,8 @@ function collaborationPage() {
           "Campaign preparation and source assignment rules",
           "Local drafts and explicit rule execution",
         ],
-        ["Calling, WhatsApp, SMS and email delivery", "Provider connection required"],
+        ["WhatsApp individual text (Baileys)", `Pairing required · ${waStatus.state}`],
+        ["Calling, SMS and email delivery", "Not connected"],
         ["Authentication, shared workspaces and permissions", "Not connected"],
         ["AI summaries, transcription, GPS and external integrations", "Not connected"],
       ].map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`),

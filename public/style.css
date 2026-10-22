@@ -981,3 +981,14 @@ progress::-moz-progress-bar {
   gap: 6px;
   font-size: 12px;
 }
+label:has(> input[type="checkbox"]) {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 12px 0;
+}
+label > input[type="checkbox"] {
+  width: auto;
+  flex: 0 0 auto;
+  margin-top: 3px;
+}

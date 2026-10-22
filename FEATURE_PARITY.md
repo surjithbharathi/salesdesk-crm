@@ -6,6 +6,8 @@ v0.5 adds a Frappe-inspired lead Kanban layout using the existing saved views an
 
 ## Evidence boundary
 
+v0.6 adds an opt-in Baileys adapter with QR/status, encrypted local auth, matched incoming text and explicit single-text sending. Mock transport and HTTP security tests pass; no number has been paired or real delivery verified. All campaign/auto reply/inbox drafts remain unsent. See [WHATSAPP.md](WHATSAPP.md).
+
 The REA `reverse-engineer-anything` skill guided target selection, staged inspection, and the separation of observations from inferences. The installed REA 6.7.0 CLI runs, but its diagnostic reports that REA MCP registration is missing for this agent. The signed-in browser is available through the application's browser-control interface; it supplies the UI observations below. No REA runtime captures, decompiled source, server implementation, API contracts, or native-provider evidence were obtained. The identifiers below are this project's observation labels, not REA Evidence IDs.
 
 No Salesmax records were edited, exported, sent, or copied into the reconstructed database. Source screenshots containing customer data are not committed.
@@ -27,35 +29,35 @@ No Salesmax records were edited, exported, sent, or copied into the reconstructe
 
 “Local” means working with the local SQLite database. It does not imply external service delivery or verified equivalence to Salesmax's hidden business rules.
 
-| Area                                     | Status        | Scope and remaining difference                                                                                            |
-| ---------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Lead CRUD/search/filter/paging           | Local         | Independent implementation based on UI-02                                                                                 |
-| Owner assignment and archive/restore     | Local         | Explicit bulk changes; archived differs from Salesmax's complete already-worked lifecycle                                 |
-| First touch, repeat enquiries, timelines | Local         | Recorded activities determine local state                                                                                 |
-| Dashboard queues                         | Partial       | Local totals and drill-down; exact rolling periods/progress and customisable panels not reproduced                        |
-| Call/note/message/visit logs             | Local         | Manual records; no automatic call acquisition                                                                             |
-| Follow-ups and task board                | Local         | User tasks plus system-origin tasks created by source-rule execution                                                      |
-| Deals, lead-state updates, payments      | Local         | Multi-deal stage aggregation and payment ledger; no payment collection                                                    |
-| Products, businesses and lists           | Local         | Simple catalogue/directory; sales quoting and stock fulfilment unimplemented                                              |
-| CSV/JSON bulk import                     | Local         | Validated 500-row batches, quoted CSV, Unicode, deduplication and rollback; no full workspace restore                     |
-| Source distribution rules                | Partial       | Enabled rules run explicitly; not attached to external lead ingestion                                                     |
-| Customer/lead inbox                      | Partial       | Conversations, received-message records, drafts and resolution; no delivery, read receipts or syncing                     |
-| Internal team inbox                      | Partial       | Persistent channels and membership-validated message records; no authentication or staff notifications                    |
-| Mailbox                                  | Partial       | Email conversation records only; no mailbox connection                                                                    |
-| Tickets                                  | Local         | Observed service stages, priority/category/owner/contact fields and board search                                          |
-| Broadcast campaigns                      | Partial       | List-based, deduplicated draft preparation; no scheduling or broadcast delivery                                           |
-| Event auto replies                       | Partial       | Enabled rules generate local drafts on implemented events; no messages dispatched or quote/payment-failure trigger parity |
-| Documents                                | Partial       | Plain text preview/download up to 100 KiB; binary uploads/PDF generation unimplemented                                    |
-| Attendance                               | Partial       | Manual check-in/out and duplicate-day validation; no device/GPS verification                                              |
-| Custom reports                           | Partial       | Five chart presets, saved grouping definitions, Chart/Table and CSV; smaller template library than UI-08                  |
-| Activity/user/source metrics             | Local         | Computed from local records; historic attribution/time windows differ from Salesmax                                       |
-| Exports                                  | Local         | Workspace JSON, safe lead CSV and report CSV                                                                              |
-| AI chatbot/copilot/transcription         | Unimplemented | Needs a selected model service and defined workflows                                                                      |
-| SIM/cloud calling and recording          | Unimplemented | Needs supported device/telephony integration                                                                              |
-| WhatsApp/email/SMS transport             | Unimplemented | Needs authorized providers, verified webhooks and delivery processing                                                     |
-| GPS/location/device attendance           | Unimplemented | Needs device app and explicit location permissions                                                                        |
-| Authentication/permissions/workspaces    | Unimplemented | Team roles are metadata; app is single-operator and bound to loopback                                                     |
-| Production deployment                    | Unimplemented | Repository published; local server only                                                                                   |
+| Area                                     | Status        | Scope and remaining difference                                                                                                 |
+| ---------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Lead CRUD/search/filter/paging           | Local         | Independent implementation based on UI-02                                                                                      |
+| Owner assignment and archive/restore     | Local         | Explicit bulk changes; archived differs from Salesmax's complete already-worked lifecycle                                      |
+| First touch, repeat enquiries, timelines | Local         | Recorded activities determine local state                                                                                      |
+| Dashboard queues                         | Partial       | Local totals and drill-down; exact rolling periods/progress and customisable panels not reproduced                             |
+| Call/note/message/visit logs             | Local         | Manual records; no automatic call acquisition                                                                                  |
+| Follow-ups and task board                | Local         | User tasks plus system-origin tasks created by source-rule execution                                                           |
+| Deals, lead-state updates, payments      | Local         | Multi-deal stage aggregation and payment ledger; no payment collection                                                         |
+| Products, businesses and lists           | Local         | Simple catalogue/directory; sales quoting and stock fulfilment unimplemented                                                   |
+| CSV/JSON bulk import                     | Local         | Validated 500-row batches, quoted CSV, Unicode, deduplication and rollback; no full workspace restore                          |
+| Source distribution rules                | Partial       | Enabled rules run explicitly; not attached to external lead ingestion                                                          |
+| Customer/lead inbox                      | Partial       | Conversations, received-message records, drafts and resolution; no delivery, read receipts or syncing                          |
+| Internal team inbox                      | Partial       | Persistent channels and membership-validated message records; no authentication or staff notifications                         |
+| Mailbox                                  | Partial       | Email conversation records only; no mailbox connection                                                                         |
+| Tickets                                  | Local         | Observed service stages, priority/category/owner/contact fields and board search                                               |
+| Broadcast campaigns                      | Partial       | List-based, deduplicated draft preparation; no scheduling or broadcast delivery                                                |
+| Event auto replies                       | Partial       | Enabled rules generate local drafts on implemented events; no messages dispatched or quote/payment-failure trigger parity      |
+| Documents                                | Partial       | Plain text preview/download up to 100 KiB; binary uploads/PDF generation unimplemented                                         |
+| Attendance                               | Partial       | Manual check-in/out and duplicate-day validation; no device/GPS verification                                                   |
+| Custom reports                           | Partial       | Five chart presets, saved grouping definitions, Chart/Table and CSV; smaller template library than UI-08                       |
+| Activity/user/source metrics             | Local         | Computed from local records; historic attribution/time windows differ from Salesmax                                            |
+| Exports                                  | Local         | Workspace JSON, safe lead CSV and report CSV                                                                                   |
+| AI chatbot/copilot/transcription         | Unimplemented | Needs a selected model service and defined workflows                                                                           |
+| SIM/cloud calling and recording          | Unimplemented | Needs supported device/telephony integration                                                                                   |
+| WhatsApp/email/SMS transport             | Partial       | Baileys individual-text adapter implemented; live pairing/delivery unverified. Email/SMS remain disconnected. See WHATSAPP.md. |
+| GPS/location/device attendance           | Unimplemented | Needs device app and explicit location permissions                                                                             |
+| Authentication/permissions/workspaces    | Unimplemented | Team roles are metadata; app is single-operator and bound to loopback                                                          |
+| Production deployment                    | Unimplemented | Repository published; local server only                                                                                        |
 
 ## Verification
 

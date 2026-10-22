@@ -3,6 +3,8 @@ import { readFile, mkdir } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
 import { randomUUID } from "node:crypto";
 import { createExtensions } from "./extensions.mjs";
+import { encryptedAuth } from "./whatsapp-auth.mjs";
+import { createWhatsApp, phoneDigits } from "./whatsapp.mjs";
 
 const port = Number(process.env.PORT || 3100);
 await mkdir(new URL("./data/", import.meta.url), { recursive: true });
@@ -260,6 +262,104 @@ async function body(req) {
 }
 const extensions = createExtensions({ all, get, put, tx, stamp, log, bad });
 kinds.push(...extensions.kinds);
+function waConversation(leadId) {
+  let conversation = all("conversations").find(
+    (c) => c.leadId === leadId && c.channel === "WhatsApp" && c.provider === "baileys",
+  );
+  if (!conversation) {
+    conversation = stamp({
+      leadId,
+      subject: "WhatsApp · Baileys",
+      channel: "WhatsApp",
+      provider: "baileys",
+      status: "Open",
+      owner: get("leads", leadId)?.owner || "",
+    });
+    put("conversations", conversation);
+  }
+  return conversation;
+}
+const whatsapp = createWhatsApp({
+  async load() {
+    const [baileys, { default: QRCode }, { default: pino }] = await Promise.all([
+      import("baileys"),
+      import("qrcode"),
+      import("pino"),
+    ]);
+    return {
+      makeSocket: baileys.default,
+      logger: pino({ level: "silent" }),
+      qr: (value) => QRCode.toDataURL(value, { width: 280, margin: 2 }),
+      loggedOut: baileys.DisconnectReason.loggedOut,
+      restartRequired: baileys.DisconnectReason.restartRequired,
+      auth: () =>
+        encryptedAuth({
+          db,
+          keyPath:
+            (process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname) +
+            ".wa-key",
+          BufferJSON: baileys.BufferJSON,
+          initAuthCreds: baileys.initAuthCreds,
+          proto: baileys.proto,
+        }),
+    };
+  },
+  receive(message) {
+    const matches = all("leads").filter(
+      (l) => !l.archived && phoneDigits(l.phone) === message.phone,
+    );
+    if (matches.length !== 1) return false;
+    const lead = matches[0];
+    if (
+      all("messages").some(
+        (m) =>
+          m.provider === "baileys" && m.providerId === message.providerId && m.jid === message.jid,
+      )
+    )
+      return true;
+    tx(() => {
+      const conversation = waConversation(lead.id);
+      put(
+        "messages",
+        stamp({
+          ...message,
+          provider: "baileys",
+          leadId: lead.id,
+          conversationId: conversation.id,
+          direction: "Incoming",
+          status: "Received",
+        }),
+      );
+      put("conversations", { ...conversation, status: "Open", updatedAt: now() });
+      log(lead.id, "Message", message.text, { direction: "Incoming", provider: "baileys" });
+    });
+    return true;
+  },
+  lookupRequest: (requestId) =>
+    all("messages").find((m) => m.provider === "baileys" && m.requestId === requestId),
+  sent(message) {
+    return tx(() => {
+      const old = message.id ? get("messages", message.id) : null;
+      const conversation = waConversation(message.leadId);
+      const record = old
+        ? { ...old, status: message.status, providerId: message.providerId || "", updatedAt: now() }
+        : stamp({
+            ...message,
+            provider: "baileys",
+            direction: "Outgoing",
+            conversationId: conversation.id,
+          });
+      put("messages", record);
+      if (!old) log(message.leadId, "System", "WhatsApp send requested (Baileys)");
+      if (old?.status !== "Sent" && record.status === "Sent")
+        log(message.leadId, "Message", message.text, {
+          direction: "Outgoing",
+          provider: "baileys",
+        });
+      return record;
+    });
+  },
+});
 const files = {
   "/": ["public/index.html", "text/html"],
   "/app.js": ["public/app.js", "text/javascript"],
@@ -295,6 +395,52 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === "/api/state" && req.method === "GET") {
       send(200, Object.fromEntries(kinds.map((k) => [k, all(k)])));
       return;
+    }
+    if (url.pathname === "/api/whatsapp/status" && req.method === "GET") {
+      send(200, whatsapp.snapshot());
+      return;
+    }
+    if (url.pathname.startsWith("/api/whatsapp/") && req.method === "POST") {
+      // These actions can expose a linked account or transmit a real message.
+      if (!["http://localhost:" + port, "http://127.0.0.1:" + port].includes(req.headers.origin))
+        bad("Same-origin browser request required", 403);
+      const p = await body(req);
+      if (url.pathname === "/api/whatsapp/connect") {
+        if (p.acknowledged !== true)
+          bad("Acknowledge the unofficial-client and local message-storage risks first");
+        send(200, await whatsapp.connect());
+        return;
+      }
+      if (url.pathname === "/api/whatsapp/disconnect") {
+        whatsapp.stop();
+        send(200, whatsapp.snapshot());
+        return;
+      }
+      if (url.pathname === "/api/whatsapp/send") {
+        if (typeof p.leadId !== "string" || !p.leadId) bad("Choose an active lead");
+        const lead = get("leads", p.leadId);
+        if (!lead || lead.archived) bad("Choose an active lead");
+        if (
+          p.confirmed !== true ||
+          typeof p.text !== "string" ||
+          !p.text.trim() ||
+          p.text.length > 10000 ||
+          typeof p.requestId !== "string" ||
+          !/^[a-f0-9-]{36}$/i.test(p.requestId)
+        )
+          bad("Confirm a text message and valid request ID");
+        send(
+          200,
+          await whatsapp.send({
+            requestId: p.requestId,
+            leadId: lead.id,
+            phone: lead.phone,
+            text: p.text.trim(),
+          }),
+        );
+        return;
+      }
+      bad("Unknown WhatsApp operation", 404);
     }
     if (url.pathname === "/api/import" && req.method === "POST") {
       const p = await body(req);
@@ -449,9 +595,10 @@ const server = http.createServer(async (req, res) => {
 });
 server.listen(port, "127.0.0.1", () => console.log(`Salesdesk CRM: http://localhost:${port}`));
 for (const signal of ["SIGINT", "SIGTERM"])
-  process.on(signal, () =>
+  process.on(signal, () => {
+    whatsapp.stop();
     server.close(() => {
       db.close();
       process.exit(0);
-    }),
-  );
+    });
+  });
