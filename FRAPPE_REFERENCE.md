@@ -7,7 +7,7 @@ Salesdesk independently combines the observed Salesmax workflow structure, Twent
 - List and Kanban layouts use the same records, search, owner/source/stage filters, ordering, and saved filter definitions.
 - Four lead lanes show counts and estimated values. Cards open the existing lead detail/activity timeline.
 - Keyboard-accessible stage selectors persist changes through the existing validated API. Timeline entries identify the previous and new stage.
-- Board layouts scroll horizontally on narrow screens. Drag-and-drop, configurable columns, and saving the layout preference are not implemented.
+- Board layouts scroll horizontally on narrow screens. v0.5.1 adds mouse/pen card dragging between lanes, highlighted drop targets, edge scrolling, Escape/outside-drop cancellation, and guarded saves. Keyboard and touch users retain the stage selector. Configurable columns and saving the layout preference are not implemented.
 
 ## Source evidence
 

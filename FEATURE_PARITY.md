@@ -2,7 +2,7 @@
 
 Updated 22 October 2026. This is an independent local implementation, not a claim of complete Salesmax parity.
 
-v0.5 adds a Frappe-inspired lead Kanban layout using the existing saved views and filters, keyboard-accessible persisted stage moves, lane counts/value totals, and explicit stage-change timeline entries. No drag-and-drop or live provider integrations are claimed. See [FRAPPE_REFERENCE.md](FRAPPE_REFERENCE.md).
+v0.5 adds a Frappe-inspired lead Kanban layout using the existing saved views and filters, keyboard-accessible persisted stage moves, lane counts/value totals, and explicit stage-change timeline entries. v0.5.1 adds mouse/pen drag-and-drop between stage lanes with cancellation, drop highlights and guarded saves. Touch uses the stage selector. No live provider integrations are claimed. See [FRAPPE_REFERENCE.md](FRAPPE_REFERENCE.md).
 
 ## Evidence boundary
 

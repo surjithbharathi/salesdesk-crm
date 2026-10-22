@@ -36,6 +36,7 @@ let state,
   scope = "",
   leadViewId = "",
   leadLayout = "list",
+  boardSaving = false,
   sortKey = "createdAt",
   sortDir = "desc",
   selected = new Set(),
@@ -483,13 +484,84 @@ function leadsPage() {
 }
 function leadBoard(leads) {
   const stages = ["New", "Prospecting", "Opportunity", "Closed"];
-  return `<div class="panel-body"><p class="muted">Same records and filters as the list. Open a card for its activity timeline; use Move to to change its stage.</p><div class="lead-board">${stages
+  return `<div class="panel-body"><p class="muted">Drag a card into another stage, or use Move to. Open a card for its activity timeline. Filters and saved views apply to this board.</p><div class="lead-board" aria-busy="${boardSaving}">${stages
     .map((stageName) => {
       const cards = leads.filter((l) => l.stage === stageName);
-      return `<section class="lead-lane" aria-label="${stageName} leads"><h3>${esc(stageName)} <small>${cards.length} · ${money(sum(cards, "value"))}</small></h3>${cards.map((l) => `<article class="lead-card">${leadButton(l.id)}<p>${esc(l.company || "No company")}</p><small>${esc(user(l.owner))} · ${esc(l.source || "No source")}</small><p><b>${money(l.value)}</b></p><label>Move to<select data-board-stage="${esc(l.id)}" aria-label="Move ${esc(l.name)} to stage">${opts(stages, l.stage)}</select></label></article>`).join("") || '<p class="empty">No matching leads</p>'}</section>`;
+      return `<section class="lead-lane" data-drop-stage="${stageName}" aria-label="${stageName} leads"><h3>${esc(stageName)} <small>${cards.length} · ${money(sum(cards, "value"))}</small></h3>${cards.map((l) => `<article class="lead-card" draggable="${!boardSaving}" data-drag-lead="${esc(l.id)}">${leadButton(l.id)}<p>${esc(l.company || "No company")}</p><small>${esc(user(l.owner))} · ${esc(l.source || "No source")}</small><p><b>${money(l.value)}</b></p><label>Move to<select data-board-stage="${esc(l.id)}" aria-label="Move ${esc(l.name)} to stage" ${boardSaving ? "disabled" : ""}>${opts(stages, l.stage)}</select></label></article>`).join("") || '<p class="empty">Drop a lead here</p>'}</section>`;
     })
     .join("")}</div></div>`;
 }
+let draggedLeadId = "";
+function clearBoardDrag() {
+  draggedLeadId = "";
+  document
+    .querySelectorAll(".dragging, .drop-target")
+    .forEach((el) => el.classList.remove("dragging", "drop-target"));
+}
+async function moveBoardLead(id, targetStage) {
+  if (boardSaving || !lead(id) || lead(id).stage === targetStage) return;
+  boardSaving = true;
+  render();
+  try {
+    await change("leads", id, { stage: targetStage });
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    boardSaving = false;
+    render();
+  }
+}
+let boardPointer;
+document.addEventListener("dragstart", (e) => {
+  if (e.target.closest("[data-drag-lead]")) e.preventDefault();
+});
+document.addEventListener("pointerdown", (e) => {
+  const card = e.target.closest("[data-drag-lead]");
+  if (
+    !card ||
+    boardSaving ||
+    e.button !== 0 ||
+    e.pointerType === "touch" ||
+    e.target.closest("select, input, button, a")
+  )
+    return;
+  boardPointer = { card, pointerId: e.pointerId, x: e.clientX, y: e.clientY };
+  card.setPointerCapture(e.pointerId);
+});
+document.addEventListener("pointermove", (e) => {
+  if (!boardPointer || e.pointerId !== boardPointer.pointerId) return;
+  if (!draggedLeadId && Math.hypot(e.clientX - boardPointer.x, e.clientY - boardPointer.y) < 6)
+    return;
+  draggedLeadId = boardPointer.card.dataset.dragLead;
+  boardPointer.card.classList.add("dragging");
+  e.preventDefault();
+  document.querySelectorAll(".drop-target").forEach((el) => el.classList.remove("drop-target"));
+  const lane = document.elementFromPoint(e.clientX, e.clientY)?.closest("[data-drop-stage]");
+  if (!lane) return;
+  lane.classList.add("drop-target");
+  const board = lane.closest(".lead-board"),
+    rect = board.getBoundingClientRect();
+  if (e.clientX < rect.left + 45) board.scrollLeft -= 24;
+  if (e.clientX > rect.right - 45) board.scrollLeft += 24;
+});
+function cancelBoardPointer() {
+  if (boardPointer?.card.hasPointerCapture(boardPointer.pointerId))
+    boardPointer.card.releasePointerCapture(boardPointer.pointerId);
+  boardPointer = undefined;
+  clearBoardDrag();
+}
+document.addEventListener("pointerup", async (e) => {
+  if (!boardPointer || e.pointerId !== boardPointer.pointerId) return;
+  const id = draggedLeadId;
+  const lane = document.elementFromPoint(e.clientX, e.clientY)?.closest("[data-drop-stage]");
+  cancelBoardPointer();
+  if (id && lane) await moveBoardLead(id, lane.dataset.dropStage);
+});
+document.addEventListener("pointercancel", cancelBoardPointer);
+window.addEventListener("blur", cancelBoardPointer);
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") cancelBoardPointer();
+});
 function activityFeed(items) {
   return items.length
     ? items
@@ -1206,12 +1278,7 @@ document.addEventListener("change", async (e) => {
       render();
     }
     if (el.dataset.boardStage) {
-      el.disabled = true;
-      try {
-        await change("leads", el.dataset.boardStage, { stage: el.value });
-      } finally {
-        render();
-      }
+      await moveBoardLead(el.dataset.boardStage, el.value);
     }
     if (el.id === "lead-view") {
       const saved = (state.leadViews || []).find((v) => v.id === el.value);
