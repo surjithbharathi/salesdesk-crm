@@ -1,4 +1,14 @@
-# Android business-call companion · v0.7
+# Android mobile CRM · v0.8
+
+## Shared company login (current flow)
+
+Open the web CRM and choose **Set up shared login**. Select your existing CRM user, enter company name, username and a password of at least 12 characters. The first account is the administrator. **Manage accounts** lets that administrator create member logins for other existing CRM users. Do not send passwords through chat.
+
+The Android app uses the same username and password, not a separate owner selection or manually entered device token. The stable CRM user ID scopes leads, tasks, activities, calls and recordings. Mobile includes Home, Leads, Calls, Tasks and Settings; lead creation/stage updates/notes and task creation/completion use authenticated APIs. Cached workspace and pending queues are isolated by endpoint/user. Logout removes the local session/workspace and attempts server revocation; offline logout cannot revoke an unreachable server session until expiry. Sessions expire after 12 hours.
+
+Web sessions use HttpOnly SameSite=Strict cookies; device sessions use encrypted local bearer credentials. Passwords use salted scrypt, server sessions store only token hashes, and inactive users lose access. Company setup disables legacy device-token login. Administrators can view the company; members see assigned records and cannot manage integrations/accounts. This is one local company workspace, not multi-tenant SaaS.
+
+For USB debugging use `adb reverse tcp:3101 tcp:3101`, then the mobile endpoint `http://127.0.0.1:3101`. Debug HTTP is loopback-only; release requires HTTPS with a private proxy exposing only the device API. Never expose desktop/admin port 3100. The following legacy enrollment instructions apply only before company login is enabled, and are not the recommended mobile CRM workflow.
 
 The original Android companion reads existing call logs and recordings; it never records microphone/call audio itself. No private Salesmax/TeleCRM source, call logs, recordings, account databases or tokens are copied into this project.
 

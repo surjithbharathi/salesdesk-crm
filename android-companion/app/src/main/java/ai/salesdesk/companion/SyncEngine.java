@@ -18,21 +18,35 @@ final class SyncEngine {
     static final AtomicBoolean running = new AtomicBoolean(false);
     static volatile boolean cancelled;
     static void cancel() { cancelled = true; }
-    static void check(Context c) throws Exception { if (cancelled || !SecureConfig.prefs(c).getBoolean("enabled", false)) throw new Exception("Sync paused"); }
+    static void check(Context c) throws Exception { if (cancelled || !SecureConfig.loggedIn(c) || !SecureConfig.prefs(c).getBoolean("enabled", false)) throw new Exception("Sync paused; sign in and enable business sync"); }
     static String request(Context c, String path, String method, byte[] bytes, Map<String,String> headers) throws Exception {
-        check(c); String base = SecureConfig.prefs(c).getString("endpoint", ""); URL url = new URL(base + path);
+        check(c); return transport(c,path,method,bytes,headers,true);
+    }
+    static JSONObject requestApi(Context c,String path,String method,JSONObject body) throws Exception {
+        return new JSONObject(transport(c,path,method,body==null?null:body.toString().getBytes("UTF-8"),Collections.singletonMap("Content-Type","application/json"),!path.equals("/v1/login")));
+    }
+    static String transport(Context c,String path,String method,byte[] bytes,Map<String,String> headers,boolean authenticated) throws Exception {
+        String base = SecureConfig.prefs(c).getString("endpoint", ""); URL url = new URL(base + path);
         if (!url.getProtocol().equals("https") && !(BuildConfig.DEBUG && url.getProtocol().equals("http") && (url.getHost().equals("127.0.0.1") || url.getHost().equals("localhost")))) throw new Exception("HTTPS is required (debug USB loopback is supported)");
         if (url.getUserInfo() != null || url.getQuery() != null || url.getRef() != null) throw new Exception("Invalid endpoint");
         HttpURLConnection connection = (HttpURLConnection)url.openConnection(); connection.setInstanceFollowRedirects(false); connection.setRequestMethod(method); connection.setConnectTimeout(15000); connection.setReadTimeout(30000);
-        connection.setRequestProperty("Authorization", "Bearer " + SecureConfig.token(c));
+        if(authenticated) connection.setRequestProperty("Authorization", "Bearer " + SecureConfig.token(c));
         for (Map.Entry<String,String> entry : headers.entrySet()) connection.setRequestProperty(entry.getKey(), entry.getValue());
         try {
             if (bytes != null) { connection.setDoOutput(true); connection.setFixedLengthStreamingMode(bytes.length); try (OutputStream out = connection.getOutputStream()) { out.write(bytes); } }
-            int code = connection.getResponseCode(); if (code != 200) throw new HttpError(code);
+            int code = connection.getResponseCode(); if (code < 200 || code >= 300) throw new HttpError(code);
             try (InputStream in = connection.getInputStream(); ByteArrayOutputStream out = new ByteArrayOutputStream()) { byte[] buffer = new byte[4096]; int n; while ((n=in.read(buffer)) != -1) { if (out.size() + n > 1048576) throw new Exception("Response too large"); out.write(buffer,0,n); } return out.toString("UTF-8"); }
         } finally { connection.disconnect(); }
     }
     static String normalize(String value, String country) { String number = value.replaceAll("[^0-9]", ""); if (value.trim().startsWith("+")) return number; if (number.startsWith("00")) return number.substring(2); if (number.startsWith("0")) number = number.substring(1); return number.length() == 10 ? country + number : number; }
+    static File recording(Context c,String id) throws Exception {
+        if(!id.matches("[a-f0-9-]{36}"))throw new Exception("Invalid recording");
+        URL url=new URL(SecureConfig.prefs(c).getString("endpoint","")+"/v1/recordings/"+id);
+        if(!url.getProtocol().equals("https")&&!(BuildConfig.DEBUG&&url.getProtocol().equals("http")&&(url.getHost().equals("127.0.0.1")||url.getHost().equals("localhost"))))throw new Exception("HTTPS required");
+        HttpURLConnection connection=(HttpURLConnection)url.openConnection();connection.setInstanceFollowRedirects(false);connection.setRequestProperty("Authorization","Bearer "+SecureConfig.token(c));connection.setConnectTimeout(15000);connection.setReadTimeout(30000);
+        File file=File.createTempFile("crm-recording-",".audio",c.getCacheDir());boolean complete=false;
+        try{int code=connection.getResponseCode();if(code!=200)throw new HttpError(code);try(InputStream in=connection.getInputStream();OutputStream out=new FileOutputStream(file)){byte[] buf=new byte[8192];int n,total=0;while((n=in.read(buf))!=-1){total+=n;if(total>20*1024*1024)throw new IOException("Recording exceeds 20 MiB");out.write(buf,0,n);}}complete=true;return file;}finally{connection.disconnect();if(!complete)file.delete();}
+    }
     static ArrayList<JSONObject> calls(SQLiteDatabase db) throws Exception {
         ArrayList<JSONObject> list = new ArrayList<>();
         try (Cursor cur = db.rawQuery("SELECT * FROM calls WHERE uploaded=0 ORDER BY started DESC LIMIT 500", null)) { while (cur.moveToNext()) { JSONObject row=new JSONObject(); for (String col : cur.getColumnNames()) row.put(col, cur.isNull(cur.getColumnIndexOrThrow(col)) ? "" : cur.getString(cur.getColumnIndexOrThrow(col))); list.add(row); } }

@@ -1,8 +1,11 @@
 plugins { id 'com.android.application' }
+def crmOrigin = providers.gradleProperty('crmApiOrigin').orElse('http://127.0.0.1:3101').get()
+def crmUri = new URI(crmOrigin)
+if (!crmUri.host || crmUri.rawUserInfo || crmUri.rawQuery || crmUri.rawFragment || (crmUri.path && crmUri.path != '') || !(crmUri.scheme == 'https' || (crmUri.scheme == 'http' && crmUri.host in ['127.0.0.1','localhost']))) throw new GradleException('Invalid configured CRM service origin')
 android {
     namespace 'ai.salesdesk.companion'
     compileSdk 36
     buildFeatures { buildConfig true }
-    defaultConfig { applicationId 'ai.salesdesk.companion'; minSdk 26; targetSdk 36; versionCode 1; versionName '0.7.0' }
+    defaultConfig { applicationId 'ai.salesdesk.companion'; minSdk 26; targetSdk 36; versionCode 4; versionName '0.8.2'; buildConfigField 'String', 'CRM_API_ORIGIN', groovy.json.JsonOutput.toJson(crmOrigin) }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
 }

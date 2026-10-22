@@ -1,0 +1,9 @@
+.git
+node_modules
+data
+android-companion
+.env*
+*.apk
+*.test.mjs
+*.keystore
+*.jks

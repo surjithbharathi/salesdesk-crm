@@ -56,7 +56,7 @@ test("CRM lifecycle, transaction rollback, validation, and persistent storage", 
     assert.equal((await request("whatsapp/connect", "POST", {}, { Origin: base })).status, 400);
     assert.equal(
       (await request("whatsapp/send", "POST", { confirmed: true }, { Origin: base })).status,
-      400,
+      405,
     );
     assert.equal((await request("whatsapp/disconnect", "POST", {}, { Origin: base })).status, 200);
     const owner = s.users[0].id;

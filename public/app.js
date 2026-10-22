@@ -1,7 +1,9 @@
 import { parseLeadCsv } from "./csv.js";
 import { summarizeReport } from "./reports.js";
 import { applyLeadView } from "./lead-views.js";
+import { initializeAuth } from "./auth.js";
 const $ = (s) => document.querySelector(s);
+let sharedIdentity = null;
 const esc = (s) =>
   String(s ?? "").replace(
     /[&<>"']/g,
@@ -854,11 +856,15 @@ let mobileDevices = [];
 function mobilePanel() {
   return panel(
     "Android call & recording sync",
-    `<div class="panel-body"><p>Companion app reads existing call logs and your selected recording folder. Only one matching active lead assigned to the device owner can receive a call. No microphone recording, personal-call uploads or automatic grants.</p><p class="warning-box">Create a separate token per phone. Device API is separate on loopback port 3101; use USB reverse for debug or a privately deployed HTTPS proxy for the device API only. Do not publish the local CRM/admin port.</p><form id="mobile-device"><label>Device label<input name="name" required maxlength="100" placeholder="Business Android phone"></label><label>Assigned CRM owner<select name="owner" required>${opts(
-      state.users.filter((u) => u.active).map((u) => [u.id, u.name]),
-      "",
-      "Choose owner",
-    )}</select></label><label><input type="checkbox" required> I authorize this device to sync this owner's business call metadata and consented recordings.</label><button class="primary" type="submit">Create device token</button></form>${table(
+    `<div class="panel-body"><p>The Android mobile CRM includes leads, tasks, calls and settings. Call sync reads existing call logs and your selected recording folder; no microphone recording or automatic permission grants.</p>${
+      sharedIdentity
+        ? `<p class="warning-box">Sign in on mobile with the same CRM username and password. Calls automatically belong to that user ID; no separate owner or token setup. Device API: port 3101 via USB reverse for debug, or a private HTTPS proxy for production. Never expose the desktop admin port.</p>`
+        : `<p class="warning-box">Enable company login using the account button to use shared mobile login. Legacy demo device tokens below stop working once company login is enabled.</p><form id="mobile-device"><label>Device label<input name="name" required maxlength="100" placeholder="Business Android phone"></label><label>Assigned CRM owner<select name="owner" required>${opts(
+            state.users.filter((u) => u.active).map((u) => [u.id, u.name]),
+            "",
+            "Choose owner",
+          )}</select></label><label><input type="checkbox" required> I authorize this device to sync this owner's business call metadata and consented recordings.</label><button class="primary" type="submit">Create device token</button></form>`
+    }${table(
       ["Device", "Owner", "Access", "Action"],
       mobileDevices.map(
         (d) =>
@@ -876,7 +882,7 @@ function mobilePanel() {
   );
 }
 function waStatusHtml() {
-  return `<p><b>${esc(waStatus.state)}</b></p>${waStatus.error ? `<p class="warning-box">${esc(waStatus.error)}</p>` : ""}${waStatus.qr ? `<img src="${esc(waStatus.qr)}" alt="Private WhatsApp pairing QR" width="280" height="280"><p>On your dedicated phone: WhatsApp → Linked devices → Link a device. Do not share this QR.</p>` : ""}<small>Unmatched incoming texts this session: ${Number(waStatus.unmatched || 0)}. Only new individual text messages matching exactly one active lead's full international number are stored; groups, history and media are ignored.</small>`;
+  return `<p><b>${esc(waStatus.state)}</b> · Sync only</p>${waStatus.error ? `<p class="warning-box">${esc(waStatus.error)}</p>` : ""}${waStatus.qr ? `<img src="${esc(waStatus.qr)}" alt="Private WhatsApp pairing QR" width="280" height="280"><p>On your dedicated phone: WhatsApp → Linked devices → Link a device. Do not share this QR.</p>` : ""}<small>Unmatched texts this session: ${Number(waStatus.unmatched || 0)}. Incoming and manually outgoing individual text events match exactly one active lead's full international number. Groups, media and full history import are not supported.</small>`;
 }
 setInterval(async () => {
   if (
@@ -904,12 +910,12 @@ function integrations() {
   return (
     mobilePanel() +
     panel(
-      "WhatsApp · Baileys",
-      `<div class="panel-body"><div class="warning-box">Unofficial WhatsApp linked-device client, not Meta's Business API. Account restriction is possible: use a dedicated test number. Incoming matching text is stored in this local CRM. This single-operator app has no production sign-in.</div><div id="wa-status">${waStatusHtml()}</div><label><input type="checkbox" id="wa-consent"> I understand the unofficial-client risk and allow this local CRM to store my linked session and matching incoming text.</label><div class="row"><button data-action="wa-connect">Connect / resume</button><button data-action="wa-disconnect">Pause connection</button></div><p>Pairing is your action. Pause keeps the encrypted session; revoke it from WhatsApp's Linked devices screen to unlink. No messages are sent automatically.</p><form id="wa-send"><h3>Send one WhatsApp text</h3><label>Recipient lead<select name="leadId" required>${opts(
+      "WhatsApp · Baileys · Sync only",
+      `<div class="panel-body"><div class="warning-box">Unofficial linked-device client: account restriction remains possible even without automated sending. Sync only; no CRM send/bulk-send API.</div><div id="wa-status">${waStatusHtml()}</div><label><input type="checkbox" id="wa-consent"> I understand the unofficial-client risk and authorize storing matched incoming and manually sent WhatsApp text.</label><div class="row"><button data-action="wa-connect">Connect / resume sync</button><button data-action="wa-disconnect">Pause sync</button></div><p>Pairing is your action. Pause retains encrypted linked credentials; revoke from WhatsApp Linked devices to unlink. Messages you send in mobile/WhatsApp Web sync back when delivered to this linked client.</p><form id="wa-web-draft"><h3>Open a manual WhatsApp Web draft</h3><label>Recipient lead<select name="leadId" required>${opts(
         state.leads.filter((l) => !l.archived).map((l) => [l.id, `${l.name} · ${l.phone}`]),
         "",
         "Choose a lead",
-      )}</select></label><label>Message<textarea name="text" maxlength="10000" required></textarea></label><label><input type="checkbox" name="confirmed" required> I have permission to contact this recipient and want to send this text now.</label><button type="submit" class="primary">Send WhatsApp text now</button><p>Sent means submitted to WhatsApp, not delivered or read. Unknown means the result is uncertain: check WhatsApp before retrying. This does not send inbox or campaign drafts.</p></form></div>`,
+      )}</select></label><label>Optional draft<textarea name="text" maxlength="4000"></textarea></label><button type="submit" class="primary">Open WhatsApp Web — send manually</button><p>Opens a new tab with recipient and draft in the URL. Review there and press Send yourself. Opening a draft does not create a sent CRM record. WhatsApp Web sign-in may be required; drafts appear in browser history.</p></form></div>`,
     ) +
     '<br><div class="warning-box">Other external integrations below are not connected.</div><br><div class="integration-grid">' +
     [
@@ -1107,7 +1113,7 @@ function showLead(id, tab = "Timeline") {
     )}`;
   modal(
     "Lead workspace",
-    `<div class="lead-banner"><span class="avatar">${esc(initials(l.name))}</span><div><h2>${esc(l.name)}</h2><span class="muted">${esc(l.company)} · ${esc(user(l.owner))}</span></div></div><div class="split"><div class="row">${pill(l.stage)}${l.repeat ? pill("Repeat enquiry") : ""}</div><span class="muted">${money(l.value)}</span></div><div class="detail-tabs">${["Timeline", "Details", "Tasks", "Deals"].map((t) => `<button data-detail-tab="${t}" class="${t === tab ? "active" : ""}">${t}</button>`).join("")}</div>${body}`,
+    `<div class="lead-banner"><span class="avatar">${esc(initials(l.name))}</span><div><h2>${esc(l.name)}</h2><span class="muted">${esc(l.company)} · ${esc(user(l.owner))}</span></div><button class="primary" data-action="call-on-phone">☎ Call on my phone</button></div><div class="split"><div class="row">${pill(l.stage)}${l.repeat ? pill("Repeat enquiry") : ""}</div><span class="muted">${money(l.value)}</span></div><div class="detail-tabs">${["Timeline", "Details", "Tasks", "Deals"].map((t) => `<button data-detail-tab="${t}" class="${t === tab ? "active" : ""}">${t}</button>`).join("")}</div>${body}`,
   );
 }
 function download(name, text, type) {
@@ -1178,6 +1184,24 @@ document.addEventListener("click", async (e) => {
       return;
     }
     const a = b.dataset.action;
+    if (a === "call-on-phone") {
+      const l = lead(detailId),
+        devices = await api("click-to-call/devices");
+      if (!devices.some((d) => d.ready))
+        throw Error(
+          "Your phone bridge is unavailable. Sign in with this same user, grant call-bridge permissions and enable Background click-to-call in mobile Settings. Check notification, network, battery settings and lock-screen preference.",
+        );
+      modal(
+        "Call from your Android phone",
+        `<form id="click-to-call"><input type="hidden" name="leadId" value="${esc(l.id)}"><input type="hidden" name="requestId" value="${crypto.randomUUID()}"><p>Call ${esc(l.name)} · ${esc(l.phone)} using your phone SIM? Carrier charges may apply. Salesdesk need not be open if its background bridge notification is active and connected.</p><label>My ready phone<select name="deviceId" required>${devices
+          .filter((d) => d.ready)
+          .map((d) => `<option value="${esc(d.id)}">${esc(d.name)}</option>`)
+          .join(
+            "",
+          )}</select></label><button class="primary" type="submit">Call now</button><p>No automatic retry. A queued request expires after 30 seconds. Dual-SIM phones may ask you to choose a SIM.</p></form>`,
+      );
+      return;
+    }
     if (a === "mobile-revoke") {
       await api(`mobile/devices/${b.dataset.device}/revoke`, "POST", {});
       await refresh();
@@ -1423,39 +1447,31 @@ document.addEventListener("submit", async (e) => {
       );
       return;
     }
-    if (f.id === "wa-send") {
-      const fingerprint = JSON.stringify([p.leadId, p.text]);
-      if (f.dataset.fingerprint !== fingerprint) {
-        f.dataset.fingerprint = fingerprint;
-        f.dataset.requestId = crypto.randomUUID();
+    if (f.id === "click-to-call") {
+      const submit = f.querySelector('button[type="submit"]');
+      submit.disabled = true;
+      try {
+        const result = await api("click-to-call/request", "POST", { ...p, confirmed: true });
+        toast(
+          `Call request ${result.status}. Check your phone; this is not confirmation of a connected call.`,
+        );
+        $("#modal").close();
+      } catch (error) {
+        submit.disabled = false;
+        throw error;
       }
-      const result = await api("whatsapp/send", "POST", {
-        ...p,
-        confirmed: p.confirmed === "on",
-        requestId: f.dataset.requestId,
-      });
-      state = await api("state");
-      if (result.status === "Sent") {
-        f.reset();
-        delete f.dataset.fingerprint;
-        delete f.dataset.requestId;
-        toast("Text submitted to WhatsApp (not a delivery receipt)");
-      } else {
-        toast("Send result uncertain. Check WhatsApp before trying again.", true);
-      }
-      let notice = f.querySelector(".wa-send-result");
-      if (!notice) {
-        notice = document.createElement("p");
-        notice.className = "wa-send-result warning-box";
-        notice.setAttribute("role", "status");
-        f.append(notice);
-      }
-      notice.textContent =
-        result.status === "Sent"
-          ? "Submitted to WhatsApp. Delivery/read status is not tracked."
-          : "Result: " +
-            result.status +
-            ". Do not resend until you have checked WhatsApp; the message might have been sent.";
+      return;
+    }
+    if (f.id === "wa-web-draft") {
+      const recipient = state.leads.find((l) => l.id === p.leadId && !l.archived);
+      const phone = String(recipient?.phone || "").replace(/\D/g, "");
+      if (!/^[1-9]\d{7,14}$/.test(phone))
+        throw Error("Choose a lead with a full international phone number.");
+      const url = new URL("https://web.whatsapp.com/send");
+      url.searchParams.set("phone", phone);
+      if (p.text) url.searchParams.set("text", p.text);
+      window.open(url.href, "_blank", "noopener,noreferrer");
+      toast("WhatsApp Web draft opened. Review and press Send there; nothing was sent by CRM.");
       return;
     }
     if (f.id === "record-form") {
@@ -2035,6 +2051,7 @@ document.addEventListener("click", async (e) => {
   }
 });
 try {
+  sharedIdentity = await initializeAuth();
   view = location.hash.slice(1) || "dashboard";
   await refresh();
 } catch (e) {

@@ -6,8 +6,23 @@ import { createExtensions } from "./extensions.mjs";
 import { encryptedAuth } from "./whatsapp-auth.mjs";
 import { createWhatsApp, phoneDigits } from "./whatsapp.mjs";
 import { createMobileSync, MAX_AUDIO } from "./mobile-sync.mjs";
+import { createUserAuth } from "./user-auth.mjs";
+import { scopedState } from "./user-scope.mjs";
+import { createClickToCall } from "./click-to-call.mjs";
 
 const port = Number(process.env.PORT || 3100);
+const publicOrigin = process.env.PUBLIC_ORIGIN || "";
+if (
+  publicOrigin &&
+  (!publicOrigin.startsWith("https://") || new URL(publicOrigin).origin !== publicOrigin)
+)
+  throw Error("PUBLIC_ORIGIN must be an HTTPS origin");
+const allowedOrigins = [
+  "http://localhost:" + port,
+  "http://127.0.0.1:" + port,
+  ...(publicOrigin ? [publicOrigin] : []),
+];
+const bindHost = process.env.BIND_HOST || "127.0.0.1";
 await mkdir(new URL("./data/", import.meta.url), { recursive: true });
 const db = new DatabaseSync(
   process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname,
@@ -274,6 +289,55 @@ const mobile = createMobileSync({
   keyPath:
     (process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname) + ".mobile-key",
 });
+const userAuth = createUserAuth({ db, getUser: (id) => get("users", id) });
+if (publicOrigin && !userAuth.configured())
+  throw Error(
+    "Public deployment requires an existing company account database; refusing unauthenticated setup",
+  );
+const clickToCall = createClickToCall({
+  db,
+  getLead: (id) => get("leads", id),
+  getDevice: (id) => mobile.devices().find((d) => d.id === id),
+});
+function sessionToken(req) {
+  return (
+    /(?:^|;\s*)salesdesk_session=([A-Za-z0-9_-]{43})(?:;|$)/.exec(req.headers.cookie || "")?.[1] ||
+    ""
+  );
+}
+function ownLead(userId, leadId) {
+  if (typeof leadId !== "string" || get("leads", leadId)?.owner !== userId)
+    bad("Lead not accessible", 403);
+  return get("leads", leadId);
+}
+function loginDevice(identity) {
+  if (!/^[a-f0-9-]{36}$/i.test(identity.deviceId || ""))
+    bad("Mobile login requires a valid device ID", 401);
+  let device = mobile
+    .devices()
+    .find((d) => d.clientId === identity.deviceId && d.owner === identity.user.id);
+  if (device?.revoked) bad("Device access revoked", 401);
+  if (!device) {
+    const issued = mobile.issue({
+      name: `${identity.user.name} · mobile`,
+      owner: identity.user.id,
+    });
+    device = {
+      id: issued.id,
+      name: issued.name,
+      owner: issued.owner,
+      createdAt: issued.createdAt,
+      updatedAt: issued.updatedAt,
+      revoked: false,
+      clientId: identity.deviceId,
+    };
+    db.prepare("UPDATE mobile_devices SET body=?, token_hash=NULL WHERE id=?").run(
+      JSON.stringify(device),
+      device.id,
+    );
+  }
+  return device;
+}
 // Separate device-only listener: never proxies the unauthenticated web/admin app.
 const mobilePort = Number(process.env.MOBILE_PORT || port + 1);
 const mobileServer = http.createServer(async (req, res) => {
@@ -285,8 +349,107 @@ const mobileServer = http.createServer(async (req, res) => {
   };
   try {
     if (req.headers.origin) bad("Browser access is not supported on the device API", 403);
-    const device = mobile.authenticate(req.headers.authorization);
     const url = new URL(req.url, "http://localhost");
+    if (req.method === "POST" && url.pathname === "/v1/login") {
+      if (!userAuth.configured()) bad("Create the shared company login in the web CRM first", 503);
+      if (req.headers["content-type"]?.split(";")[0] !== "application/json")
+        bad("JSON required", 415);
+      const p = await body(req);
+      if (typeof p.deviceId !== "string" || !/^[a-f0-9-]{36}$/i.test(p.deviceId))
+        bad("Valid mobile device ID required");
+      const result = userAuth.login(p);
+      loginDevice(result);
+      reply(200, result);
+      return;
+    }
+    const bearer = /^Bearer ([A-Za-z0-9_-]{43})$/.exec(req.headers.authorization || "")?.[1] || "";
+    const identity = userAuth.configured() ? userAuth.authenticate(bearer) : null;
+    const device = identity
+      ? loginDevice(identity)
+      : mobile.authenticate(req.headers.authorization);
+    if (url.pathname === "/v1/logout" && req.method === "POST") {
+      if (identity) userAuth.revoke(bearer);
+      reply(200, { loggedOut: true });
+      return;
+    }
+    if (url.pathname === "/v1/workspace" && req.method === "GET") {
+      if (!identity) bad("Shared user login required", 401);
+      reply(200, {
+        ...scopedState(all, identity.user.id),
+        user: identity.user,
+        company: identity.company,
+      });
+      return;
+    }
+    if (
+      identity &&
+      ["POST", "PATCH"].includes(req.method) &&
+      /^\/v1\/(leads|tasks|notes)(?:\/[a-f0-9-]{36})?$/.test(url.pathname)
+    ) {
+      if (req.headers["content-type"]?.split(";")[0] !== "application/json")
+        bad("JSON required", 415);
+      const [, , kind, id] = url.pathname.split("/");
+      const p = await body(req),
+        userId = identity.user.id;
+      const result = tx(() => {
+        if (kind === "notes") {
+          if (req.method !== "POST" || id) bad("Unsupported route", 405);
+          ownLead(userId, p.leadId);
+          const text = string(p.text, "text", 4000);
+          if (!text) bad("Note text required");
+          return log(p.leadId, "Note", text, { userId });
+        }
+        if ((req.method === "PATCH") !== Boolean(id)) bad("Unsupported route", 405);
+        const old = id ? get(kind, id) : null;
+        if (id && !old) bad("Record not found", 404);
+        if (kind === "leads") {
+          if (old) ownLead(userId, id);
+          const allowed = ["name", "phone", "company", "email", "city", "stage", "value"];
+          if (Object.keys(p).some((k) => !allowed.includes(k))) bad("Unsupported lead field");
+          const value = validate("leads", { ...p, owner: userId }, old || {}),
+            record = old ? { ...value, updatedAt: now() } : stamp({ ...value, firstTouchAt: null });
+          put("leads", record);
+          log(record.id, "System", old ? "Lead updated from mobile" : "Lead created from mobile", {
+            userId,
+          });
+          return record;
+        }
+        if (old && old.owner !== userId) bad("Task not accessible", 403);
+        if (old && Object.keys(p).some((k) => k !== "status"))
+          bad("Only task status can be changed here");
+        if (p.leadId) ownLead(userId, p.leadId);
+        if (old?.leadId) ownLead(userId, old.leadId);
+        const value = validate("tasks", { ...p, owner: userId }, old || {}),
+          record = old ? { ...value, updatedAt: now() } : stamp(value);
+        put("tasks", record);
+        if (record.leadId)
+          log(record.leadId, "System", `Task ${record.status}: ${record.title}`, { userId });
+        return record;
+      });
+      reply(200, result);
+      return;
+    }
+    const playback = /^\/v1\/recordings\/([a-f0-9-]{36})$/.exec(url.pathname);
+    if (identity && playback && req.method === "GET") {
+      const call = all("mobileCalls").find((c) => c.recordingId === playback[1]);
+      if (!call) bad("Recording not found", 404);
+      ownLead(identity.user.id, call.leadId);
+      const audio = mobile.playback(playback[1]);
+      res.writeHead(200, { "Content-Type": audio.mime, "Content-Length": audio.bytes.length });
+      res.end(audio.bytes);
+      return;
+    }
+    if (identity && url.pathname.startsWith("/v1/click-to-call/") && req.method === "POST") {
+      if (req.headers["content-type"]?.split(";")[0] !== "application/json")
+        bad("JSON required", 415);
+      const p = await body(req);
+      if (url.pathname === "/v1/click-to-call/poll")
+        reply(200, clickToCall.poll(identity.user.id, device.id, p.armed));
+      else if (url.pathname === "/v1/click-to-call/ack")
+        reply(200, clickToCall.acknowledge(identity.user.id, device.id, p.id, p.status));
+      else bad("Not found", 404);
+      return;
+    }
     if (req.method === "GET" && url.pathname === "/v1/targets") {
       reply(200, mobile.targets(device));
       return;
@@ -322,7 +485,7 @@ const mobileServer = http.createServer(async (req, res) => {
   }
 });
 mobileServer.requestTimeout = 60000;
-mobileServer.listen(mobilePort, "127.0.0.1", () =>
+mobileServer.listen(mobilePort, bindHost, () =>
   console.log(`Device sync API: http://127.0.0.1:${mobilePort}`),
 );
 function waConversation(leadId) {
@@ -332,7 +495,7 @@ function waConversation(leadId) {
   if (!conversation) {
     conversation = stamp({
       leadId,
-      subject: "WhatsApp · Baileys",
+      subject: "WhatsApp · Baileys sync",
       channel: "WhatsApp",
       provider: "baileys",
       status: "Open",
@@ -389,38 +552,18 @@ const whatsapp = createWhatsApp({
           provider: "baileys",
           leadId: lead.id,
           conversationId: conversation.id,
-          direction: "Incoming",
-          status: "Received",
+          direction: message.direction,
+          status: message.direction === "Outgoing" ? "Synced from WhatsApp" : "Received",
         }),
       );
       put("conversations", { ...conversation, status: "Open", updatedAt: now() });
-      log(lead.id, "Message", message.text, { direction: "Incoming", provider: "baileys" });
+      log(lead.id, "Message", message.text, {
+        direction: message.direction,
+        provider: "baileys",
+        occurredAt: message.occurredAt,
+      });
     });
     return true;
-  },
-  lookupRequest: (requestId) =>
-    all("messages").find((m) => m.provider === "baileys" && m.requestId === requestId),
-  sent(message) {
-    return tx(() => {
-      const old = message.id ? get("messages", message.id) : null;
-      const conversation = waConversation(message.leadId);
-      const record = old
-        ? { ...old, status: message.status, providerId: message.providerId || "", updatedAt: now() }
-        : stamp({
-            ...message,
-            provider: "baileys",
-            direction: "Outgoing",
-            conversationId: conversation.id,
-          });
-      put("messages", record);
-      if (!old) log(message.leadId, "System", "WhatsApp send requested (Baileys)");
-      if (old?.status !== "Sent" && record.status === "Sent")
-        log(message.leadId, "Message", message.text, {
-          direction: "Outgoing",
-          provider: "baileys",
-        });
-      return record;
-    });
   },
 });
 const files = {
@@ -429,6 +572,7 @@ const files = {
   "/csv.js": ["public/csv.js", "text/javascript"],
   "/reports.js": ["public/reports.js", "text/javascript"],
   "/lead-views.js": ["public/lead-views.js", "text/javascript"],
+  "/auth.js": ["public/auth.js", "text/javascript"],
   "/style.css": ["public/style.css", "text/css"],
 };
 const server = http.createServer(async (req, res) => {
@@ -444,18 +588,124 @@ const server = http.createServer(async (req, res) => {
   };
   try {
     const url = new URL(req.url, "http://localhost");
-    if (![`localhost:${port}`, `127.0.0.1:${port}`].includes(req.headers.host))
+    if (
+      ![
+        `localhost:${port}`,
+        `127.0.0.1:${port}`,
+        ...(publicOrigin ? [new URL(publicOrigin).host] : []),
+      ].includes(req.headers.host)
+    )
       bad("Unrecognized host", 403);
     if (!["GET", "HEAD"].includes(req.method)) {
-      if (
-        req.headers.origin &&
-        !["http://localhost:" + port, "http://127.0.0.1:" + port].includes(req.headers.origin)
-      )
+      if (req.headers.origin && !allowedOrigins.includes(req.headers.origin))
         bad("Cross-origin write refused", 403);
       if (req.headers["content-type"]?.split(";")[0] !== "application/json")
         bad("JSON content type required", 415);
     }
+    const authRoute = url.pathname.startsWith("/api/auth/");
+    let identity = null;
+    if (userAuth.configured() && sessionToken(req)) {
+      try {
+        identity = userAuth.authenticate(sessionToken(req));
+      } catch {}
+    }
+    const sameOrigin = () => {
+      if (!allowedOrigins.includes(req.headers.origin))
+        bad("Same-origin browser request required", 403);
+    };
+    const cookie = (token) =>
+      res.setHeader(
+        "Set-Cookie",
+        `salesdesk_session=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${token ? 43200 : 0}${publicOrigin ? "; Secure" : ""}`,
+      );
+    if (authRoute) {
+      const action = url.pathname.slice("/api/auth/".length);
+      if (action === "status" && req.method === "GET") {
+        send(200, {
+          configured: userAuth.configured(),
+          user: identity?.user || null,
+          company: identity?.company || "",
+          ...(!userAuth.configured()
+            ? {
+                users: all("users")
+                  .filter((u) => u.active)
+                  .map((u) => ({ id: u.id, name: u.name })),
+              }
+            : {}),
+        });
+        return;
+      }
+      if (["bootstrap", "login"].includes(action) && req.method === "POST") {
+        sameOrigin();
+        const result = userAuth[action](await body(req));
+        cookie(result.token);
+        send(200, { user: result.user, company: result.company });
+        return;
+      }
+      if (!identity) bad("Login required", 401);
+      if (action === "logout" && req.method === "POST") {
+        sameOrigin();
+        userAuth.revoke(sessionToken(req));
+        cookie("");
+        send(200, { ok: true });
+        return;
+      }
+      if (action === "accounts") {
+        if (identity.user.role !== "admin") bad("Administrator required", 403);
+        if (req.method === "GET") {
+          send(200, {
+            accounts: userAuth.listAccounts(),
+            users: all("users")
+              .filter((u) => u.active)
+              .map((u) => ({ id: u.id, name: u.name })),
+          });
+          return;
+        }
+        if (req.method === "POST") {
+          sameOrigin();
+          send(200, userAuth.createAccount(identity, await body(req)));
+          return;
+        }
+      }
+      bad("Not found", 404);
+    }
+    if (url.pathname.startsWith("/api/") && userAuth.configured()) {
+      if (!identity) bad("Login required", 401);
+      if (!["GET", "HEAD"].includes(req.method)) sameOrigin();
+    }
+    const member = identity && identity.user.role !== "admin";
+    if (member) {
+      const allowedRead =
+        [
+          "/api/state",
+          "/api/mobile/devices",
+          "/api/whatsapp/status",
+          "/api/click-to-call/devices",
+        ].includes(url.pathname) || /^\/api\/mobile\/recordings\/[a-f0-9-]{36}$/.test(url.pathname);
+      const allowedWrite =
+        (url.pathname === "/api/click-to-call/request" && req.method === "POST") ||
+        (/^\/api\/(leads|tasks|activities)(?:\/[a-zA-Z0-9-]+)?$/.test(url.pathname) &&
+          ["POST", "PATCH"].includes(req.method));
+      if (!(req.method === "GET" ? allowedRead : allowedWrite)) bad("Administrator required", 403);
+    }
+    if (url.pathname.startsWith("/api/click-to-call/")) {
+      if (!identity) bad("Set up shared login and sign in first", 401);
+      if (url.pathname === "/api/click-to-call/devices" && req.method === "GET") {
+        send(200, clickToCall.receivers(identity.user.id));
+        return;
+      }
+      if (url.pathname === "/api/click-to-call/request" && req.method === "POST") {
+        sameOrigin();
+        send(200, clickToCall.request(identity.user.id, await body(req)));
+        return;
+      }
+      bad("Not found", 404);
+    }
     if (url.pathname === "/api/state" && req.method === "GET") {
+      if (member) {
+        send(200, scopedState(all, identity.user.id));
+        return;
+      }
       send(200, {
         ...Object.fromEntries(kinds.map((k) => [k, all(k)])),
         mobileCalls: all("mobileCalls"),
@@ -463,18 +713,23 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (url.pathname === "/api/mobile/devices" && req.method === "GET") {
-      send(200, mobile.devices());
+      send(
+        200,
+        mobile.devices().filter((d) => !member || d.owner === identity.user.id),
+      );
       return;
     }
     if (url.pathname === "/api/mobile/devices" && req.method === "POST") {
-      if (!["http://localhost:" + port, "http://127.0.0.1:" + port].includes(req.headers.origin))
+      if (userAuth.configured())
+        bad("Use the same CRM username and password on mobile; manual tokens are disabled", 409);
+      if (!allowedOrigins.includes(req.headers.origin))
         bad("Local same-origin request required", 403);
       send(200, mobile.issue(await body(req)));
       return;
     }
     const revokeDevice = /^\/api\/mobile\/devices\/([a-f0-9-]{36})\/revoke$/.exec(url.pathname);
     if (revokeDevice && req.method === "POST") {
-      if (!["http://localhost:" + port, "http://127.0.0.1:" + port].includes(req.headers.origin))
+      if (!allowedOrigins.includes(req.headers.origin))
         bad("Local same-origin request required", 403);
       mobile.revoke(revokeDevice[1]);
       send(200, { revoked: true });
@@ -482,6 +737,11 @@ const server = http.createServer(async (req, res) => {
     }
     const recording = /^\/api\/mobile\/recordings\/([a-f0-9-]{36})$/.exec(url.pathname);
     if (recording && req.method === "GET") {
+      if (member) {
+        const call = all("mobileCalls").find((c) => c.recordingId === recording[1]);
+        if (!call) bad("Not found", 404);
+        ownLead(identity.user.id, call.leadId);
+      }
       const audio = mobile.playback(recording[1]);
       send(200, audio.bytes, {
         "Content-Type": audio.mime,
@@ -491,12 +751,17 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (url.pathname === "/api/whatsapp/status" && req.method === "GET") {
-      send(200, whatsapp.snapshot());
+      send(
+        200,
+        member
+          ? { status: "admin_required", error: "Administrator manages WhatsApp" }
+          : whatsapp.snapshot(),
+      );
       return;
     }
     if (url.pathname.startsWith("/api/whatsapp/") && req.method === "POST") {
       // These actions can expose a linked account or transmit a real message.
-      if (!["http://localhost:" + port, "http://127.0.0.1:" + port].includes(req.headers.origin))
+      if (!allowedOrigins.includes(req.headers.origin))
         bad("Same-origin browser request required", 403);
       const p = await body(req);
       if (url.pathname === "/api/whatsapp/connect") {
@@ -511,28 +776,7 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       if (url.pathname === "/api/whatsapp/send") {
-        if (typeof p.leadId !== "string" || !p.leadId) bad("Choose an active lead");
-        const lead = get("leads", p.leadId);
-        if (!lead || lead.archived) bad("Choose an active lead");
-        if (
-          p.confirmed !== true ||
-          typeof p.text !== "string" ||
-          !p.text.trim() ||
-          p.text.length > 10000 ||
-          typeof p.requestId !== "string" ||
-          !/^[a-f0-9-]{36}$/i.test(p.requestId)
-        )
-          bad("Confirm a text message and valid request ID");
-        send(
-          200,
-          await whatsapp.send({
-            requestId: p.requestId,
-            leadId: lead.id,
-            phone: lead.phone,
-            text: p.text.trim(),
-          }),
-        );
-        return;
+        bad("WhatsApp is sync-only. Open WhatsApp Web and send manually.", 405);
       }
       bad("Unknown WhatsApp operation", 404);
     }
@@ -564,7 +808,7 @@ const server = http.createServer(async (req, res) => {
       send(200, result);
       return;
     }
-    if (await extensions.handle(req, url, body, send)) return;
+    if (!member && (await extensions.handle(req, url, body, send))) return;
     const match = url.pathname.match(/^\/api\/([a-zA-Z]+)(?:\/([a-zA-Z0-9-]+))?$/);
     if (match && !kinds.includes(match[1])) bad("Not found", 404);
     if (match && ["POST", "PATCH"].includes(req.method)) {
@@ -572,6 +816,18 @@ const server = http.createServer(async (req, res) => {
       if ((req.method === "POST" && id) || (req.method === "PATCH" && !id))
         bad("Unsupported route", 405);
       const p = await body(req);
+      if (member) {
+        const existing = id ? get(kind, id) : null;
+        if (id && !existing) bad("Record not found", 404);
+        if (kind === "leads") {
+          if (id) ownLead(identity.user.id, id);
+          p.owner = identity.user.id;
+        } else if (kind === "tasks") {
+          if (existing && existing.owner !== identity.user.id) bad("Task not accessible", 403);
+          if (p.leadId || existing?.leadId) ownLead(identity.user.id, p.leadId || existing.leadId);
+          p.owner = identity.user.id;
+        } else if (kind === "activities") ownLead(identity.user.id, p.leadId);
+      }
       const result = tx(() => {
         if (kind === "activities") {
           if (id) bad("Activities are immutable");
@@ -687,7 +943,9 @@ const server = http.createServer(async (req, res) => {
     if (!e.status) console.error(e);
   }
 });
-server.listen(port, "127.0.0.1", () => console.log(`Salesdesk CRM: http://localhost:${port}`));
+server.listen(port, bindHost, () =>
+  console.log(`Salesdesk CRM: ${publicOrigin || `http://localhost:${port}`}`),
+);
 for (const signal of ["SIGINT", "SIGTERM"])
   process.on(signal, () => {
     mobileServer.close();

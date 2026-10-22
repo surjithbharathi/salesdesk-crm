@@ -42,7 +42,7 @@ test("encrypted auth persists credentials and Signal keys without exporting plai
   }
 });
 
-test("incoming messages accept individual text, support alternate phone JIDs, and ignore history payloads/groups/media", () => {
+test("text sync accepts incoming and manually outgoing text, alternate JIDs; ignores groups/media", () => {
   const key = { id: "one", remoteJid: "919999999999@s.whatsapp.net", fromMe: false };
   assert.equal(incomingText({ key, message: { conversation: "Hi" } }).phone, "919999999999");
   assert.equal(
@@ -53,8 +53,8 @@ test("incoming messages accept individual text, support alternate phone JIDs, an
     "Hello",
   );
   assert.equal(
-    incomingText({ key: { ...key, fromMe: true }, message: { conversation: "Hi" } }),
-    null,
+    incomingText({ key: { ...key, fromMe: true }, message: { conversation: "Hi" } }).direction,
+    "Outgoing",
   );
   assert.equal(
     incomingText({
@@ -110,21 +110,20 @@ test("connection requires explicit start, handles QR/open/pause, and ignores sta
     message: { conversation: "Hi" },
   };
   ev.emit("messages.upsert", { type: "append", messages: [message] });
-  assert.equal(received, 0);
-  ev.emit("messages.upsert", { type: "notify", messages: [message] });
   assert.equal(received, 1);
+  ev.emit("messages.upsert", { type: "notify", messages: [message] });
+  assert.equal(received, 2);
   wa.stop();
   ev.emit("connection.update", { connection: "open" });
   ev.emit("messages.upsert", { type: "notify", messages: [message] });
   assert.equal(wa.snapshot().state, "disconnected");
-  assert.equal(received, 1);
+  assert.equal(received, 2);
 });
 
-test("manual sends deduplicate request IDs and mark network failures uncertain without automatic retries", async () => {
-  const ev = new EventEmitter(),
-    records = new Map();
-  let sends = 0,
-    fail = false;
+test("sync-only adapter exposes no send method and never invokes socket sendMessage", async () => {
+  const ev = new EventEmitter();
+  let sends = 0;
+  const received = [];
   const wa = createWhatsApp({
     load: async () => ({
       makeSocket: () => ({
@@ -132,33 +131,35 @@ test("manual sends deduplicate request IDs and mark network failures uncertain w
         end() {},
         async sendMessage() {
           sends++;
-          if (fail) throw Error("network");
           return { key: { id: "provider1" } };
         },
       }),
       auth: () => ({ state: {}, saveCreds() {} }),
     }),
-    receive() {},
-    lookupRequest: (id) => records.get(id),
-    sent: (record) => {
-      records.set(record.requestId, { ...record, id: record.id || record.requestId });
-      return records.get(record.requestId);
+    receive(message) {
+      received.push(message);
+      return true;
     },
   });
-  const message = { requestId: "request-1", leadId: "lead", phone: "+919999999999", text: "Hi" };
-  await assert.rejects(wa.send(message), /not connected/);
+  assert.equal(wa.send, undefined);
   await wa.connect();
   ev.emit("connection.update", { connection: "open" });
-  assert.equal((await wa.send(message)).status, "Sent");
-  await wa.send(message);
-  assert.equal(sends, 1);
-  fail = true;
-  assert.equal((await wa.send({ ...message, requestId: "request-2" })).status, "Unknown");
-  assert.equal((await wa.send({ ...message, requestId: "request-2" })).status, "Unknown");
-  assert.equal(sends, 2);
-  await assert.rejects(
-    wa.send({ ...message, requestId: "request-3", phone: "123" }),
-    /international/,
+  const raw = {
+    key: { id: "manual1", remoteJid: "919999999999@s.whatsapp.net", fromMe: true },
+    messageTimestamp: 1780000000,
+    message: { conversation: "Manually sent" },
+  };
+  ev.emit("messages.upsert", { type: "append", messages: [raw] });
+  ev.emit("messages.upsert", {
+    type: "notify",
+    messages: [{ ...raw, key: { ...raw.key, id: "incoming1", fromMe: false } }],
+  });
+  assert.deepEqual(
+    received.map((m) => m.direction),
+    ["Outgoing", "Incoming"],
   );
+  assert.equal(received[0].occurredAt, "2026-05-28T20:26:40.000Z");
+  assert.equal(wa.snapshot().sendingEnabled, false);
+  assert.equal(sends, 0);
   wa.stop();
 });

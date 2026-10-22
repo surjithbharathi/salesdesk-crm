@@ -4,6 +4,86 @@
   background: #f5f7f8;
   font-size: 13px;
 }
+.auth-dialog {
+  width: min(480px, calc(100vw - 32px));
+  max-height: calc(100dvh - 40px);
+  overflow: auto;
+  border: 1px solid #dfe7e1;
+  border-radius: 14px;
+  padding: 28px;
+  color: #293e34;
+  box-shadow: 0 24px 80px #173b292b;
+}
+.auth-dialog::backdrop {
+  background: #18382ee0;
+}
+.auth-dialog h1 {
+  font-size: 25px;
+  color: #168261;
+}
+.auth-dialog h2 {
+  font-size: 19px;
+}
+.auth-dialog p {
+  line-height: 1.6;
+}
+.auth-dialog form,
+.auth-dialog label {
+  display: grid;
+  gap: 10px;
+}
+.auth-dialog form {
+  gap: 16px;
+}
+.auth-dialog input,
+.auth-dialog select {
+  width: 100%;
+  padding: 11px;
+  border: 1px solid #b7cbbf;
+  border-radius: 6px;
+  background: white;
+  color: #293e34;
+}
+.auth-error {
+  color: #ad342d;
+  margin: 0;
+}
+.auth-account-bar,
+.auth-dialog-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.auth-account-bar {
+  font-size: 11px;
+}
+.auth-account-bar button {
+  font-size: 11px;
+  padding: 6px 8px;
+}
+.auth-dialog-title {
+  justify-content: space-between;
+}
+.auth-account-list {
+  padding: 0;
+  list-style: none;
+}
+.auth-account-list li {
+  display: grid;
+  gap: 5px;
+  padding: 12px 0;
+  border-bottom: 1px solid #e1e8e3;
+}
+@media (max-width: 700px) {
+  main > header:has(.auth-account-bar) {
+    height: auto;
+    min-height: 70px;
+    flex-wrap: wrap;
+    padding-block: 10px;
+    gap: 8px;
+  }
+}
 * {
   box-sizing: border-box;
 }

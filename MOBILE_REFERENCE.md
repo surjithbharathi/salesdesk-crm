@@ -19,4 +19,10 @@ The user authorized studying their USB-connected phone's Salesmax and TeleCRM ap
 
 ## Independent implementation choices
 
+### Follow-up visual observations
+
+Read-only phone inspection captured Salesmax Home (dashboard tabs, team pulse, pipeline counts, work plan, bottom navigation), its activity feed (call direction/duration, recording availability and transcript cards), and TeleCRM My Calls (lead/number, status chip, owner badge, direction/duration and recent time). Local REA evidence: `ev_69e041d23b7fd97fd05c85d40ff62c3ba69d67bbe15e50c71a3d6356ecce167e`, `ev_7f789dc19118ea878313428214e149aa2b2e8a431c4ceaed902ad185fa7be2ab`, `ev_bf71eba3ae5b374596f7c21dbb81a738588f7a59fbb1306103429ba3cd3ce0ba`. Screenshots remain private; no customer names, numbers or transcripts are used as fixtures. Settings was not reliably captured. No calls/messages/settings mutations were performed. These observations inform original layouts, not a claim of recovered vendor code or exact parity.
+
+v0.8 replaces the main manual-token setup experience with shared web/mobile user accounts, authenticated workspace CRUD and automatic per-user device binding. The older per-device-token design below describes v0.7; legacy tokens work only before company login is enabled.
+
 An opt-in native Android companion uses CallLog and a user-selected SAF folder, a local SQLite retry queue and periodic JobScheduler, rather than importing proprietary services. Per-device scoped tokens, a separate device-only listener, AES-GCM recording storage, explicit manual review and no automatic permission grants are our design decisions. Number/time/duration tolerances are documented in MOBILE_SYNC.md, not presented as recovered vendor logic. CallSync was only a repository reference; no code from its MSSQL/FTP implementation was copied.

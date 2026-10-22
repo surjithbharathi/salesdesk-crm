@@ -1,0 +1,32 @@
+services:
+  salesdesk:
+    build:
+      context: https://github.com/surjithbharathi/salesdesk-crm.git#main
+    pull_policy: build
+    restart: unless-stopped
+    init: true
+    environment:
+      PUBLIC_ORIGIN: https://salesdesk-crm.srv1696974.hstgr.cloud
+      BIND_HOST: 0.0.0.0
+      CRM_DB: /app/data/crm.sqlite
+    volumes:
+      - /opt/salesdesk-crm/data:/app/data
+    mem_limit: 768m
+    cpus: 1.0
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.salesdesk-web.rule=Host(`salesdesk-crm.srv1696974.hstgr.cloud`)
+      - traefik.http.routers.salesdesk-web.entrypoints=websecure
+      - traefik.http.routers.salesdesk-web.tls.certresolver=letsencrypt
+      - traefik.http.routers.salesdesk-web.service=salesdesk-web
+      - traefik.http.services.salesdesk-web.loadbalancer.server.port=3100
+      - traefik.http.routers.salesdesk-mobile.rule=Host(`salesdesk-crm.srv1696974.hstgr.cloud`) && PathPrefix(`/v1/`)
+      - traefik.http.routers.salesdesk-mobile.priority=100
+      - traefik.http.routers.salesdesk-mobile.entrypoints=websecure
+      - traefik.http.routers.salesdesk-mobile.tls.certresolver=letsencrypt
+      - traefik.http.routers.salesdesk-mobile.service=salesdesk-mobile
+      - traefik.http.services.salesdesk-mobile.loadbalancer.server.port=3101
