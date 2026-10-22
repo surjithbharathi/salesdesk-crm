@@ -2,6 +2,10 @@
 
 **Continuing on another computer? Start with [HANDOFF.md](HANDOFF.md).** It contains setup, deployment state, Android signing caveats, completed work and outstanding acceptance checks. No runtime database, private screenshots or secrets are included in this public repository.
 
+Android 0.9.0 UI source now includes a modern violet/neutral theme, Lucide icons, Home shortcuts, contact rows and expandable Settings. A separate sample-data preview is installed and both preview/online builds assemble and lint. The existing phone app remains 0.8.3 until its original signing key is available. See [UI_REDESIGN.md](android-companion/UI_REDESIGN.md) for verification limits and build instructions.
+
+Recording auto-match source now uses call end time and actual audio duration, independent of filenames, with unique-match and personal-call ambiguity checks. Twelve matcher regression cases pass. This requires the updated signed Android app; the original installed app has not received it.
+
 Latest Android v0.8.3 improves the five native screens and introduces event-triggered business call sync (20-second settle delay, recording retries, minute fallback while active). Web call views now refresh changed synced-call data every three seconds without interrupting forms/audio. All 42 CRM tests and Android assemble/lint pass. The APK was installed; final device UI/latency checks remain incomplete after USB disconnected. See [design-qa.md](design-qa.md). The user confirmed actual mobile login/background SIM calling before this UI pass; this is not verification of every call/recording/device scenario.
 
 The paragraphs below preserve feature history. Current status/limitations in HANDOFF.md, WHATSAPP.md, CLICK_TO_CALL.md and design-qa.md supersede older test counts or earlier unverified/no-dialing boundaries.

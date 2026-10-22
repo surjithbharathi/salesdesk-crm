@@ -55,24 +55,53 @@ final class SyncEngine {
     static long duration(Context c, Uri uri) { try (MediaMetadataRetriever mm = new MediaMetadataRetriever()) { mm.setDataSource(c,uri); return Long.parseLong(mm.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION))/1000; } catch (Exception e) { return 0; } }
     static long modified(Context c, Uri uri) { try (Cursor cur=c.getContentResolver().query(uri,new String[]{DocumentsContract.Document.COLUMN_LAST_MODIFIED},null,null,null)) { return cur!=null && cur.moveToFirst() ? cur.getLong(0) : 0; } catch (Exception e) { return 0; } }
     static void matchFolder(Context c, SQLiteDatabase db, ArrayList<JSONObject> rows) throws Exception {
-        String saved=SecureConfig.prefs(c).getString("folder", ""); if(saved.isEmpty()) return;
-        Uri tree=Uri.parse(saved), children=DocumentsContract.buildChildDocumentsUriUsingTree(tree,DocumentsContract.getTreeDocumentId(tree));
-        Map<String,ArrayList<String>> candidates=new HashMap<>(); Map<String,Long> fileTimes=new HashMap<>();
-        try(Cursor files=c.getContentResolver().query(children,new String[]{DocumentsContract.Document.COLUMN_DOCUMENT_ID,DocumentsContract.Document.COLUMN_DISPLAY_NAME,DocumentsContract.Document.COLUMN_MIME_TYPE,DocumentsContract.Document.COLUMN_LAST_MODIFIED},null,null,null)) {
-            int seen=0; while(files!=null && files.moveToNext() && seen++<1000) {
-                check(c); String mime=files.getString(2); if(mime==null || !mime.startsWith("audio/")) continue;
-                long changed=files.getLong(3); if(changed>System.currentTimeMillis()-15000) continue;
-                Uri uri=DocumentsContract.buildDocumentUriUsingTree(tree,files.getString(0)); String name=files.getString(1).replaceAll("[^0-9]", ""); long length=duration(c,uri); if(length<1) continue;
-                ArrayList<String> possible=new ArrayList<>();
-                for(JSONObject row:rows) {
-                    String phone=row.getString("phone"); long start=row.getLong("started"), seconds=row.getLong("duration");
-                    if(seconds>0 && phone.length()>=10 && name.contains(phone.substring(phone.length()-10)) && Math.abs(changed-(start+seconds*1000))<=120000 && Math.abs(length-seconds)<=Math.max(10,seconds*.2)) possible.add(row.getString("local_id"));
-                }
-                if(possible.size()==1) { String id=possible.get(0); candidates.computeIfAbsent(id,k->new ArrayList<>()).add(uri.toString()); fileTimes.put(uri.toString(),changed); }
+        String saved=SecureConfig.prefs(c).getString("folder", ""); if(saved.isEmpty() || rows.isEmpty()) return;
+        Set<String> eligible=new HashSet<>(), reserved=new HashSet<>(), reservedDocuments=new HashSet<>();
+        long earliest=Long.MAX_VALUE;
+        for(JSONObject row:rows) if(row.getString("uri").isEmpty() && row.getLong("duration")>0) {
+            eligible.add(row.getString("local_id")); earliest=Math.min(earliest,row.getLong("started"));
+        }
+        if(eligible.isEmpty()) return;
+        try(Cursor used=db.rawQuery("SELECT uri FROM calls WHERE uri IS NOT NULL AND uri<>''",null)) {
+            while(used.moveToNext()) {
+                String value=used.getString(0); reserved.add(value);
+                try { Uri uri=Uri.parse(value); reservedDocuments.add(uri.getAuthority()+"/"+DocumentsContract.getDocumentId(uri)); } catch(Exception ignored) {}
             }
         }
-        for(JSONObject row:rows) { ArrayList<String> matches=candidates.get(row.getString("local_id")); if(row.getString("uri").isEmpty() && matches!=null && matches.size()==1) { ContentValues values=new ContentValues(); values.put("uri",matches.get(0)); values.put("mode","auto"); db.update("calls",values,"local_id=?",new String[]{row.getString("local_id")}); } }
+        // Nearby personal calls block ambiguous matches, but are never stored or uploaded.
+        ArrayList<RecordingMatcher.Call> timings=new ArrayList<>();
+        try(Cursor log=c.getContentResolver().query(CallLog.Calls.CONTENT_URI,
+            new String[]{CallLog.Calls._ID,CallLog.Calls.DATE,CallLog.Calls.DURATION},
+            CallLog.Calls.DATE+">=?",new String[]{String.valueOf(Math.max(0,earliest-86400000L-120000L))},CallLog.Calls.DATE+" DESC")) {
+            if(log==null) return;
+            while(log.moveToNext()) {
+                check(c); if(timings.size()>=5000) return; // Incomplete evidence: require manual review.
+                long start=log.getLong(1); String id=log.getString(0)+"-"+start;
+                timings.add(new RecordingMatcher.Call(id,start,log.getLong(2),eligible.contains(id)));
+            }
+        }
+        Uri tree=Uri.parse(saved), children=DocumentsContract.buildChildDocumentsUriUsingTree(tree,DocumentsContract.getTreeDocumentId(tree));
+        ArrayList<RecordingMatcher.Audio> audio=new ArrayList<>();
+        try(Cursor files=c.getContentResolver().query(children,new String[]{DocumentsContract.Document.COLUMN_DOCUMENT_ID,DocumentsContract.Document.COLUMN_MIME_TYPE,DocumentsContract.Document.COLUMN_LAST_MODIFIED},null,null,null)) {
+            if(files==null) return;
+            int seen=0; while(files.moveToNext()) {
+                check(c); if(++seen>5000) return;
+                String mime=files.getString(1); if(mime==null || !mime.startsWith("audio/")) continue;
+                long changed=files.getLong(2); if(changed>System.currentTimeMillis()-15000) continue;
+                boolean relevant=false;
+                for(RecordingMatcher.Call call:timings) if(call.eligible && RecordingMatcher.nearEnd(call,changed)) { relevant=true; break; }
+                if(!relevant) continue;
+                Uri uri=DocumentsContract.buildDocumentUriUsingTree(tree,files.getString(0));
+                if(!reserved.contains(uri.toString()) && !reservedDocuments.contains(uri.getAuthority()+"/"+DocumentsContract.getDocumentId(uri))) audio.add(new RecordingMatcher.Audio(uri.toString(),changed,duration(c,uri)));
+            }
+        }
+        Map<String,String> matches=RecordingMatcher.match(timings,audio,reserved);
+        for(Map.Entry<String,String> match:matches.entrySet()) {
+            ContentValues values=new ContentValues(); values.put("uri",match.getValue()); values.put("mode","auto");
+            db.update("calls",values,"local_id=? AND uploaded=0 AND (uri IS NULL OR uri='')",new String[]{match.getKey()});
+        }
     }
+
     static void run(Context c) throws Exception {
         if(!running.compareAndSet(false,true)) return; cancelled=false;
         try(QueueDb helper=new QueueDb(c)) {
@@ -100,7 +129,9 @@ final class SyncEngine {
                     remote=new JSONObject(request(c,"/v1/calls","POST",payload.toString().getBytes("UTF-8"),Collections.singletonMap("Content-Type","application/json"))).getString("id"); ContentValues v=new ContentValues(); v.put("remote_id",remote); db.update("calls",v,"local_id=?",new String[]{row.getString("local_id")}); synced++; }
             }
             // Publish call logs first: scanning/reading audio must not delay the CRM timeline.
-            matchFolder(c,db,calls(db));
+            ArrayList<JSONObject> matchable=calls(db);
+            matchable.removeIf(row->!phones.contains(row.optString("phone")));
+            matchFolder(c,db,matchable);
             for(JSONObject row:calls(db)) {
                 check(c); if(!phones.contains(row.getString("phone"))) continue;
                 String remote=row.getString("remote_id");
