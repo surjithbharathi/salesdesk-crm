@@ -1,5 +1,7 @@
 # Salesdesk CRM
 
+v0.5 adds a shared-filter lead Kanban board with accessible stage moves and stage-change timeline entries. See [FRAPPE_REFERENCE.md](FRAPPE_REFERENCE.md) for the combined Salesmax/Twenty/Frappe direction and remaining integration boundaries.
+
 A working local CRM modeled on the Salesmax workflows observed in the user's signed-in dashboard and lead grid. Original implementation and branding; no proprietary source or customer records copied.
 
 ## Run

@@ -394,7 +394,15 @@ const server = http.createServer(async (req, res) => {
         if (kind === "conversations" && record.status === "Resolved" && old?.status !== "Resolved")
           event("Conversation resolved");
         if (kind === "leads")
-          log(record.id, "System", old ? "Lead details updated" : "Lead created");
+          log(
+            record.id,
+            "System",
+            old && old.stage !== record.stage
+              ? `Lead stage changed: ${old.stage} → ${record.stage}`
+              : old
+                ? "Lead details updated"
+                : "Lead created",
+          );
         if (kind === "tasks" && record.leadId)
           log(
             record.leadId,

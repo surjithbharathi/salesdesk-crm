@@ -2,6 +2,8 @@
 
 Updated 22 October 2026. This is an independent local implementation, not a claim of complete Salesmax parity.
 
+v0.5 adds a Frappe-inspired lead Kanban layout using the existing saved views and filters, keyboard-accessible persisted stage moves, lane counts/value totals, and explicit stage-change timeline entries. No drag-and-drop or live provider integrations are claimed. See [FRAPPE_REFERENCE.md](FRAPPE_REFERENCE.md).
+
 ## Evidence boundary
 
 The REA `reverse-engineer-anything` skill guided target selection, staged inspection, and the separation of observations from inferences. The installed REA 6.7.0 CLI runs, but its diagnostic reports that REA MCP registration is missing for this agent. The signed-in browser is available through the application's browser-control interface; it supplies the UI observations below. No REA runtime captures, decompiled source, server implementation, API contracts, or native-provider evidence were obtained. The identifiers below are this project's observation labels, not REA Evidence IDs.

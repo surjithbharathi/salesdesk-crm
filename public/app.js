@@ -35,6 +35,7 @@ let state,
   page = 1,
   scope = "",
   leadViewId = "",
+  leadLayout = "list",
   sortKey = "createdAt",
   sortDir = "desc",
   selected = new Set(),
@@ -431,7 +432,13 @@ function leadsPage() {
   );
   return panel(
     "Lead workspace",
-    `<div class="toolbar"><select id="lead-view" aria-label="Saved lead view">${opts(
+    `<div class="toolbar"><select id="lead-layout" aria-label="Lead layout">${opts(
+      [
+        ["list", "List"],
+        ["board", "Kanban board"],
+      ],
+      leadLayout,
+    )}</select><select id="lead-view" aria-label="Saved lead view">${opts(
       (state.leadViews || [])
         .filter((v) => Boolean(v.archived) === (view === "archived"))
         .map((v) => [v.id, v.name]),
@@ -452,25 +459,36 @@ function leadsPage() {
       sortDir,
     )}</select><button data-action="save-lead-view">Save current view</button></div>` +
       filters() +
-      `<div class="toolbar"><span class="muted">${selected.size} selected</span><button data-action="assign">Assign owner</button><button data-action="archive">${view === "archived" ? "Restore selected" : "Archive selected"}</button><button data-action="clear-selection">Clear selection</button></div>` +
-      table(
-        [
-          '<input type="checkbox" class="checkbox" id="select-all" aria-label="Select visible leads">',
-          "Lead name",
-          "Lead owner",
-          "Lead stage",
-          "First touch",
-          "Source",
-          "Next action",
-          "Value",
-        ],
-        rows.map((l) => {
-          const t = leadTasks(l.id)[0];
-          return `<tr><td><input class="checkbox" type="checkbox" data-select="${l.id}" aria-label="Select ${esc(l.name)}" ${selected.has(l.id) ? "checked" : ""}></td><td><div class="person"><span class="avatar">${esc(initials(l.name))}</span><div>${leadButton(l.id)}<small>${esc(l.company)} ${l.repeat ? " · Repeat" : ""}</small></div></div></td><td>${esc(user(l.owner))}</td><td>${pill(l.stage)}</td><td>${l.firstTouchAt ? '<span class="green">Worked</span>' : '<span class="overdue">Not worked yet</span>'}</td><td>${esc(l.source)}</td><td><span class="${t && Date.parse(t.due) < Date.now() ? "overdue" : ""}">${t ? esc(date(t.due)) : "Unscheduled"}</span></td><td>${money(l.value)}</td></tr>`;
-        }),
-      ) +
-      `<div class="footer-row"><span>${ls.length ? (page - 1) * 10 + 1 : 0}–${Math.min(page * 10, ls.length)} of ${ls.length} leads</span><div class="row"><button data-action="prev" ${page === 1 ? "disabled" : ""}>←</button> Page ${page} of ${pages} <button data-action="next" ${page === pages ? "disabled" : ""}>→</button></div></div>`,
+      (leadLayout === "board"
+        ? leadBoard(ls)
+        : `<div class="toolbar"><span class="muted">${selected.size} selected</span><button data-action="assign">Assign owner</button><button data-action="archive">${view === "archived" ? "Restore selected" : "Archive selected"}</button><button data-action="clear-selection">Clear selection</button></div>` +
+          table(
+            [
+              '<input type="checkbox" class="checkbox" id="select-all" aria-label="Select visible leads">',
+              "Lead name",
+              "Lead owner",
+              "Lead stage",
+              "First touch",
+              "Source",
+              "Next action",
+              "Value",
+            ],
+            rows.map((l) => {
+              const t = leadTasks(l.id)[0];
+              return `<tr><td><input class="checkbox" type="checkbox" data-select="${l.id}" aria-label="Select ${esc(l.name)}" ${selected.has(l.id) ? "checked" : ""}></td><td><div class="person"><span class="avatar">${esc(initials(l.name))}</span><div>${leadButton(l.id)}<small>${esc(l.company)} ${l.repeat ? " · Repeat" : ""}</small></div></div></td><td>${esc(user(l.owner))}</td><td>${pill(l.stage)}</td><td>${l.firstTouchAt ? '<span class="green">Worked</span>' : '<span class="overdue">Not worked yet</span>'}</td><td>${esc(l.source)}</td><td><span class="${t && Date.parse(t.due) < Date.now() ? "overdue" : ""}">${t ? esc(date(t.due)) : "Unscheduled"}</span></td><td>${money(l.value)}</td></tr>`;
+            }),
+          ) +
+          `<div class="footer-row"><span>${ls.length ? (page - 1) * 10 + 1 : 0}–${Math.min(page * 10, ls.length)} of ${ls.length} leads</span><div class="row"><button data-action="prev" ${page === 1 ? "disabled" : ""}>←</button> Page ${page} of ${pages} <button data-action="next" ${page === pages ? "disabled" : ""}>→</button></div></div>`),
   );
+}
+function leadBoard(leads) {
+  const stages = ["New", "Prospecting", "Opportunity", "Closed"];
+  return `<div class="panel-body"><p class="muted">Same records and filters as the list. Open a card for its activity timeline; use Move to to change its stage.</p><div class="lead-board">${stages
+    .map((stageName) => {
+      const cards = leads.filter((l) => l.stage === stageName);
+      return `<section class="lead-lane" aria-label="${stageName} leads"><h3>${esc(stageName)} <small>${cards.length} · ${money(sum(cards, "value"))}</small></h3>${cards.map((l) => `<article class="lead-card">${leadButton(l.id)}<p>${esc(l.company || "No company")}</p><small>${esc(user(l.owner))} · ${esc(l.source || "No source")}</small><p><b>${money(l.value)}</b></p><label>Move to<select data-board-stage="${esc(l.id)}" aria-label="Move ${esc(l.name)} to stage">${opts(stages, l.stage)}</select></label></article>`).join("") || '<p class="empty">No matching leads</p>'}</section>`;
+    })
+    .join("")}</div></div>`;
 }
 function activityFeed(items) {
   return items.length
@@ -1182,6 +1200,19 @@ document.addEventListener("input", (e) => {
 document.addEventListener("change", async (e) => {
   const el = e.target;
   try {
+    if (el.id === "lead-layout") {
+      leadLayout = el.value === "board" ? "board" : "list";
+      selected.clear();
+      render();
+    }
+    if (el.dataset.boardStage) {
+      el.disabled = true;
+      try {
+        await change("leads", el.dataset.boardStage, { stage: el.value });
+      } finally {
+        render();
+      }
+    }
     if (el.id === "lead-view") {
       const saved = (state.leadViews || []).find((v) => v.id === el.value);
       leadViewId = saved?.id || "";

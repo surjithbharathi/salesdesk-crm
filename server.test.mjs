@@ -124,6 +124,15 @@ test("CRM lifecycle, transaction rollback, validation, and persistent storage", 
     await request("deals/" + secondDeal.data.id, "PATCH", { stage: "Lost" });
     assert.equal((await request("state")).data.leads.find((l) => l.id === id).disposition, "Won");
     assert.equal((await request("leads/" + id, "PATCH", { stage: "Unknown" })).status, 400);
+    assert.equal((await request("leads/" + id, "PATCH", { stage: "Prospecting" })).status, 200);
+    const moved = (await request("state")).data;
+    assert.equal(moved.leads.find((l) => l.id === id).stage, "Prospecting");
+    assert.ok(
+      moved.activities.some(
+        (a) => a.leadId === id && a.text === "Lead stage changed: Closed → Prospecting",
+      ),
+    );
+    await request("leads/" + id, "PATCH", { stage: "Closed" });
     assert.equal(
       (
         await request("tasks", "POST", {

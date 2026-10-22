@@ -926,3 +926,42 @@ progress::-moz-progress-bar {
   width: 100%;
   accent-color: #5b55ce;
 }
+.lead-board {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(240px, 1fr));
+  gap: 16px;
+  overflow-x: auto;
+  padding-bottom: 12px;
+}
+.lead-lane {
+  background: #f4f6f8;
+  border: 1px solid #e1e5e8;
+  border-radius: 10px;
+  padding: 12px;
+  min-width: 0;
+}
+.lead-lane h3 {
+  margin: 0 0 14px;
+  font-size: 15px;
+}
+.lead-lane h3 small {
+  display: block;
+  margin-top: 6px;
+  font-weight: 400;
+}
+.lead-card {
+  background: white;
+  border: 1px solid #e1e5e8;
+  border-radius: 8px;
+  padding: 14px;
+  margin-bottom: 12px;
+  overflow-wrap: anywhere;
+}
+.lead-card p {
+  margin: 8px 0;
+}
+.lead-card label {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+}
