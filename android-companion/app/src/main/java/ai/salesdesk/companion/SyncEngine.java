@@ -77,6 +77,7 @@ final class SyncEngine {
         if(!running.compareAndSet(false,true)) return; cancelled=false;
         try(QueueDb helper=new QueueDb(c)) {
             check(c); if(c.checkSelfPermission(Manifest.permission.READ_CALL_LOG)!=PackageManager.PERMISSION_GRANTED) throw new Exception("Call-log permission missing");
+            if(c.checkSelfPermission(Manifest.permission.READ_PHONE_STATE)==PackageManager.PERMISSION_GRANTED && c.getSystemService(android.telecom.TelecomManager.class).isInCall()) return;
             SQLiteDatabase db=helper.getWritableDatabase();
             JSONArray targets; boolean online=true;
             try { targets=new JSONArray(request(c,"/v1/targets","GET",null,Collections.emptyMap())); SecureConfig.prefs(c).edit().putString("targets",targets.toString()).commit(); }
@@ -90,20 +91,26 @@ final class SyncEngine {
                     ContentValues v=new ContentValues(); v.put("local_id",log.getString(0)+"-"+start); v.put("phone",phone); v.put("started",start); v.put("duration",seconds); v.put("direction",direction); db.insertWithOnConflict("calls",null,v,SQLiteDatabase.CONFLICT_IGNORE);
                 }
             }
-            ArrayList<JSONObject> queued=calls(db); matchFolder(c,db,queued); int synced=0, uploaded=0;
+            int synced=0, uploaded=0;
             if(!online) { SecureConfig.prefs(c).edit().putString("status","Offline: business calls queued locally using the last assigned-lead list. Retry when connected.").apply(); return; }
             for(JSONObject row:calls(db)) {
                 check(c); if(!phones.contains(row.getString("phone"))) continue;
                 String remote=row.getString("remote_id");
                 if(remote.isEmpty()) { JSONObject payload=new JSONObject().put("localId",row.getString("local_id")).put("phone",row.getString("phone")).put("startedAt",row.getLong("started")).put("duration",row.getLong("duration")).put("direction",row.getString("direction"));
                     remote=new JSONObject(request(c,"/v1/calls","POST",payload.toString().getBytes("UTF-8"),Collections.singletonMap("Content-Type","application/json"))).getString("id"); ContentValues v=new ContentValues(); v.put("remote_id",remote); db.update("calls",v,"local_id=?",new String[]{row.getString("local_id")}); synced++; }
-                if(row.getString("uri").isEmpty()) continue;
+            }
+            // Publish call logs first: scanning/reading audio must not delay the CRM timeline.
+            matchFolder(c,db,calls(db));
+            for(JSONObject row:calls(db)) {
+                check(c); if(!phones.contains(row.getString("phone"))) continue;
+                String remote=row.getString("remote_id");
+                if(remote.isEmpty() || row.getString("uri").isEmpty()) continue;
                 Uri uri=Uri.parse(row.getString("uri")); long seconds=duration(c,uri); if(seconds<1) continue;
                 byte[] bytes; try(InputStream in=c.getContentResolver().openInputStream(uri); ByteArrayOutputStream out=new ByteArrayOutputStream()) { if(in==null) continue; byte[] buf=new byte[8192]; int n; while((n=in.read(buf))!=-1) { check(c); if(out.size()+n>20*1024*1024) throw new Exception("Recording exceeds 20 MiB"); out.write(buf,0,n); } bytes=out.toByteArray(); }
                 Map<String,String> headers=new HashMap<>(); headers.put("Content-Type","application/octet-stream"); headers.put("X-Match-Mode",row.getString("mode")); headers.put("X-Audio-Duration",String.valueOf(seconds)); headers.put("X-File-Modified",String.valueOf(modified(c,uri)));
                 request(c,"/v1/calls/"+remote+"/recording","PUT",bytes,headers); ContentValues v=new ContentValues(); v.put("uploaded",1); db.update("calls",v,"local_id=?",new String[]{row.getString("local_id")}); uploaded++;
             }
-            SecureConfig.prefs(c).edit().putString("status","Last sync: "+new java.util.Date()+" · "+synced+" new calls · "+uploaded+" recordings. Unmatched files need review.").apply();
+            SecureConfig.prefs(c).edit().putString("status","Updated "+android.text.format.DateFormat.getTimeFormat(c).format(new java.util.Date())+" · "+synced+" new calls · "+uploaded+" recordings").apply();
         } finally { running.set(false); }
     }
 }

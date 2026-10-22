@@ -13,6 +13,7 @@ import org.json.JSONObject;
 public class CallBridgeService extends Service {
     private volatile boolean stopped;
     private Thread worker;
+    private CallSyncWatcher syncWatcher;
     static boolean permissions(Context c){return c.checkSelfPermission(Manifest.permission.CALL_PHONE)==PackageManager.PERMISSION_GRANTED&&c.checkSelfPermission(Manifest.permission.READ_PHONE_STATE)==PackageManager.PERMISSION_GRANTED&&(Build.VERSION.SDK_INT<33||c.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED);}
     @Override public IBinder onBind(Intent intent){return null;}
     @Override public int onStartCommand(Intent intent,int flags,int id){
@@ -24,7 +25,7 @@ public class CallBridgeService extends Service {
         PendingIntent pause=PendingIntent.getService(this,7102,new Intent(this,CallBridgeService.class).setAction("STOP"),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
         Notification notification=new Notification.Builder(this,"call-bridge").setSmallIcon(android.R.drawable.ic_menu_call).setContentTitle("Salesdesk is running").setContentText("Background web calling enabled. Tap to manage or Pause calling to stop.").setContentIntent(open).setOngoing(true).addAction(new Notification.Action.Builder(null,"Pause calling",pause).build()).build();
         if(Build.VERSION.SDK_INT>=34)startForeground(7101,notification,ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);else startForeground(7101,notification);
-        if(worker==null){stopped=false;worker=new Thread(this::loop,"salesdesk-call-bridge");worker.start();}
+        if(worker==null){stopped=false;syncWatcher=new CallSyncWatcher(this);syncWatcher.start();worker=new Thread(this::loop,"salesdesk-call-bridge");worker.start();}
         return START_STICKY;
     }
     private boolean ready(String user){
@@ -57,5 +58,5 @@ public class CallBridgeService extends Service {
             try{Thread.sleep(3000);}catch(InterruptedException ignored){return;}
         }
     }
-    @Override public void onDestroy(){stopped=true;if(worker!=null)worker.interrupt();stopForeground(STOP_FOREGROUND_REMOVE);super.onDestroy();}
+    @Override public void onDestroy(){stopped=true;if(syncWatcher!=null)syncWatcher.close();if(worker!=null)worker.interrupt();stopForeground(STOP_FOREGROUND_REMOVE);super.onDestroy();}
 }

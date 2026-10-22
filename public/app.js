@@ -881,6 +881,53 @@ function mobilePanel() {
     )}</div>`,
   );
 }
+let callRefreshBusy = false;
+async function refreshSyncedCalls() {
+  if (
+    callRefreshBusy ||
+    !state ||
+    document.hidden ||
+    $("#modal").open ||
+    document.activeElement?.closest("input, textarea, select") ||
+    [...document.querySelectorAll("audio")].some((audio) => !audio.paused)
+  )
+    return;
+  if (!["integrations", "calls", "activities", "engagements", "dashboard"].includes(view)) return;
+  callRefreshBusy = true;
+  const requestedView = view;
+  try {
+    const next = await api("state");
+    if (
+      requestedView !== view ||
+      $("#modal").open ||
+      document.activeElement?.closest("input, textarea, select")
+    )
+      return;
+    if (JSON.stringify(next.mobileCalls || []) === JSON.stringify(state.mobileCalls || [])) return;
+    const position = { x: window.scrollX, y: window.scrollY };
+    if (view === "integrations") {
+      const panel = $("#mobile-sync-panel");
+      if (
+        !panel ||
+        panel.querySelector("form") ||
+        [...panel.querySelectorAll("audio")].some((audio) => !audio.paused)
+      )
+        return;
+      state = next;
+      panel.innerHTML = mobilePanel();
+    } else {
+      if ([...document.querySelectorAll("audio")].some((audio) => !audio.paused)) return;
+      state = next;
+      render();
+    }
+    window.scrollTo(position.x, position.y);
+  } catch {
+    /* Keep existing calls while offline; the next poll retries. */
+  } finally {
+    callRefreshBusy = false;
+  }
+}
+setInterval(refreshSyncedCalls, 3000);
 function waStatusHtml() {
   return `<p><b>${esc(waStatus.state)}</b> · Sync only</p>${waStatus.error ? `<p class="warning-box">${esc(waStatus.error)}</p>` : ""}${waStatus.qr ? `<img src="${esc(waStatus.qr)}" alt="Private WhatsApp pairing QR" width="280" height="280"><p>On your dedicated phone: WhatsApp → Linked devices → Link a device. Do not share this QR.</p>` : ""}<small>Unmatched texts this session: ${Number(waStatus.unmatched || 0)}. Incoming and manually outgoing individual text events match exactly one active lead's full international number. Groups, media and full history import are not supported.</small>`;
 }
@@ -908,7 +955,7 @@ setInterval(async () => {
 }, 3000);
 function integrations() {
   return (
-    mobilePanel() +
+    `<div id="mobile-sync-panel">${mobilePanel()}</div>` +
     panel(
       "WhatsApp · Baileys · Sync only",
       `<div class="panel-body"><div class="warning-box">Unofficial linked-device client: account restriction remains possible even without automated sending. Sync only; no CRM send/bulk-send API.</div><div id="wa-status">${waStatusHtml()}</div><label><input type="checkbox" id="wa-consent"> I understand the unofficial-client risk and authorize storing matched incoming and manually sent WhatsApp text.</label><div class="row"><button data-action="wa-connect">Connect / resume sync</button><button data-action="wa-disconnect">Pause sync</button></div><p>Pairing is your action. Pause retains encrypted linked credentials; revoke from WhatsApp Linked devices to unlink. Messages you send in mobile/WhatsApp Web sync back when delivered to this linked client.</p><form id="wa-web-draft"><h3>Open a manual WhatsApp Web draft</h3><label>Recipient lead<select name="leadId" required>${opts(
