@@ -17,7 +17,7 @@ npm run check
 npm test
 ```
 
-The 12 tests use isolated fixtures plus a temporary SQLite database and port 3199. They cover lead creation, call logging, task completion, multi-deal closure, payments, tickets, channels, documents, attendance, event drafts, report joins/date windows, CSV parsing, validation, cross-origin write rejection, import rollback, deduplication, and persistence after restart.
+The 13 tests use isolated fixtures plus a temporary SQLite database and port 3199. They cover saved lead views, lead creation, call logging, task completion, multi-deal closure, payments, tickets, channels, documents, attendance, event drafts, report joins/date windows, CSV parsing, validation, cross-origin write rejection, import rollback, deduplication, and persistence after restart.
 
 ## Implemented
 
@@ -41,6 +41,7 @@ The 12 tests use isolated fixtures plus a temporary SQLite database and port 319
 - Plain-text documents with preview/download; manual attendance check-in/out.
 - Source assignment rules with system follow-ups; five report chart presets, saved grouping definitions, chart/table views and report CSV.
 - CSV paste/file loading, JSON file loading and a downloadable import template.
+- Saved lead views with persisted search, filters, archive scope and sorting, independently inspired by Twenty. See [TWENTY_REFERENCE.md](TWENTY_REFERENCE.md) for reviewed sources and the integration design.
 
 ## Storage and migration
 

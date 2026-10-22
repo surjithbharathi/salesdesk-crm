@@ -241,6 +241,20 @@ test("CRM lifecycle, transaction rollback, validation, and persistent storage", 
       200,
     );
     assert.equal((await fetch(base + "/csv.js")).status, 200);
+    const savedView = await request("leadViews", "POST", {
+      name: "Web opportunities",
+      query: "QA",
+      stage: "Closed",
+      source: "Test",
+      owner,
+      sortKey: "value",
+      sortDir: "desc",
+    });
+    assert.equal(savedView.status, 200);
+    assert.equal(
+      (await request("leadViews", "POST", { name: "Invalid view", sortKey: "password" })).status,
+      400,
+    );
     await stop();
     await start();
     s = (await request("state")).data;
@@ -250,6 +264,7 @@ test("CRM lifecycle, transaction rollback, validation, and persistent storage", 
     assert.ok(s.teamMessages.some((m) => m.channelId === channel.data.id));
     assert.equal(s.tickets.find((t) => t.id === ticket.data.id).status, "Service Scheduled");
     assert.ok(s.documents.some((d) => d.id === doc.data.id));
+    assert.equal(s.leadViews.find((v) => v.id === savedView.data.id).sortKey, "value");
   } finally {
     await stop();
     await rm(dir, { recursive: true, force: true });

@@ -1,12 +1,12 @@
 {
   "name": "salesdesk-crm",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
-    "check": "node --check server.mjs && node --check extensions.mjs && node --check public/app.js && node --check public/csv.js && node --check public/reports.js",
-    "test": "node --test server.test.mjs extensions.test.mjs csv.test.mjs reports.test.mjs"
+    "check": "node --check server.mjs && node --check extensions.mjs && node --check public/app.js && node --check public/csv.js && node --check public/reports.js && node --check public/lead-views.js",
+    "test": "node --test server.test.mjs extensions.test.mjs csv.test.mjs reports.test.mjs lead-views.test.mjs"
   },
   "engines": {
     "node": ">=22.13"

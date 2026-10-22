@@ -57,4 +57,6 @@ No Salesmax records were edited, exported, sent, or copied into the reconstructe
 
 ## Verification
 
+Version 0.4 adds independent saved lead views and sorting informed by Twenty's public view/filter architecture. See [TWENTY_REFERENCE.md](TWENTY_REFERENCE.md). Twenty API synchronization remains unconnected.
+
 `npm test` covers server HTTP workflows, SQLite restart persistence, transactional import rollback, draft event generation, channel membership, campaign/rule idempotence, text documents, report joins/date windows, CSV quoting/Unicode and invalid inputs. Browser checks supplement the tests for user-facing forms and navigation. The suite does not establish Salesmax provider behavior or production readiness.

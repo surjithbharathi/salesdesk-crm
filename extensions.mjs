@@ -11,6 +11,7 @@ export function createExtensions({ all, get, put, tx, stamp, log, bad }) {
     "autoReplies",
     "teamChannels",
     "teamMessages",
+    "leadViews",
   ];
   const triggers = [
     "Lead created",
@@ -205,6 +206,23 @@ export function createExtensions({ all, get, put, tx, stamp, log, bad }) {
       if (!v.checkIn || (v.checkOut && v.checkOut < v.checkIn)) bad("Invalid attendance times");
       if (all(kind).some((x) => x.id !== old.id && x.userId === v.userId && x.date === v.date))
         bad("Attendance already exists");
+    }
+    if (kind === "leadViews") {
+      s("name", 120, true);
+      s("query", 200);
+      s("source", 200);
+      ref("owner", "users");
+      choice("stage", ["", "New", "Prospecting", "Opportunity", "Closed"]);
+      choice("sortKey", ["createdAt", "name", "value"]);
+      choice("sortDir", ["desc", "asc"]);
+      field(
+        "archived",
+        (x) => {
+          if (typeof x !== "boolean") bad("Invalid archived scope");
+          return x;
+        },
+        false,
+      );
     }
     if (kind === "savedReports") {
       s("name", 200, true);

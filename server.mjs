@@ -265,6 +265,7 @@ const files = {
   "/app.js": ["public/app.js", "text/javascript"],
   "/csv.js": ["public/csv.js", "text/javascript"],
   "/reports.js": ["public/reports.js", "text/javascript"],
+  "/lead-views.js": ["public/lead-views.js", "text/javascript"],
   "/style.css": ["public/style.css", "text/css"],
 };
 const server = http.createServer(async (req, res) => {

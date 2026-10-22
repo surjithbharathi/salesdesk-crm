@@ -1,5 +1,6 @@
 import { parseLeadCsv } from "./csv.js";
 import { summarizeReport } from "./reports.js";
+import { applyLeadView } from "./lead-views.js";
 const $ = (s) => document.querySelector(s);
 const esc = (s) =>
   String(s ?? "").replace(
@@ -33,6 +34,9 @@ let state,
   queue = "",
   page = 1,
   scope = "",
+  leadViewId = "",
+  sortKey = "createdAt",
+  sortDir = "desc",
   selected = new Set(),
   detailId;
 const titles = {
@@ -405,16 +409,15 @@ function filters() {
 function filtered() {
   let ls = state.leads.filter((l) => Boolean(l.archived) === (view === "archived"));
   if (queue) ls = queueLeads(queue, ls);
-  const q = query.toLowerCase();
-  return ls.filter(
-    (l) =>
-      (!stage || l.stage === stage) &&
-      (!owner || l.owner === owner) &&
-      (!source || l.source === source) &&
-      [l.name, l.company, l.phone, l.email, l.city].some((v) =>
-        String(v).toLowerCase().includes(q),
-      ),
-  );
+  return applyLeadView(ls, {
+    query,
+    stage,
+    owner,
+    source,
+    sortKey,
+    sortDir,
+    archived: view === "archived",
+  });
 }
 function leadsPage() {
   const ls = filtered(),
@@ -428,7 +431,27 @@ function leadsPage() {
   );
   return panel(
     "Lead workspace",
-    filters() +
+    `<div class="toolbar"><select id="lead-view" aria-label="Saved lead view">${opts(
+      (state.leadViews || [])
+        .filter((v) => Boolean(v.archived) === (view === "archived"))
+        .map((v) => [v.id, v.name]),
+      leadViewId,
+      "Custom view",
+    )}</select><select id="lead-sort" aria-label="Sort leads">${opts(
+      [
+        ["createdAt", "Created date"],
+        ["name", "Lead name"],
+        ["value", "Estimated value"],
+      ],
+      sortKey,
+    )}</select><select id="lead-sort-dir" aria-label="Sort direction">${opts(
+      [
+        ["desc", "Descending"],
+        ["asc", "Ascending"],
+      ],
+      sortDir,
+    )}</select><button data-action="save-lead-view">Save current view</button></div>` +
+      filters() +
       `<div class="toolbar"><span class="muted">${selected.size} selected</span><button data-action="assign">Assign owner</button><button data-action="archive">${view === "archived" ? "Restore selected" : "Archive selected"}</button><button data-action="clear-selection">Clear selection</button></div>` +
       table(
         [
@@ -762,6 +785,10 @@ function integrations() {
         "Authentication",
         "Production use needs sign-in, access policies, auditing and isolated team workspaces.",
       ],
+      [
+        "Twenty CRM",
+        "Reference architecture reviewed. Connecting a Twenty workspace needs an API endpoint, authorized credentials and object/field mappings. No sync is active.",
+      ],
     ]
       .map(
         ([name, desc]) =>
@@ -952,6 +979,9 @@ window.addEventListener("hashchange", () => {
   stage = "";
   owner = queue ? scope : "";
   source = "";
+  leadViewId = "";
+  sortKey = "createdAt";
+  sortDir = "desc";
   page = 1;
   selected.clear();
   document.body.classList.remove("nav-open");
@@ -1000,6 +1030,27 @@ document.addEventListener("click", async (e) => {
       return;
     }
     const a = b.dataset.action;
+    if (a === "save-lead-view") {
+      if (queue) throw Error("Clear the work-queue filter before saving a view.");
+      const definition = {
+        query,
+        stage,
+        owner,
+        source,
+        sortKey,
+        sortDir,
+        archived: String(view === "archived"),
+      };
+      form(
+        "leadViews",
+        field("name", "View name", "", "text", true) +
+          Object.entries(definition)
+            .map(([key, value]) => `<input type="hidden" name="${key}" value="${esc(value)}">`)
+            .join(""),
+        "",
+        "Save current lead view",
+      );
+    }
     if (a === "close") $("#modal").close();
     if (a === "add-lead") leadForm();
     if (a === "add-task") taskForm();
@@ -1121,6 +1172,7 @@ document.addEventListener("input", (e) => {
     const input = e.target,
       pos = input.selectionStart;
     query = input.value;
+    leadViewId = "";
     page = 1;
     render();
     $("#search").focus();
@@ -1130,7 +1182,29 @@ document.addEventListener("input", (e) => {
 document.addEventListener("change", async (e) => {
   const el = e.target;
   try {
+    if (el.id === "lead-view") {
+      const saved = (state.leadViews || []).find((v) => v.id === el.value);
+      leadViewId = saved?.id || "";
+      query = saved?.query || "";
+      stage = saved?.stage || "";
+      owner = saved?.owner || "";
+      source = saved?.source || "";
+      sortKey = saved?.sortKey || "createdAt";
+      sortDir = saved?.sortDir || "desc";
+      queue = "";
+      page = 1;
+      selected.clear();
+      render();
+    }
+    if (el.id === "lead-sort" || el.id === "lead-sort-dir") {
+      if (el.id === "lead-sort") sortKey = el.value;
+      else sortDir = el.value;
+      leadViewId = "";
+      page = 1;
+      render();
+    }
     if (["stage", "owner", "source"].includes(el.id)) {
+      leadViewId = "";
       ({ stage: (v) => (stage = v), owner: (v) => (owner = v), source: (v) => (source = v) })[
         el.id
       ](el.value);
@@ -1175,6 +1249,7 @@ document.addEventListener("submit", async (e) => {
           (o) => o.value,
         );
       if (f.dataset.kind === "leads") p.repeat = f.elements.repeat.checked;
+      if (f.dataset.kind === "leadViews") p.archived = p.archived === "true";
       if (p.due) p.due = new Date(p.due).toISOString();
       await change(f.dataset.kind, f.dataset.id, p);
       $("#modal").close();
