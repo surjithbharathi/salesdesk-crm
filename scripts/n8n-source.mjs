@@ -62,6 +62,7 @@ async function setup(step) {
         ...process.env,
         N8N_DIAGNOSTICS_ENABLED: "false",
         N8N_PERSONALIZATION_ENABLED: "false",
+        VUE_APP_SALESDESK_INTERNAL: "true",
       },
     },
   );

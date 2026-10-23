@@ -6,7 +6,7 @@ WORKDIR /source
 RUN git clone --depth 1 --branch n8n@2.44.6 https://github.com/n8n-io/n8n.git . && test "$(git rev-parse HEAD)" = b58d9e89d60e9a3485bb511c5091d8be0d9511e4
 COPY automation/source.patch /tmp/salesdesk-source.patch
 RUN git apply --check /tmp/salesdesk-source.patch && git apply /tmp/salesdesk-source.patch
-ENV CI=true VITE_SALESDESK_INTERNAL=true N8N_DIAGNOSTICS_ENABLED=false N8N_PERSONALIZATION_ENABLED=false
+ENV CI=true VUE_APP_SALESDESK_INTERNAL=true N8N_DIAGNOSTICS_ENABLED=false N8N_PERSONALIZATION_ENABLED=false
 RUN pnpm agent:setup install --mem 4096 --concurrency 2 --tail 30
 RUN pnpm agent:setup build --mem 4096 --concurrency 2 --tail 30
 RUN N8N_USER_FOLDER=/tmp/salesdesk-build-tests pnpm --filter n8n test src/services/__tests__/salesdesk-access.service.test.ts src/controllers/__tests__/salesdesk.controller.test.ts --maxWorkers=1
@@ -16,6 +16,7 @@ RUN cp LICENSE.md /opt/n8n/UPSTREAM-LICENSE.md
 FROM node:24.22.1-bookworm-slim
 LABEL org.opencontainers.image.source=https://github.com/surjithbharathi/salesdesk-crm
 ENV NODE_ENV=production
+ENV N8N_RELEASE_TYPE=stable
 COPY --from=node:22.22.2-bookworm-slim /usr/local/bin/node /usr/local/bin/node22
 ENV SALESDESK_CRM_NODE=/usr/local/bin/node22
 WORKDIR /app
