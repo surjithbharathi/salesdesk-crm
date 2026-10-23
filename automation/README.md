@@ -1,5 +1,9 @@
 # Internal source-based automation
 
+## Paused by product decision — 23 October 2026
+
+The user chose to avoid the inbuilt n8n feature. Do not deploy or enable this runtime without a new request. Automatic source-image builds are disabled; workflows are manual-only for retained technical reference. The running CRM has no n8n runtime enabled. Source and isolated test data are preserved, not deleted.
+
 ## Requested product
 
 Use n8n source as the base for the Salesdesk Automation feature. Do not replace this with a link to an existing service or a separate employee portal. Employees must create workflows from the CRM. Keep required upstream license and modification notices. Do not enable paid features by changing license checks.

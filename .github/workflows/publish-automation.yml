@@ -1,12 +1,5 @@
 name: Build source-based Automation image
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'automation/**'
-      - 'scripts/start-with-automation.mjs'
-      - 'automation-bridge.mjs'
-      - '.github/workflows/publish-automation.yml'
   workflow_dispatch:
 permissions:
   contents: read

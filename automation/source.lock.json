@@ -7,5 +7,5 @@
   "audience": "selected-internal-users-only",
   "license": "Sustainable Use License; enterprise files have separate terms",
   "integration": "source-based-editor-and-engine",
-  "status": "local-save-and-run-verified-production-image-pending"
+  "status": "paused-by-user-inbuilt-feature-not-wanted"
 }
