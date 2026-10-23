@@ -117,6 +117,37 @@ const workflow = (
   })
 ).data.data;
 assert.ok(workflow.id);
+const edited = (
+  await request(`/automation/rest/workflows/${workflow.id}`, {
+    method: "PATCH",
+    cookie,
+    browserId,
+    body: {
+      name: "[Local test] Edited workflow with notes",
+      expectedChecksum: workflow.checksum,
+      nodes: [
+        ...workflow.nodes,
+        {
+          id: randomUUID(),
+          name: "Workflow notes",
+          type: "n8n-nodes-base.stickyNote",
+          typeVersion: 1,
+          position: [0, 220],
+          parameters: {
+            content: "## Internal workflow\nThis test has no external side effects.",
+            width: 360,
+            height: 180,
+          },
+        },
+      ],
+    },
+  })
+).data.data;
+assert.equal(edited.name, "[Local test] Edited workflow with notes");
+assert.ok(edited.nodes.some((n) => n.type === "n8n-nodes-base.stickyNote"));
+const workspace = await fetch(base + "/automation/", { headers: { cookie } });
+assert.equal(workspace.status, 200);
+assert.match(await workspace.text(), /src="\/automation\/assets\/index-/);
 const run = (
   await request(`/automation/rest/workflows/${workflow.id}/run`, {
     method: "POST",
@@ -135,6 +166,10 @@ for (let attempt = 0; attempt < 30; attempt++) {
   await new Promise((ok) => setTimeout(ok, 1000));
 }
 assert.equal(execution.status, "success", JSON.stringify(execution).slice(0, 700));
+assert.ok(
+  JSON.stringify(execution).includes("Workflow builder ready"),
+  "Execution log contains the expected output",
+);
 if (!accounts.accounts.some((u) => u.id === memberId))
   await request("/api/auth/accounts", {
     method: "POST",
@@ -182,6 +217,7 @@ await grant(adminId, true);
 console.log(
   JSON.stringify({
     savedWorkflow: true,
+    editedWorkflowAndNotes: true,
     executionStatus: execution.status,
     crossUserReadDenied: true,
     revokedSessionDenied: true,
