@@ -52,10 +52,10 @@ function installAccountBar(identity, configured) {
     if (button.name === "accounts") openAccounts();
   });
   (document.querySelector("main > header") || document.body).append(bar);
-  if (identity) {
-    const workspace = document.querySelector(".workspace b");
-    if (workspace) workspace.textContent = identity.company;
-  }
+  // The demo labels belong only to the unauthenticated local trial.
+  const workspace = document.getElementById("workspace-name");
+  if (workspace) workspace.textContent = identity ? identity.company : "Demo workspace";
+  document.getElementById("demo-badge")?.toggleAttribute("hidden", Boolean(identity));
   // Demo is allowed only before the server has any account.
   if (configured && !identity) bar.remove();
 }

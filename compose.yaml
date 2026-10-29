@@ -7,6 +7,8 @@ services:
     environment:
       PUBLIC_ORIGIN: https://salesdesk-crm.srv1696974.hstgr.cloud
       BIND_HOST: 0.0.0.0
+      # Traefik sits in front: use the real client address for login throttling.
+      TRUST_PROXY: "true"
       CRM_DB: /app/data/crm.sqlite
     volumes:
       - /opt/salesdesk-crm/data:/app/data

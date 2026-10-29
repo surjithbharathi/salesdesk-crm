@@ -30,7 +30,8 @@ test("encrypted auth persists credentials and Signal keys without exporting plai
       ).includes(Buffer.from("private-test-value")),
       false,
     );
-    assert.equal(statSync(options.keyPath).mode & 0o777, 0o600);
+    // POSIX permission bits are not meaningful on Windows.
+    if (process.platform !== "win32") assert.equal(statSync(options.keyPath).mode & 0o777, 0o600);
     assert.equal(readFileSync(options.keyPath).length, 32);
     await restored.state.keys.set({ session: { a: null } });
     assert.deepEqual(await restored.state.keys.get("session", ["a"]), {});

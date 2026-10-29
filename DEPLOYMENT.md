@@ -15,3 +15,10 @@ PUBLIC_ORIGIN enables exact HTTPS host/origin checks and Secure cookies. Public 
 Android is built with `-PcrmApiOrigin=https://salesdesk-crm.srv1696974.hstgr.cloud`; end users enter username/password only. Changing endpoint requires a fresh login and pauses previous sync/calling consent. Call/recording compatibility and background calling still require permission/real-device verification. Mobile binary changes require reinstall/update of the APK; redeploying the web server alone does not update installed Android code.
 
 Before a major upgrade, back up the SQLite database consistently plus adjacent encryption keys in private storage. Never restore a stale local snapshot over live production data during ordinary code updates. Keep past images/commits for code rollback; database rollback/migrations require a separate backup decision. No automatic rollback or GitHub Actions SSH secrets are provisioned by this flow.
+
+## Environment settings added in Phase 0
+
+- `TRUST_PROXY=true` — use the last `X-Forwarded-For` hop as the client address for login throttling. Set it only behind a proxy you control (Traefik in `compose.yaml`); without it every user behind the proxy shares one address.
+- `DEFAULT_COUNTRY_CODE` (default `91`) — country code added to 10-digit numbers when comparing phone numbers (web, mobile sync, WhatsApp, imports). The Android app uses the country code saved in its settings.
+- A public deployment (`PUBLIC_ORIGIN` set) no longer creates demo data on an empty database; it refuses to start until a company account database exists.
+- Phone (device) sessions now last 30 days and remain revocable; browser sessions stay at 12 hours.

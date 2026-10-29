@@ -1,11 +1,11 @@
 import { createHash, randomBytes, randomUUID, createCipheriv, createDecipheriv } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync, chmodSync } from "node:fs";
 import { dirname } from "node:path";
+import { canonicalPhone } from "./phone.mjs";
 const hash = (data) => createHash("sha256").update(data).digest("hex");
 const fail = (message, status = 400) => {
   throw Object.assign(Error(message), { status });
 };
-const digits = (value) => String(value || "").replace(/\D/g, "");
 export const MAX_AUDIO = 20 * 1024 * 1024;
 export function audioType(bytes) {
   if (bytes.subarray(0, 4).toString() === "OggS") return "audio/ogg";
@@ -80,7 +80,7 @@ export function createMobileSync({ db, all, get, put, stamp, tx, log, keyPath })
   const targets = (d) =>
     all("leads")
       .filter((l) => !l.archived && l.owner === d.owner)
-      .map((l) => ({ id: l.id, phone: digits(l.phone) }))
+      .map((l) => ({ id: l.id, phone: canonicalPhone(l.phone) }))
       .filter((l) => /^[1-9]\d{7,14}$/.test(l.phone));
   function call(d, p) {
     if (
@@ -128,8 +128,30 @@ export function createMobileSync({ db, all, get, put, stamp, tx, log, keyPath })
         activityId: activity.id,
       });
       put("mobileCalls", record);
+      touchLead(matches[0].id, p);
       return record;
     });
+  }
+  // A synced call is real work: it counts as first touch, updates call metrics and moves a
+  // new lead into prospecting once it connected (same rule as a manually logged call).
+  function touchLead(leadId, p) {
+    const lead = get("leads", leadId);
+    if (!lead) return;
+    const at = new Date(p.startedAt).toISOString();
+    const connected = p.duration > 0 && ["Incoming", "Outgoing"].includes(p.direction);
+    const next = {
+      ...lead,
+      callCount: (lead.callCount || 0) + 1,
+      connectedCalls: (lead.connectedCalls || 0) + (connected ? 1 : 0),
+      totalCallSeconds: (lead.totalCallSeconds || 0) + p.duration,
+      lastCallAt: lead.lastCallAt && lead.lastCallAt > at ? lead.lastCallAt : at,
+      updatedAt: new Date().toISOString(),
+    };
+    // A missed incoming call is the customer reaching out, not the rep working the lead.
+    if ((p.direction === "Outgoing" || connected) && (!lead.firstTouchAt || at < lead.firstTouchAt))
+      next.firstTouchAt = at;
+    if (connected && lead.stage === "New") next.stage = "Prospecting";
+    put("leads", next);
   }
   function recording(d, callId, bytes, meta) {
     const c = get("mobileCalls", callId);

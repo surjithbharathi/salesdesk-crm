@@ -5,7 +5,12 @@ const fail = (message, status = 400) => {
   throw Object.assign(new Error(message), { status });
 };
 const SESSION_MS = 12 * 60 * 60 * 1000;
+// Phones keep a longer session so call sync is not silently paused twice a day.
+// It stays revocable: logout, password reset and disabling the user all end it.
+const DEVICE_SESSION_MS = 30 * 24 * 60 * 60 * 1000;
 const WINDOW_MS = 5 * 60 * 1000;
+const MAX_PAIR_FAILURES = 5; // per username + client address
+const MAX_ADDRESS_FAILURES = 100; // per client address, across usernames
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function createUserAuth({ db, getUser, now = () => Date.now() }) {
@@ -13,8 +18,15 @@ export function createUserAuth({ db, getUser, now = () => Date.now() }) {
     CREATE TABLE IF NOT EXISTS auth_sessions(token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires_at INTEGER NOT NULL, device_id TEXT);
     CREATE TABLE IF NOT EXISTS auth_settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS auth_resets(token_hash TEXT PRIMARY KEY,user_id TEXT NOT NULL,expires_at INTEGER NOT NULL);`);
-  const failures = new Map();
-  let globalFailures = [];
+  // Throttling is per client address so one attacker cannot lock real users out.
+  const failures = new Map(); // "username|address" -> timestamps
+  const addressFailures = new Map(); // address -> timestamps
+  const recentOf = (map, key, time) => (map.get(key) || []).filter((t) => t > time - WINDOW_MS);
+  const remember = (map, key, time) => {
+    map.set(key, [...recentOf(map, key, time), time]);
+    // Bound attacker-controlled key memory.
+    if (map.size > 1000) map.delete(map.keys().next().value);
+  };
   const configured = () => Boolean(db.prepare("SELECT 1 FROM auth_accounts LIMIT 1").get());
   const companyName = () =>
     db.prepare("SELECT value FROM auth_settings WHERE key='company'").get()?.value || "";
@@ -55,7 +67,7 @@ export function createUserAuth({ db, getUser, now = () => Date.now() }) {
     db.prepare("INSERT INTO auth_sessions VALUES(?,?,?,?)").run(
       digest(token),
       user.id,
-      now() + SESSION_MS,
+      now() + (deviceId ? DEVICE_SESSION_MS : SESSION_MS),
       deviceId || null,
     );
     return { token, user, company: companyName(), deviceId: deviceId || null };
@@ -84,7 +96,7 @@ export function createUserAuth({ db, getUser, now = () => Date.now() }) {
     if (!account || publicUser(account).role !== "admin") fail("Administrator required", 403);
     return { user: publicUser(addAccount(input, "member")), company: companyName() };
   }
-  function login({ username, password, deviceId } = {}) {
+  function login({ username, password, deviceId } = {}, { ip } = {}) {
     if (deviceId !== undefined && (typeof deviceId !== "string" || !UUID.test(deviceId)))
       fail("Device ID must be a UUID");
     let name;
@@ -93,10 +105,13 @@ export function createUserAuth({ db, getUser, now = () => Date.now() }) {
     } catch {
       name = "<invalid>";
     }
+    const address = typeof ip === "string" && ip ? ip.slice(0, 100) : "unknown";
+    const pair = `${name}|${address}`;
     const time = now();
-    globalFailures = globalFailures.filter((t) => t > time - WINDOW_MS);
-    const recent = (failures.get(name) || []).filter((t) => t > time - WINDOW_MS);
-    if (recent.length >= 5 || globalFailures.length >= 100)
+    if (
+      recentOf(failures, pair, time).length >= MAX_PAIR_FAILURES ||
+      recentOf(addressFailures, address, time).length >= MAX_ADDRESS_FAILURES
+    )
       fail("Invalid credentials or session", 401);
     const account = db.prepare("SELECT * FROM auth_accounts WHERE username=?").get(name);
     // Unknown users perform the same password derivation to reduce enumeration.
@@ -104,14 +119,11 @@ export function createUserAuth({ db, getUser, now = () => Date.now() }) {
     const candidate = scryptSync(safePassword, account?.salt || "0".repeat(64), 64);
     const expected = Buffer.from(account?.password_hash || "0".repeat(128), "hex");
     if (!account || !timingSafeEqual(candidate, expected) || !getUser(account.user_id)?.active) {
-      recent.push(time);
-      failures.set(name, recent);
-      globalFailures.push(time);
-      // Bound attacker-controlled username memory.
-      if (failures.size > 1000) failures.delete(failures.keys().next().value);
+      remember(failures, pair, time);
+      remember(addressFailures, address, time);
       fail("Invalid credentials or session", 401);
     }
-    failures.delete(name);
+    failures.delete(pair);
     return session(account, deviceId);
   }
   function authenticate(token) {
@@ -186,7 +198,8 @@ export function createUserAuth({ db, getUser, now = () => Date.now() }) {
           "UPDATE call_commands SET status='Cancelled' WHERE user_id=? AND status='Pending'",
         ).run(reset.user_id);
       db.exec("COMMIT");
-      failures.delete(account.username);
+      for (const key of failures.keys())
+        if (key.startsWith(account.username + "|")) failures.delete(key);
       return { ok: true };
     } catch (error) {
       db.exec("ROLLBACK");

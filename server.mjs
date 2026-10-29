@@ -4,7 +4,8 @@ import { DatabaseSync } from "node:sqlite";
 import { randomUUID } from "node:crypto";
 import { createExtensions } from "./extensions.mjs";
 import { encryptedAuth } from "./whatsapp-auth.mjs";
-import { createWhatsApp, phoneDigits } from "./whatsapp.mjs";
+import { createWhatsApp } from "./whatsapp.mjs";
+import { canonicalPhone } from "./phone.mjs";
 import { createMobileSync, MAX_AUDIO } from "./mobile-sync.mjs";
 import { createUserAuth } from "./user-auth.mjs";
 import { scopedState } from "./user-scope.mjs";
@@ -24,6 +25,18 @@ const allowedOrigins = [
   ...(publicOrigin ? [publicOrigin] : []),
 ];
 const bindHost = process.env.BIND_HOST || "127.0.0.1";
+// Behind a trusted reverse proxy (Traefik) the real client is the last X-Forwarded-For hop.
+const trustProxy = process.env.TRUST_PROXY === "true";
+function clientIp(req) {
+  if (trustProxy) {
+    const hops = String(req.headers["x-forwarded-for"] || "")
+      .split(",")
+      .map((hop) => hop.trim())
+      .filter(Boolean);
+    if (hops.length) return hops[hops.length - 1];
+  }
+  return req.socket.remoteAddress || "unknown";
+}
 await mkdir(new URL("./data/", import.meta.url), { recursive: true });
 const db = new DatabaseSync(
   process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname,
@@ -65,7 +78,8 @@ function log(leadId, type, text, extra = {}) {
   put("activities", a);
   return a;
 }
-if (!all("users").length)
+// Demo data is for local trials only; a public deployment must never seed itself.
+if (!publicOrigin && !all("users").length)
   tx(() => {
     const users = ["Priya Nair", "Arjun Kumar", "Meera Shah"].map((name, i) =>
       stamp({ name, role: i ? "Sales representative" : "Manager", active: true }),
@@ -165,6 +179,18 @@ const ref = (kind, v, optional = false) => {
   if (typeof v !== "string" || !get(kind, v)) bad("Unknown " + kind + " reference");
   return v;
 };
+// A phone number identifies one lead (archived leads count, so a restore never clashes).
+// Checked on create and when a number changes; existing duplicates stay editable.
+function assertUniquePhone(phone, old) {
+  const key = canonicalPhone(phone);
+  if (!key || (old && canonicalPhone(old.phone) === key)) return;
+  const duplicate = all("leads").find((l) => l.id !== old?.id && canonicalPhone(l.phone) === key);
+  if (duplicate)
+    bad(
+      `A lead with this phone number already exists: ${duplicate.name}${duplicate.archived ? " (archived, restore it instead)" : ""}`,
+      409,
+    );
+}
 function validate(kind, p, old = {}) {
   if (extensions.kinds.includes(kind)) return extensions.validate(kind, p, old);
   const v = { ...old },
@@ -305,6 +331,7 @@ const clickToCall = createClickToCall({
   getLead: (id) => get("leads", id),
   getDevice: (id) => mobile.devices().find((d) => d.id === id),
 });
+const DOCUMENT_DOWNLOAD = /^\/api\/documents\/[a-zA-Z0-9-]+\/download$/;
 function sessionToken(req) {
   return (
     /(?:^|;\s*)salesdesk_session=([A-Za-z0-9_-]{43})(?:;|$)/.exec(req.headers.cookie || "")?.[1] ||
@@ -363,7 +390,7 @@ const mobileServer = http.createServer(async (req, res) => {
       const p = await body(req);
       if (typeof p.deviceId !== "string" || !/^[a-f0-9-]{36}$/i.test(p.deviceId))
         bad("Valid mobile device ID required");
-      const result = userAuth.login(p);
+      const result = userAuth.login(p, { ip: clientIp(req) });
       loginDevice(result);
       reply(200, result);
       return;
@@ -412,8 +439,11 @@ const mobileServer = http.createServer(async (req, res) => {
           if (old) ownLead(userId, id);
           const allowed = ["name", "phone", "company", "email", "city", "stage", "value"];
           if (Object.keys(p).some((k) => !allowed.includes(k))) bad("Unsupported lead field");
-          const value = validate("leads", { ...p, owner: userId }, old || {}),
-            record = old ? { ...value, updatedAt: now() } : stamp({ ...value, firstTouchAt: null });
+          const value = validate("leads", { ...p, owner: userId }, old || {});
+          assertUniquePhone(value.phone, old);
+          const record = old
+            ? { ...value, updatedAt: now() }
+            : stamp({ ...value, firstTouchAt: null });
           put("leads", record);
           log(record.id, "System", old ? "Lead updated from mobile" : "Lead created from mobile", {
             userId,
@@ -538,7 +568,7 @@ const whatsapp = createWhatsApp({
   },
   receive(message) {
     const matches = all("leads").filter(
-      (l) => !l.archived && phoneDigits(l.phone) === message.phone,
+      (l) => !l.archived && canonicalPhone(l.phone) === message.phone,
     );
     if (matches.length !== 1) return false;
     const lead = matches[0];
@@ -661,7 +691,9 @@ const server = http.createServer(async (req, res) => {
       }
       if (["bootstrap", "login"].includes(action) && req.method === "POST") {
         sameOrigin();
-        const result = userAuth[action](await body(req));
+        const input = await body(req);
+        const result =
+          action === "login" ? userAuth.login(input, { ip: clientIp(req) }) : userAuth.bootstrap(input);
         cookie(result.token);
         send(200, { user: result.user, company: result.company });
         return;
@@ -725,7 +757,9 @@ const server = http.createServer(async (req, res) => {
           "/api/mobile/devices",
           "/api/whatsapp/status",
           "/api/click-to-call/devices",
-        ].includes(url.pathname) || /^\/api\/mobile\/recordings\/[a-f0-9-]{36}$/.test(url.pathname);
+        ].includes(url.pathname) ||
+        /^\/api\/mobile\/recordings\/[a-f0-9-]{36}$/.test(url.pathname) ||
+        DOCUMENT_DOWNLOAD.test(url.pathname);
       const allowedWrite =
         (url.pathname === "/api/click-to-call/request" && req.method === "POST") ||
         (/^\/api\/(leads|tasks|activities)(?:\/[a-zA-Z0-9-]+)?$/.test(url.pathname) &&
@@ -831,11 +865,11 @@ const server = http.createServer(async (req, res) => {
       const result = tx(() => {
         let added = 0,
           skipped = 0;
-        const phones = new Set(all("leads").map((l) => l.phone.replace(/\D/g, "")));
+        const phones = new Set(all("leads").map((l) => canonicalPhone(l.phone)));
         for (const row of p.leads) {
           if (!row || typeof row !== "object" || Array.isArray(row)) bad("Invalid row");
           const v = validate("leads", row),
-            phone = v.phone.replace(/\D/g, "");
+            phone = canonicalPhone(v.phone);
           if (phone && phones.has(phone)) {
             skipped++;
             continue;
@@ -852,7 +886,14 @@ const server = http.createServer(async (req, res) => {
       send(200, result);
       return;
     }
-    if (!member && (await extensions.handle(req, url, body, send))) return;
+    // Members may download documents attached to their own leads, nothing else here.
+    const documentDownload = req.method === "GET" && DOCUMENT_DOWNLOAD.test(url.pathname);
+    if (member && documentDownload) {
+      const doc = get("documents", url.pathname.split("/")[3]);
+      if (!doc) bad("Document not found", 404);
+      ownLead(identity.user.id, doc.leadId);
+    }
+    if ((!member || documentDownload) && (await extensions.handle(req, url, body, send))) return;
     const match = url.pathname.match(/^\/api\/([a-zA-Z]+)(?:\/([a-zA-Z0-9-]+))?$/);
     if (match && !kinds.includes(match[1])) bad("Not found", 404);
     if (match && ["POST", "PATCH"].includes(req.method)) {
@@ -911,8 +952,9 @@ const server = http.createServer(async (req, res) => {
         }
         const old = id ? get(kind, id) : null;
         if (id && !old) bad("Record not found", 404);
-        const v = validate(kind, p, old || {}),
-          record = id ? { ...v, updatedAt: now() } : stamp(v);
+        const v = validate(kind, p, old || {});
+        if (kind === "leads") assertUniquePhone(v.phone, old);
+        const record = id ? { ...v, updatedAt: now() } : stamp(v);
         if (kind === "leads" && !id) record.firstTouchAt = null;
         put(kind, record);
         const eventId = randomUUID();
