@@ -103,4 +103,10 @@ test("KPI endpoints: team vs caller scope, goals need the owner, same-origin wri
   assert.equal((await post("/api/kpi/targets", { metric: "calls", value: 5 }, callerCookie)).status, 403);
   assert.equal((await post("/api/kpi/targets", { metric: "calls", value: 55 }, ownerCookie)).status, 200);
   assert.equal((await json("/api/kpi/team", { headers: { Cookie: ownerCookie } })).status, 200);
+  // Settings screens use these: callers are refused, the owner is served
+  for (const path of ["/api/workspace/users", "/api/email/settings"]) {
+    assert.equal((await json(path, { headers: { Cookie: callerCookie } })).status, 403, path);
+    assert.equal((await json(path, { headers: { Cookie: ownerCookie } })).status, 200, path);
+  }
+  assert.equal((await json("/api/workspace/access", { headers: { Cookie: callerCookie } })).status, 200);
 });

@@ -29,3 +29,9 @@ Leads, lead panel and source report from the earlier prototype (they depended on
 The React app is now served at `/`: Business, My day, Leads (with the lead panel: log a call, follow-ups, notes, stage, owner), Calls, To-do, Team, Daily goals. It uses the CRM's own record API (`/api/state`, `/api/leads`, `/api/activities`, `/api/tasks`), so every permission check is the same as before; nothing about roles or data changed.
 
 The earlier screens remain at `/classic/` only for what is not rebuilt yet: Messages (WhatsApp), Users and permissions, Integrations, Call-AI and email settings, import and export, reports. The sidebar link "Settings and messages" opens them. Rebuild those next, then remove `/classic/`.
+
+## Settings (0.19.1)
+
+Settings is rebuilt in the new app: People and access (invite, change role and permissions, setup links), Email (SMTP and test message), Add leads from a file (CSV), Merge duplicates, Archived leads, Download data, Your account. They call the same server routes as the earlier screens, so the permission checks are unchanged.
+
+Still only in `/classic/`: WhatsApp, other integrations, MCP connections, API key vault, call transcription settings, n8n, lead assignment rules, and workspace management for the Ultra Admin.

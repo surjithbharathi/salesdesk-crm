@@ -5,11 +5,12 @@ async function request(path, { method = "GET", params, body } = {}) {
   const url = new URL(path, location.origin);
   for (const [key, value] of Object.entries(params || {}))
     if (value !== undefined && value !== null && value !== "") url.searchParams.set(key, value);
+  const sends = body !== undefined && method !== "GET" && method !== "HEAD";
   const response = await fetch(url, {
     method,
     credentials: "same-origin",
-    headers: body ? { "Content-Type": "application/json" } : {},
-    body: body ? JSON.stringify(body) : undefined,
+    headers: sends ? { "Content-Type": "application/json" } : {},
+    body: sends ? JSON.stringify(body) : undefined,
   });
   const text = await response.text();
   let data = {};
@@ -53,3 +54,4 @@ export function localMonths() {
 // The CRM's own record API (leads, tasks, activities, calls). The server decides what each person may see or change.
 export const crmState = () => request("/api/state");
 export const crmSend = (method, path, body = {}) => request("/api/" + path, { method, body });
+export const crmGet = (path) => request("/api/" + path);

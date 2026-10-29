@@ -7,6 +7,7 @@ import "@fontsource/big-shoulders-display/latin-800";
 import App from "./App.jsx";
 import { ToastProvider } from "./toast.jsx";
 import "./styles.css";
+import "./settings.css";
 
 createRoot(document.getElementById("root")).render(
   <ToastProvider>
