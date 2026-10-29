@@ -14,30 +14,16 @@ import java.util.concurrent.atomic.AtomicBoolean;
 final class CallSyncWatcher {
     private final Context context;
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private volatile boolean closed;
     private boolean registered;
-    private final AtomicBoolean queued = new AtomicBoolean(false);
     private final Runnable sync = this::dispatch;
     private void dispatch() {
-        if (closed || !SecureConfig.loggedIn(context) || !SecureConfig.prefs(context).getBoolean("enabled", false)) return;
-        if (!queued.compareAndSet(false, true)) return;
-        try { worker.execute(() -> {
-            try {
-            if (closed || !SecureConfig.prefs(context).getBoolean("enabled", false)) return;
-            try { SyncEngine.run(context); }
-            catch (Exception error) {
-                boolean denied = error instanceof SyncEngine.HttpError && (((SyncEngine.HttpError)error).code == 401 || ((SyncEngine.HttpError)error).code == 403);
-                if (denied) {
-                    SecureConfig.prefs(context).edit().putBoolean("enabled", false).putString("status", "Session expired or access denied. Sign in again; sync paused.").commit();
-                    SyncJob.schedule(context, false);
-                } else SecureConfig.prefs(context).edit().putString("status", "Sync pending. Check call-log permission and internet; retrying automatically.").apply();
-            }
-            } finally { queued.set(false); }
-        }); } catch (RejectedExecutionException ignored) { queued.set(false); }
+        if(closed||!SecureConfig.loggedIn(context)||!SecureConfig.prefs(context).getBoolean("enabled",false))return;
+        if(context.checkSelfPermission(android.Manifest.permission.READ_CALL_LOG)!=android.content.pm.PackageManager.PERMISSION_GRANTED){SecureConfig.prefs(context).edit().putBoolean("enabled",false).putString("status","Call-log permission required. Sync paused.").commit();SyncJob.schedule(context,false);return;}
+        SyncJob.requestNow(context);
     }
     private final Runnable fallback = new Runnable() {
-        public void run() { if (!closed) { sync.run(); handler.postDelayed(this, 60000); } }
+        public void run() { if (!closed) { sync.run(); handler.postDelayed(this, 300000); } }
     };
     private final ContentObserver observer = new ContentObserver(handler) {
         @Override public void onChange(boolean selfChange) { changed(); }
@@ -59,6 +45,5 @@ final class CallSyncWatcher {
         closed = true;
         handler.removeCallbacksAndMessages(null);
         if (registered) context.getContentResolver().unregisterContentObserver(observer);
-        worker.shutdown();
     }
 }

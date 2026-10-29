@@ -19,7 +19,7 @@ export function scopedState(all, userId) {
       (t) => t.owner === userId && (!t.leadId || leadIds.has(t.leadId)),
     ),
     documents: all("documents").filter((d) => leadIds.has(d.leadId)),
-    mobileCalls: all("mobileCalls").filter((c) => leadIds.has(c.leadId)),
+    mobileCalls: all("mobileCalls").filter((c) => leadIds.has(c.leadId) || (c.owner === userId && all("leads").some(l => l.id === c.leadId && l.owner === "" && l.createdBy === userId))),
     lists: [],
     campaigns: [],
     automationRules: [],

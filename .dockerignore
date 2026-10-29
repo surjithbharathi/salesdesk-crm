@@ -1,9 +1,10 @@
 .git
 node_modules
 data
-android-companion
 .env*
-*.apk
-*.test.mjs
-*.keystore
-*.jks
+*.sqlite*
+*-key
+*.pem
+android-companion
+releases
+node-compile-cache

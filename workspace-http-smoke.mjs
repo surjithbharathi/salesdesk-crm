@@ -1,0 +1,33 @@
+import assert from 'node:assert/strict';
+import http from 'node:http';
+const gateway='http://127.0.0.1:3100',rootHost='salesdesk-crm.example';
+async function request(host,path,{method='GET',body,cookie}={}){return new Promise((resolve,reject)=>{const data=body?JSON.stringify(body):null;const req=http.request(gateway+path,{method,headers:{Host:host,...(body?{'Content-Type':'application/json',Origin:'https://'+host,'Content-Length':Buffer.byteLength(data)}:{}),...(cookie?{Cookie:cookie}:{})}},res=>{let text='';res.on('data',chunk=>text+=chunk);res.on('end',()=>resolve({status:res.statusCode,headers:{get:name=>Array.isArray(res.headers[name])?res.headers[name][0]:res.headers[name]},json:async()=>JSON.parse(text)}));});req.on('error',reject);req.end(data);});}
+async function login(host,username,password){const r=await request(host,'/api/auth/login',{method:'POST',body:{username,password}});assert.equal(r.status,200,'login');return r.headers.get('set-cookie').split(';')[0];}
+const rootCookie=await login(rootHost,'fixture-owner','Synthetic-Workspace-HTTP-123');
+const profile=await (await request(rootHost,'/api/workspace/access',{cookie:rootCookie})).json();assert.equal(profile.crmOwner,true);assert.equal(profile.role,'owner');
+const created=await request(rootHost,'/api/workspaces',{method:'POST',cookie:rootCookie,body:{name:'Synthetic A',ownerName:'Synthetic Workspace Owner',ownerUsername:'workspace-owner'}});assert.equal(created.status,201,'workspace creation');const workspace=await created.json(),host=new URL(workspace.url).hostname;
+const reset=await request(host,'/api/auth/reset',{method:'POST',body:{token:new URLSearchParams(new URL(workspace.setupUrl).hash.slice(1)).get('token'),password:'Synthetic-Workspace-Owner-123'}});assert.equal(reset.status,200,'owner password setup');
+const ownerCookie=await login(host,'workspace-owner','Synthetic-Workspace-Owner-123');
+assert.equal((await request(host,'/api/state',{cookie:rootCookie})).status,401,'main session cannot access another workspace');
+assert.equal((await request(rootHost,'/api/state',{cookie:ownerCookie})).status,401,'workspace session cannot access main workspace');
+assert.equal((await request(host,'/api/workspaces',{cookie:ownerCookie})).status,403,'workspace owner cannot create platform workspaces');
+const invite=await request(host,'/api/workspace/users',{method:'POST',cookie:ownerCookie,body:{name:'Synthetic Viewer',username:'fixture-viewer',role:'viewer'}});assert.equal(invite.status,201,'invite viewer');const viewer=await invite.json();
+assert.equal((await request(host,'/api/auth/reset',{method:'POST',body:{token:new URLSearchParams(new URL(viewer.setupUrl).hash.slice(1)).get('token'),password:'Synthetic-Viewer-Password-123'}})).status,200);
+const viewerCookie=await login(host,'fixture-viewer','Synthetic-Viewer-Password-123');
+assert.equal((await request(host,'/api/leads',{method:'POST',cookie:viewerCookie,body:{name:'Denied lead',phone:'+919000000099',stage:'New'}})).status,403,'viewer cannot create lead');
+assert.equal((await request(host,'/api/workspace/users',{cookie:viewerCookie})).status,403,'viewer cannot manage users');
+assert.equal((await request(host,'/api/call-ai/keys',{cookie:viewerCookie})).status,403,'viewer cannot access API keys');
+const privateLead=await request(host,'/api/leads',{method:'POST',cookie:ownerCookie,body:{name:'Synthetic tenant-private lead',phone:'+919000000098',stage:'New',owner:viewer.userId}});assert.equal(privateLead.status,200,'workspace owner creates private lead');
+const viewerState=await (await request(host,'/api/state',{cookie:viewerCookie})).json();assert.ok(viewerState.leads.some(lead=>lead.name==='Synthetic tenant-private lead'));
+const rootState=await (await request(rootHost,'/api/state',{cookie:rootCookie})).json();assert.ok(!rootState.leads.some(lead=>lead.name==='Synthetic tenant-private lead'),'tenant data absent from main database');
+const accessUpdate=await request(host,'/api/workspace/users/'+viewer.userId,{method:'PATCH',cookie:ownerCookie,body:{role:'member',active:true,permissions:{'calls.read':false}}});assert.equal(accessUpdate.status,200);
+assert.equal((await request(host,'/api/state',{cookie:viewerCookie})).status,401,'permission update revokes prior session');
+const memberCookie=await login(host,'fixture-viewer','Synthetic-Viewer-Password-123');assert.equal((await request(host,'/api/mobile/recordings/00000000-0000-4000-8000-000000000099',{cookie:memberCookie})).status,403,'recording permission enforced before lookup');
+const users=await (await request(host,'/api/workspace/users',{cookie:ownerCookie})).json();const owner=users.find(user=>user.role==='owner');
+assert.equal((await request(host,'/api/workspace/users/'+owner.id,{method:'PATCH',cookie:ownerCookie,body:{role:'member',active:true,permissions:{}}})).status,400,'last owner protected');
+assert.equal((await request(rootHost,'/api/workspaces/'+workspace.id+'/users',{cookie:rootCookie})).status,200,'CRM owner can manage tenant users');
+assert.equal((await request(rootHost,'/api/workspaces/'+workspace.id,{method:'PATCH',cookie:rootCookie,body:{state:'suspended'}})).status,200);
+assert.equal((await request(host,'/api/state',{cookie:ownerCookie})).status,403,'suspended workspace blocked');
+assert.equal((await request(rootHost,'/api/workspaces/'+workspace.id,{method:'PATCH',cookie:rootCookie,body:{state:'active'}})).status,200);
+assert.equal((await request(host,'/api/state',{cookie:ownerCookie})).status,200,'reactivation restores access');
+console.log({workspaceHttp:'passed',crossWorkspaceSessions:'denied',viewerWrites:'denied',ownerLockout:'protected',suspension:'enforced'});

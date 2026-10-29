@@ -1,13 +1,13 @@
 FROM node:22-bookworm-slim
-LABEL org.opencontainers.image.source=https://github.com/surjithbharathi/salesdesk-crm
-ENV NODE_ENV=production
 WORKDIR /app
+ENV NODE_ENV=production
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certificates && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
+RUN npm ci --omit=dev --ignore-scripts
 COPY *.mjs ./
 COPY public ./public
-RUN mkdir /app/data && chown node:node /app/data
+RUN mkdir -p /app/data && chown -R node:node /app/data
 USER node
 ENV PORT=3100 MOBILE_PORT=3101 BIND_HOST=0.0.0.0 CRM_DB=/app/data/crm.sqlite
 EXPOSE 3100 3101
-CMD ["node","server.mjs"]
+CMD ["node","workspace-gateway.mjs"]

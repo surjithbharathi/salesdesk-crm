@@ -138,5 +138,25 @@ export function createWhatsApp({ load, receive }) {
       return snapshot();
     },
     stop,
+    async logout() {
+      generation++;
+      clearTimeout(timer);
+      const old = socket;
+      socket = undefined;
+      let remoteUnlinkRequired = true;
+      try {
+        if (old?.logout) {
+          await Promise.race([old.logout(), new Promise((_, reject) => setTimeout(() => reject(Error("Logout timeout")), 5000))]);
+          remoteUnlinkRequired = false;
+        }
+      } catch { /* Local logout still completes when WhatsApp is offline. */ }
+      finally { old?.end?.(Error("Signed out")); }
+      deps ||= await load();
+      auth ||= deps.auth();
+      auth.clear();
+      auth = undefined;
+      status = { state: "logged_out", qr: null, error: remoteUnlinkRequired ? "Local session cleared. Remove this CRM device from WhatsApp → Linked devices if it is still listed." : "", unmatched: 0 };
+      return { ...snapshot(), remoteUnlinkRequired };
+    },
   };
 }

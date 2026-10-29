@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID, createCipheriv, createDecipheriv } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync, chmodSync } from "node:fs";
 import { dirname } from "node:path";
+import { phoneKeyOf } from "./lead-phone.mjs";
 const hash = (data) => createHash("sha256").update(data).digest("hex");
 const fail = (message, status = 400) => {
   throw Object.assign(Error(message), { status });
@@ -17,7 +18,7 @@ export function audioType(bytes) {
     return "audio/mpeg";
   fail("Unsupported recording format");
 }
-export function createMobileSync({ db, all, get, put, stamp, tx, log, keyPath }) {
+export function createMobileSync({ db, all, get, put, stamp, tx, log, keyPath, onRecording = () => null }) {
   db.exec(
     "CREATE TABLE IF NOT EXISTS mobile_devices(id TEXT PRIMARY KEY, token_hash TEXT UNIQUE, body TEXT); CREATE TABLE IF NOT EXISTS mobile_audio(id TEXT PRIMARY KEY, device_id TEXT, call_id TEXT UNIQUE, sha TEXT, mime TEXT, bytes BLOB, UNIQUE(device_id,sha))",
   );
@@ -80,8 +81,25 @@ export function createMobileSync({ db, all, get, put, stamp, tx, log, keyPath })
   const targets = (d) =>
     all("leads")
       .filter((l) => !l.archived && l.owner === d.owner)
-      .map((l) => ({ id: l.id, phone: digits(l.phone) }))
+      .map((l) => ({ id: l.id, phone: phoneKeyOf(l) }))
       .filter((l) => /^[1-9]\d{7,14}$/.test(l.phone));
+  function preferences(d, value) {
+    const row = db.prepare("SELECT body FROM mobile_devices WHERE id=?").get(d.id);
+    if (!row) fail("Device unavailable", 403);
+    const current = JSON.parse(row.body);
+    if (value === undefined) return current.tracking || { sims: {}, assignment: "self" };
+    if (!value || !value.sims || typeof value.sims !== "object" || Array.isArray(value.sims) ||
+        Object.keys(value.sims).length > 8 || !["self", "unassigned"].includes(value.assignment)) fail("Invalid tracking preferences");
+    const sims = {};
+    for (const [account, mode] of Object.entries(value.sims)) {
+      if (!/^[a-f0-9]{64}$/.test(account) || !["all", "leads", "off"].includes(mode)) fail("Invalid SIM policy");
+      sims[account] = mode;
+    }
+    if (Object.values(sims).includes("all") && value.consent !== true) fail("Explicit all-call sync consent required");
+    const tracking = { sims, assignment: value.assignment, updatedAt: new Date().toISOString() };
+    db.prepare("UPDATE mobile_devices SET body=? WHERE id=?").run(JSON.stringify({ ...current, tracking }), d.id);
+    return tracking;
+  }
   function call(d, p) {
     if (
       typeof p.localId !== "string" ||
@@ -96,9 +114,18 @@ export function createMobileSync({ db, all, get, put, stamp, tx, log, keyPath })
       p.duration > 86400
     )
       fail("Invalid call metadata");
-    const matches = targets(d).filter((l) => l.phone === p.phone);
-    if (matches.length !== 1) fail("Call does not match one assigned active business lead", 403);
     const existing = all("mobileCalls").find((c) => c.deviceId === d.id && c.localId === p.localId);
+    const policy = preferences(d);
+    const configured = Object.keys(policy.sims).length > 0;
+    const mode = configured ? policy.sims[p.accountId] || "off" : "leads";
+    if (mode === "off") fail("SIM tracking disabled", 403);
+    const matches = targets(d).filter((l) => l.phone === p.phone);
+    if(mode === "all")matches.push(...all("leads").filter(l=>l.owner === "" && l.createdBy === d.owner && !l.archived && phoneKeyOf(l) === p.phone).map(l=>({id:l.id,phone:digits(l.phone)})));
+    const ownUnassigned = existing && get("leads", existing.leadId)?.owner === "" && existing.owner === d.owner;
+    if (matches.length !== 1 && !(mode === "all" && ownUnassigned)) {
+      if (mode !== "all" || all("leads").some((l) => phoneKeyOf(l) === p.phone))
+        fail("Call does not match one accessible business lead", 403);
+    }
     if (existing) {
       if (
         existing.phone !== p.phone ||
@@ -110,12 +137,15 @@ export function createMobileSync({ db, all, get, put, stamp, tx, log, keyPath })
       return existing;
     }
     return tx(() => {
-      const activity = log(matches[0].id, "Call", `Phone sync · ${p.direction} · ${p.duration}s`, {
+      const lead = matches[0] || stamp({ name: p.phone, phone: p.phone, company: "", email: "", source: "Phone call", stage: "New", owner: policy.assignment === "unassigned" ? "" : d.owner, createdBy: d.owner });
+      if (!matches[0]) put("leads", lead);
+      const activity = log(lead.id, "Call", `Phone sync · ${p.direction} · ${p.duration}s`, {
         direction: p.direction,
         duration: p.duration,
         outcome: ["Missed", "Rejected"].includes(p.direction) ? "No answer" : "Recorded",
         occurredAt: new Date(p.startedAt).toISOString(),
         deviceId: d.id,
+        userId: d.owner,
       });
       const record = stamp({
         localId: p.localId,
@@ -124,7 +154,9 @@ export function createMobileSync({ db, all, get, put, stamp, tx, log, keyPath })
         startedAt: p.startedAt,
         duration: p.duration,
         deviceId: d.id,
-        leadId: matches[0].id,
+        leadId: lead.id,
+        owner: d.owner,
+        accountId: configured ? p.accountId : "",
         activityId: activity.id,
       });
       put("mobileCalls", record);
@@ -133,7 +165,11 @@ export function createMobileSync({ db, all, get, put, stamp, tx, log, keyPath })
   }
   function recording(d, callId, bytes, meta) {
     const c = get("mobileCalls", callId);
-    if (!c || c.deviceId !== d.id || !targets(d).some((l) => l.id === c.leadId))
+    const policy=preferences(d);
+    if(c && Object.keys(policy.sims).length && (!policy.sims[c.accountId] || policy.sims[c.accountId] === "off"))fail("SIM tracking disabled",403);
+    if(c && policy.sims[c.accountId] === "leads" && !targets(d).some(l=>l.id===c.leadId))fail("Call not accessible",403);
+    const lead = c && get("leads", c.leadId);
+    if (!c || c.deviceId !== d.id || (!targets(d).some((l) => l.id === c.leadId) && !(c.owner === d.owner && lead?.owner === "" && lead.createdBy === d.owner)))
       fail("Call not accessible", 403);
     if (!bytes.length || bytes.length > MAX_AUDIO) fail("Recording must be 1 byte–20 MiB", 413);
     const sha = hash(bytes),
@@ -179,6 +215,7 @@ export function createMobileSync({ db, all, get, put, stamp, tx, log, keyPath })
       cipher = createCipheriv("aes-256-gcm", audioKey(), iv);
     cipher.setAAD(Buffer.from(id));
     const encrypted = Buffer.concat([cipher.update(bytes), cipher.final()]);
+    let assistantJob;
     tx(() => {
       db.prepare("INSERT INTO mobile_audio VALUES(?,?,?,?,?,?)").run(
         id,
@@ -196,8 +233,9 @@ export function createMobileSync({ db, all, get, put, stamp, tx, log, keyPath })
         "System",
         `Phone recording attached · ${meta.mode === "manual" ? "user-reviewed" : "automatic match"}`,
       );
+      assistantJob = onRecording({ recordingId: id, callId: c.id });
     });
-    return { id, duplicate: false };
+    return { id, duplicate: false, ...(assistantJob ? { assistantJobId: assistantJob.id } : {}) };
   }
   function playback(id) {
     const r = db.prepare("SELECT bytes,mime FROM mobile_audio WHERE id=?").get(id);
@@ -211,5 +249,24 @@ export function createMobileSync({ db, all, get, put, stamp, tx, log, keyPath })
       mime: r.mime,
     };
   }
-  return { devices, issue, revoke, authenticate, targets, call, recording, playback };
+  function feedback(d, callId, clientId, text, bytes) {
+    const call = get("mobileCalls", callId), lead = call && get("leads", call.leadId);
+    if (!call || !lead || (lead.owner !== d.owner && !(lead.owner === "" && lead.createdBy === d.owner && call.owner === d.owner))) fail("Call not accessible", 403);
+    if (!/^[a-f0-9-]{36}$/.test(clientId || "") || typeof text !== "string" || text.length > 4000 || (!text.trim() && !bytes)) fail("Invalid feedback");
+    const sha = hash(bytes || Buffer.from(text));
+    const previous = all("activities").find((a) => a.feedbackId === clientId && a.userId === d.owner);
+    if (previous) { if (previous.callId !== callId || previous.feedbackSha !== sha) fail("Feedback ID conflict", 409); return previous; }
+    if (bytes && (!bytes.length || bytes.length > MAX_AUDIO)) fail("Voice feedback too large", 413);
+    const mime = bytes ? audioType(bytes) : null;
+    return tx(() => {
+      let voiceNoteId;
+      if (bytes) {
+        voiceNoteId = randomUUID(); const iv = randomBytes(12), cipher = createCipheriv("aes-256-gcm", audioKey(), iv); cipher.setAAD(Buffer.from(voiceNoteId));
+        const encrypted = Buffer.concat([cipher.update(bytes), cipher.final()]);
+        db.prepare("INSERT INTO mobile_audio VALUES(?,?,?,?,?,?)").run(voiceNoteId,d.id,"feedback:"+callId+":"+clientId,sha,mime,Buffer.concat([iv,cipher.getAuthTag(),encrypted]));
+      }
+      return log(call.leadId,"Note",text.trim() || "Post-call voice feedback",{userId:d.owner,callId,feedbackId:clientId,feedbackSha:sha,...(voiceNoteId?{voiceNoteId}:{})});
+    });
+  }
+  return { devices, issue, revoke, authenticate, targets, preferences, call, recording, playback, feedback };
 }

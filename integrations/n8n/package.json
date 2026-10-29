@@ -1,0 +1,9 @@
+{
+  "name": "n8n-nodes-salesdesk-crm",
+  "version": "0.2.0",
+  "description": "Workspace-scoped Salesdesk CRM integration",
+  "license": "MIT",
+  "keywords": ["n8n-community-node-package"],
+  "files": ["Salesdesk.node.js", "SalesdeskApi.credentials.js"],
+  "n8n": { "n8nNodesApiVersion": 1, "credentials": ["SalesdeskApi.credentials.js"], "nodes": ["Salesdesk.node.js"] }
+}
