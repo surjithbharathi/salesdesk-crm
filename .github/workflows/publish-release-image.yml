@@ -1,0 +1,47 @@
+name: Build release image (0.18 line)
+# Manual only. Builds the image from the chosen branch, tests it, starts it once on throw-away data to prove the
+# new screens and API answer, and only then publishes it under its own version tag. It never touches the `latest` tag.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Image tag to publish, for example 0.18.1-kpi
+        required: true
+permissions:
+  contents: read
+  packages: write
+concurrency:
+  group: salesdesk-release-image
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.22.2'
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - name: Build image
+        run: docker build --label org.opencontainers.image.revision="$GITHUB_SHA" -t ghcr.io/surjithbharathi/salesdesk-crm:${{ inputs.tag }} .
+      - name: Start it on throw-away data and check the new screens
+        run: |
+          docker run -d --name smoke -e PORT=3195 -e MOBILE_PORT=3196 -e BIND_HOST=0.0.0.0 -p 3195:3195 ghcr.io/surjithbharathi/salesdesk-crm:${{ inputs.tag }} node server.mjs
+          ready=false
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3195/api/kpi/me >/dev/null 2>&1; then ready=true; break; fi
+            sleep 2
+          done
+          if [ "$ready" != true ]; then docker logs --tail 80 smoke; exit 1; fi
+          curl -fsS http://127.0.0.1:3195/next/ | grep -q '<div id="root">'
+          curl -fsS http://127.0.0.1:3195/api/kpi/team >/dev/null
+          test "$(curl -s -o /dev/null -w '%{http_code}' 'http://127.0.0.1:3195/next/../server.mjs')" != "200"
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker push ghcr.io/surjithbharathi/salesdesk-crm:${{ inputs.tag }}
