@@ -160,6 +160,7 @@ $("#today").textContent = new Date().toLocaleDateString("en-IN", {
   year: "numeric",
 });
 $("#menu").onclick = () => document.body.classList.toggle("nav-open");
+$("#scrim").onclick = () => document.body.classList.remove("nav-open");
 let toastTimer;
 function toast(text, error = false) {
   $("#toast").hidden = false;
