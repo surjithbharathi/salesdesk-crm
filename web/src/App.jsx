@@ -4,6 +4,10 @@ import { parseHash, hashFor, initials } from "./format.js";
 import { useHash } from "./hooks.js";
 import Icon from "./icons.jsx";
 import Business from "./pages/Business.jsx";
+import Leads from "./pages/Leads.jsx";
+import Calls from "./pages/Calls.jsx";
+import Tasks from "./pages/Tasks.jsx";
+import { CrmProvider } from "./crm.jsx";
 import MyDay from "./pages/MyDay.jsx";
 import Team from "./pages/Team.jsx";
 import Goals from "./pages/Goals.jsx";
@@ -11,10 +15,18 @@ import Goals from "./pages/Goals.jsx";
 const NAV_LEAD = [
   ["/business", "Business", "dashboard"],
   ["/my-day", "My day", "spark"],
+  ["/leads", "Leads", "leads"],
+  ["/calls", "Calls", "phone"],
+  ["/todo", "To-do", "task"],
   ["/team", "Team", "people"],
   ["/goals", "Daily goals", "check"],
 ];
-const NAV_CALLER = [["/my-day", "My day", "spark"]];
+const NAV_CALLER = [
+  ["/my-day", "My day", "spark"],
+  ["/leads", "Leads", "leads"],
+  ["/calls", "Calls", "phone"],
+  ["/todo", "To-do", "task"],
+];
 
 function readTheme() {
   try {
@@ -102,6 +114,9 @@ export default function App() {
   const callers = meta.users;
   const viewing = owner ? (params.user || meta.id || callers[0]?.id) : meta.id;
   const page =
+    path.startsWith("/leads") ? <Leads key="leads" params={params} /> :
+    path.startsWith("/calls") ? <Calls key="calls" /> :
+    path.startsWith("/todo") ? <Tasks key="todo" /> :
     path.startsWith("/team") && owner ? <Team key="team" /> :
     path.startsWith("/goals") && owner ? <Goals key="goals" meta={meta} /> :
     path.startsWith("/my-day") || !owner ? (
@@ -145,7 +160,7 @@ export default function App() {
           <button onClick={toggleTheme} aria-label={dark ? "Switch to light theme" : "Switch to dark theme"}>
             <Icon name={dark ? "sun" : "moon"} /><span className="label">{dark ? "Light theme" : "Dark theme"}</span>
           </button>
-          <a href="/"><Icon name="external" /><span className="label">Leads and calls</span></a>
+          <a href="/classic/"><Icon name="external" /><span className="label">Settings and messages</span></a>
           {session.user && (
             <button onClick={async () => { await logout(); location.reload(); }}>
               <Icon name="close" /><span className="label">Sign out</span>
@@ -153,7 +168,7 @@ export default function App() {
           )}
         </div>
       </aside>
-      <main className="work">{page}</main>
+      <main className="work"><CrmProvider me={meta}>{page}</CrmProvider></main>
     </div>
   );
 }

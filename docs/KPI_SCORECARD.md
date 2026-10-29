@@ -23,3 +23,9 @@ Call made 1, answered +1, follow-up done on time 3, quotation given 10, order wo
 ## Not included
 
 Leads, lead panel and source report from the earlier prototype (they depended on the separate Phase 1 data layer and stay in the classic screens). The Phase 1 schema, importer and `/api/v2` live on branch `phase1/schema` and are not part of this build.
+
+## New front door (0.19.0)
+
+The React app is now served at `/`: Business, My day, Leads (with the lead panel: log a call, follow-ups, notes, stage, owner), Calls, To-do, Team, Daily goals. It uses the CRM's own record API (`/api/state`, `/api/leads`, `/api/activities`, `/api/tasks`), so every permission check is the same as before; nothing about roles or data changed.
+
+The earlier screens remain at `/classic/` only for what is not rebuilt yet: Messages (WhatsApp), Users and permissions, Integrations, Call-AI and email settings, import and export, reports. The sidebar link "Settings and messages" opens them. Rebuild those next, then remove `/classic/`.

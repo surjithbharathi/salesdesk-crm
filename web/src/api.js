@@ -49,3 +49,7 @@ export function localMonths() {
   next.setMonth(next.getMonth() + 1);
   return { monthStart: first.toISOString(), prevStart: prev.toISOString(), nextStart: next.toISOString() };
 }
+
+// The CRM's own record API (leads, tasks, activities, calls). The server decides what each person may see or change.
+export const crmState = () => request("/api/state");
+export const crmSend = (method, path, body = {}) => request("/api/" + path, { method, body });

@@ -1237,6 +1237,13 @@ const server = http.createServer(async (req, res) => {
       send(200, result);
       return;
     }
+    // The new app is the front door. The earlier screens stay reachable at /classic/ for settings not rebuilt yet.
+    if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html")) return serveWebApp("/next/", res);
+    if (req.method === "GET" && (url.pathname === "/classic" || url.pathname === "/classic/")) {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(await readFile(new URL("public/index.html", import.meta.url)));
+      return;
+    }
     if (req.method === "GET" && (url.pathname === "/next" || url.pathname.startsWith("/next/"))) {
       if (url.pathname === "/next") {
         res.writeHead(301, { Location: "/next/" });

@@ -63,6 +63,13 @@ test("KPI endpoints: team vs caller scope, goals need the owner, same-origin wri
   assert.equal((await json(`/api/kpi/day?user=${first.id}`)).data.goal.calls, 30);
   assert.equal((await post("/api/kpi/targets", { metric: "calls", value: -3 })).status, 400);
 
+  // the new app is the front door; the earlier screens stay at /classic/
+  const front = await fetch(base + "/");
+  assert.equal(front.status, 200);
+  assert.match(await front.text(), /id="root"/);
+  const classic = await fetch(base + "/classic/");
+  assert.equal(classic.status, 200);
+  assert.match(await classic.text(), /id="nav"/);
   // the new app is static, and traversal never reaches other files
   const redirect = await fetch(base + "/next", { redirect: "manual" });
   assert.equal(redirect.status, 301);
