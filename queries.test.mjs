@@ -168,3 +168,22 @@ test("meta exposes reference data for the screens", (t) => {
   assert.equal(m.users.length, 2);
   assert.ok(m.callOutcomes.some((o) => o.label === "Interested"));
 });
+
+test("a dashboard card's number equals the leads listed when you click it", (t) => {
+  const { store, q } = fixture(t);
+  const a = store.createLead({ name: "A", phone: phone(), source: "IndiaMart", owner: "u1" });
+  const b = store.createLead({ name: "B", phone: phone(), source: "Website", owner: "u2" });
+  store.createLead({ name: "C", phone: phone(), source: "Website", owner: "u1" });
+  store.captureLead({ name: "A", phone: a.phone_e164, source: "Whatsapp" });
+  store.addTask({ leadId: a.id, ownerId: "u1", title: "today", dueAt: "2026-10-29T10:00:00Z" });
+  store.addTask({ leadId: b.id, ownerId: "u2", title: "late", dueAt: "2026-10-20T10:00:00Z" });
+  store.logCall({ phone: b.phone_e164, direction: "Outgoing", startedAt: "2026-10-28T09:00:00Z", duration: 30, deviceId: "d", localId: "1" });
+  const day = { now: "2026-10-29T12:00:00.000Z", dayStart: "2026-10-29T00:00:00.000Z", dayEnd: "2026-10-29T23:59:59.999Z" };
+  const cards = { new: "newLeads", untouched: "awaitingFirstTouch", repeat: "repeatEnquiries", today: "followupsToday", overdue: "overdueFollowups" };
+  for (const ownerId of [undefined, "u1", "u2"]) {
+    const dash = q.dashboard({ ...day, ownerId });
+    for (const [queue, card] of Object.entries(cards))
+      assert.equal(q.listLeads({ queue, dayStart: day.dayStart, dayEnd: day.dayEnd, ownerId }).total, dash[card], `${queue} for ${ownerId ?? "all"}`);
+  }
+  assert.throws(() => q.listLeads({ queue: "nonsense" }), /Unknown queue/);
+});

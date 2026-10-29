@@ -115,3 +115,28 @@ test("v2 read API: paging, detail, dashboard, source report, read-only, member s
   const adminAll = await get("/leads", { Cookie: adminCookie });
   assert.equal(adminAll.data.total, legacy.leads.length);
 });
+
+test("the new web app is served under /next/ without exposing other files", async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), "salesdesk-next-"));
+  const file = join(dir, "crm.sqlite");
+  const port = 3291, base = `http://127.0.0.1:${port}`;
+  const server = await start(file, port);
+  t.after(async () => {
+    await stop(server);
+    await rm(dir, { recursive: true, force: true });
+  });
+  const redirect = await fetch(base + "/next", { redirect: "manual" });
+  assert.equal(redirect.status, 301);
+  assert.equal(redirect.headers.get("location"), "/next/");
+  // Path traversal attempts must never reach files outside web/dist.
+  for (const path of ["/next/../server.mjs", "/next/%2e%2e/server.mjs", "/next/..%2fserver.mjs", "/next/assets/../../package.json", "/next/%00", "/next/x.mjs"]) {
+    const response = await fetch(base + path);
+    const body = await response.text();
+    assert.ok(response.status === 404 || response.status === 400, `${path} -> ${response.status}`);
+    assert.ok(!body.includes("createServer") && !body.includes('"name": "salesdesk-crm"'), `${path} leaked a file`);
+  }
+  // Either the built app or a clear "not built" message, never a crash.
+  const index = await fetch(base + "/next/");
+  assert.ok([200, 404].includes(index.status));
+  if (index.status === 404) assert.match(await index.text(), /npm run web:build/);
+});

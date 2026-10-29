@@ -7,6 +7,22 @@ const POST_QUOTATION = [
   "st_payment_received", "st_dispatched", "st_delivered", "st_regular_customer", "st_won",
 ];
 const JUNK_REASONS = ["lr_wrong_number", "lr_duplicate"];
+// Work-queue predicates shared by the dashboard counts and the lead list drill-down, so a card's number
+// always equals the number of leads you see when you click it.
+export const QUEUES = {
+  new: () => ["st.stage_group='FRESH'", []],
+  untouched: () => ["l.first_touch_at IS NULL", []],
+  repeat: () => ["l.is_repeat=1", []],
+  today: ({ dayStart, dayEnd }) => ["l.next_followup_at >= ? AND l.next_followup_at <= ?", [dayStart, dayEnd]],
+  overdue: ({ dayStart }) => ["l.next_followup_at < ?", [dayStart]],
+};
+const ACTIVE = "l.archived_at IS NULL AND st.stage_group IN ('FRESH','ACTIVE')";
+function dayBounds({ now = new Date().toISOString(), dayStart, dayEnd } = {}) {
+  return {
+    dayStart: dayStart ?? now.slice(0, 10) + "T00:00:00.000Z",
+    dayEnd: dayEnd ?? now.slice(0, 10) + "T23:59:59.999Z",
+  };
+}
 const clampLimit = (limit, fallback = 50) => Math.min(200, Math.max(1, Number.isInteger(limit) ? limit : fallback));
 const encode = (a, b) => Buffer.from(`${a}|${b}`).toString("base64url");
 function decode(cursor) {
@@ -40,9 +56,15 @@ export function createQueries(db) {
   }
 
   // Newest-updated first; cursor continues exactly where the previous page ended.
-  function listLeads({ ownerId, statusId, group, sourceId, tagId, q, archived = false, limit, cursor } = {}) {
+  function listLeads({ ownerId, statusId, group, sourceId, tagId, q, queue, dayStart, dayEnd, archived = false, limit, cursor } = {}) {
     const where = [archived ? "l.archived_at IS NOT NULL" : "l.archived_at IS NULL"];
     const args = [];
+    if (queue) {
+      if (!QUEUES[queue]) throw Object.assign(new Error("Unknown queue: " + queue), { status: 400 });
+      const [cond, queueArgs] = QUEUES[queue](dayBounds({ dayStart, dayEnd }));
+      where.push("st.stage_group IN ('FRESH','ACTIVE')", cond);
+      args.push(...queueArgs);
+    }
     if (ownerId === null) where.push("l.owner_id IS NULL");
     else if (ownerId) (where.push("l.owner_id=?"), args.push(ownerId));
     if (statusId) (where.push("l.status_id=?"), args.push(statusId));
@@ -107,20 +129,21 @@ export function createQueries(db) {
   // Work queues for the owner dashboard. `now`, `dayStart`, `dayEnd` are ISO strings supplied by the caller
   // so "today" follows the business's local day, not the server's.
   function dashboard({ ownerId, now = new Date().toISOString(), dayStart, dayEnd } = {}) {
-    const start = dayStart ?? now.slice(0, 10) + "T00:00:00.000Z";
-    const end = dayEnd ?? now.slice(0, 10) + "T23:59:59.999Z";
+    const day = dayBounds({ now, dayStart, dayEnd });
     const scope = ownerId ? " AND l.owner_id=?" : "";
     const sargs = ownerId ? [ownerId] : [];
-    const active = "l.archived_at IS NULL AND st.stage_group IN ('FRESH','ACTIVE')";
-    const count = (cond, ...args) =>
-      one(`SELECT count(*) c FROM leads l JOIN statuses st ON st.id=l.status_id WHERE ${active}${scope} AND ${cond}`, ...sargs, ...args).c;
+    const active = ACTIVE;
+    const queueCount = (name) => {
+      const [cond, args] = QUEUES[name](day);
+      return one(`SELECT count(*) c FROM leads l JOIN statuses st ON st.id=l.status_id WHERE ${active}${scope} AND ${cond}`, ...sargs, ...args).c;
+    };
     const callScope = ownerId ? " AND c.user_id=?" : "";
     return {
-      newLeads: count("st.stage_group='FRESH'"),
-      awaitingFirstTouch: count("l.first_touch_at IS NULL"),
-      repeatEnquiries: count("l.is_repeat=1"),
-      followupsToday: count("l.next_followup_at >= ? AND l.next_followup_at <= ?", start, end),
-      overdueFollowups: count("l.next_followup_at < ?", start),
+      newLeads: queueCount("new"),
+      awaitingFirstTouch: queueCount("untouched"),
+      repeatEnquiries: queueCount("repeat"),
+      followupsToday: queueCount("today"),
+      overdueFollowups: queueCount("overdue"),
       unassigned: one(`SELECT count(*) c FROM leads l JOIN statuses st ON st.id=l.status_id WHERE ${active} AND l.owner_id IS NULL`).c,
       missedCallsToReturn: one(
         `SELECT count(DISTINCT c.lead_id) c FROM calls c JOIN leads l ON l.id=c.lead_id JOIN statuses st ON st.id=l.status_id

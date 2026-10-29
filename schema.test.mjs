@@ -42,12 +42,12 @@ test("migrations apply in order, are idempotent and dry-run changes nothing", ()
     assert.deepEqual(dry.pending, listMigrations(migrationsDir).map((m) => m.file));
     assert.equal(db.prepare("SELECT count(*) c FROM sqlite_master WHERE name='leads'").get().c, 0);
     const first = migrate(db, migrationsDir);
-    assert.deepEqual(first.applied, ["001_core.sql", "002_ai.sql", "003_seed.sql"]);
-    assert.equal(first.to, 3);
+    assert.deepEqual(first.applied, ["001_core.sql", "002_ai.sql", "003_seed.sql", "004_targets.sql"]);
+    assert.equal(first.to, 4);
     const second = migrate(db, migrationsDir);
     assert.deepEqual(second.applied, []);
     assert.deepEqual(second.pending, []);
-    assert.equal(db.prepare("SELECT count(*) c FROM schema_migrations").get().c, 3);
+    assert.equal(db.prepare("SELECT count(*) c FROM schema_migrations").get().c, 4);
   } finally {
     db.close();
   }
@@ -65,12 +65,12 @@ test("an edited, removed or failing migration is refused and rolled back", (t) =
   rmSync(join(dir, "003_seed.sql"));
   cpSync(join(migrationsDir, "003_seed.sql"), join(dir, "003_seed.sql"));
   cpSync(join(migrationsDir, "001_core.sql"), join(dir, "001_core.sql"));
-  writeFileSync(join(dir, "004_bad.sql"), "CREATE TABLE ok_table(x); INSERT INTO nonexistent VALUES(1);");
-  assert.throws(() => migrate(db, dir), /004_bad\.sql failed and was rolled back/);
+  writeFileSync(join(dir, "005_bad.sql"), "CREATE TABLE ok_table(x); INSERT INTO nonexistent VALUES(1);");
+  assert.throws(() => migrate(db, dir), /005_bad\.sql failed and was rolled back/);
   assert.equal(db.prepare("SELECT count(*) c FROM sqlite_master WHERE name='ok_table'").get().c, 0);
-  assert.equal(db.prepare("SELECT count(*) c FROM schema_migrations").get().c, 3);
+  assert.equal(db.prepare("SELECT count(*) c FROM schema_migrations").get().c, 4);
   rmSync(join(dir, "002_ai.sql"));
-  rmSync(join(dir, "004_bad.sql"));
+  rmSync(join(dir, "005_bad.sql"));
   assert.throws(() => migrate(db, dir), /missing from/);
   assert.ok(readdirSync(dir).length >= 2);
 });

@@ -13,3 +13,7 @@ android-companion/local.properties
 
 # Private research notes about the business and third-party tools; never publish (this repository is public)
 docs/private/
+
+# new web app
+web/node_modules/
+web/dist/

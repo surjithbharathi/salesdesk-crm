@@ -7,8 +7,10 @@ import { encryptedAuth } from "./whatsapp-auth.mjs";
 import { createWhatsApp } from "./whatsapp.mjs";
 import { canonicalPhone } from "./phone.mjs";
 import { fileURLToPath } from "node:url";
+import { resolve as resolvePath, sep, extname } from "node:path";
 import { migrate } from "./db-migrate.mjs";
 import { createQueries } from "./queries.mjs";
+import { createScorecard } from "./scorecard.mjs";
 import { createMobileSync, MAX_AUDIO } from "./mobile-sync.mjs";
 import { createUserAuth } from "./user-auth.mjs";
 import { scopedState } from "./user-scope.mjs";
@@ -333,9 +335,11 @@ if (publicOrigin && !userAuth.configured())
 // first, and it only reads, so the existing screens and the phone app are unaffected.
 const v2 = process.env.ENABLE_V2 === "true";
 let queries = null;
+let scorecard = null;
 if (v2) {
   migrate(db, fileURLToPath(new URL("./migrations/", import.meta.url)));
   queries = createQueries(db);
+  scorecard = createScorecard(db);
 }
 function handleV2(req, url, identity, send) {
   if (req.method !== "GET") bad("The v2 API is read-only for now", 405);
@@ -352,6 +356,7 @@ function handleV2(req, url, identity, send) {
       queries.listLeads({
         ownerId: owner(), statusId: p.get("status") || undefined, group: p.get("group") || undefined,
         sourceId: p.get("source") || undefined, tagId: p.get("tag") || undefined, q: p.get("q") || undefined,
+        queue: p.get("queue") || undefined, dayStart: p.get("dayStart") || undefined, dayEnd: p.get("dayEnd") || undefined,
         archived: p.get("archived") === "true", limit: number("limit"), cursor: p.get("cursor") || undefined,
       }),
     );
@@ -366,11 +371,52 @@ function handleV2(req, url, identity, send) {
         : detail,
     );
   }
+  if (path === "/me/day" || path === "/team/day" || path === "/leaderboard") {
+    const tz = Number.isFinite(number("tz")) ? number("tz") : 330;
+    const day = { dayStart: p.get("dayStart") || undefined, dayEnd: p.get("dayEnd") || undefined, tz };
+    if (path === "/leaderboard") return send(200, scorecard.leaderboard({ tz }));
+    if (path === "/team/day") {
+      if (member) bad("Managers and owners only", 403);
+      return send(200, scorecard.team(day));
+    }
+    const userId = scope ?? p.get("user");
+    if (!userId) bad("Choose a person with ?user=", 400);
+    return send(200, scorecard.myDay({ userId, ...day }));
+  }
   if (path === "/dashboard")
     return send(200, queries.dashboard({ ownerId: owner(), dayStart: p.get("dayStart") || undefined, dayEnd: p.get("dayEnd") || undefined }));
   if (path === "/reports/sources")
     return send(200, queries.sourceReport({ from: p.get("from"), to: p.get("to"), ownerId: owner() }));
   bad("Not found", 404);
+}
+// The new React app (built into web/dist) is served under /next/. Static files only; its data comes from /api/v2.
+const WEB_ROOT = fileURLToPath(new URL("./web/dist/", import.meta.url));
+const WEB_TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon", ".json": "application/json", ".woff2": "font/woff2" };
+async function serveWebApp(pathname, res) {
+  let relative;
+  try {
+    relative = decodeURIComponent(pathname.slice("/next/".length)) || "index.html";
+  } catch {
+    relative = "";
+  }
+  const root = WEB_ROOT.endsWith(sep) ? WEB_ROOT.slice(0, -1) : WEB_ROOT;
+  const file = resolvePath(root, relative);
+  const type = WEB_TYPES[extname(file)];
+  if (!relative || !file.startsWith(root + sep) || !type) {
+    res.writeHead(404, { "Content-Type": "text/plain" });
+    return res.end("Not found");
+  }
+  try {
+    const data = await readFile(file);
+    res.writeHead(200, {
+      "Content-Type": type,
+      "Cache-Control": relative.startsWith("assets/") ? "public, max-age=31536000, immutable" : "no-store",
+    });
+    res.end(data);
+  } catch {
+    res.writeHead(404, { "Content-Type": "text/plain" });
+    res.end("The new web app has not been built. Run: npm run web:build");
+  }
 }
 const clickToCall = createClickToCall({
   db,
@@ -1066,6 +1112,13 @@ const server = http.createServer(async (req, res) => {
       });
       send(200, result);
       return;
+    }
+    if (req.method === "GET" && (url.pathname === "/next" || url.pathname.startsWith("/next/"))) {
+      if (url.pathname === "/next") {
+        res.writeHead(301, { Location: "/next/" });
+        return res.end();
+      }
+      return serveWebApp(url.pathname, res);
     }
     if (req.method === "GET" && files[url.pathname]) {
       const [path, type] = files[url.pathname];
