@@ -1,7 +1,7 @@
 import React, { useState } from "react";
-import { v2, localDay } from "../api.js";
+import { v2, localDay, localMonths } from "../api.js";
 import { useLoad } from "../hooks.js";
-import { hashFor, pct, plural } from "../format.js";
+import { hashFor, pct, plural, rupees } from "../format.js";
 
 const WORK = [
   ["overdueFollowups", "overdue", "Late follow-ups", "Calls promised to a customer that are past due", true],
@@ -98,6 +98,37 @@ function PressLine({ totals, days, setDays }) {
   );
 }
 
+function change(now, before) {
+  if (!before) return now ? "Nothing to compare with last month" : "No orders in either month";
+  const diff = now - before;
+  return diff === 0 ? "Same as last month" : `${diff > 0 ? "Up" : "Down"} ${Math.abs(diff)} from last month`;
+}
+
+function Month({ data }) {
+  const month = new Date().toLocaleDateString("en-IN", { month: "long" });
+  const { thisMonth: now, lastMonth: before } = data;
+  return (
+    <section aria-label="This month" className="month">
+      <h2 className="section-title">{month} so far</h2>
+      <div className="month-tiles">
+        <div className="month-tile"><b className="num">{now.n}</b><span>{now.n === 1 ? "order" : "orders"}</span><small>{change(now.n, before.n)}</small></div>
+        <div className="month-tile"><b className="num">{rupees(now.value)}</b><span>order value</span><small>{before.value ? `Last month ${rupees(before.value)}` : "No orders last month"}</small></div>
+      </div>
+      <div className="table-frame">
+        <table className="grid">
+          <thead><tr><th>Person</th><th className="right">Calls</th><th className="right">Quotations</th><th className="right">Orders</th><th className="right">Order value</th></tr></thead>
+          <tbody>
+            {data.people.map((p) => (
+              <tr key={p.id}><td><b>{p.name}</b></td><td className="right num">{p.calls}</td><td className="right num">{p.quotations}</td><td className="right num">{p.orders}</td><td className="right num">{rupees(p.value)}</td></tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="muted gauge-note">An order is counted in the month its lead moved to a Won stage. Value is the lead's expected value.</p>
+    </section>
+  );
+}
+
 function Pipeline({ rows }) {
   const total = rows.reduce((s, r) => s + r.count, 0) || 1;
   let x = 0;
@@ -141,6 +172,7 @@ export default function Dashboard() {
     (t, s) => ({ leads: t.leads + s.leads, contacted: t.contacted + s.contacted, connected: t.connected + s.connected, quotation: t.quotation + s.reached_quotation, won: t.won + s.won }),
     { leads: 0, contacted: 0, connected: 0, quotation: 0, won: 0 },
   );
+  const business = useLoad(() => v2("/business", localMonths()), []);
   const date = new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" });
   const d = today.data;
   return (
@@ -150,6 +182,7 @@ export default function Dashboard() {
         <span className="work-date">{date}</span>
       </div>
       {report.error ? <p className="error">{report.error.message}</p> : <PressLine totals={totals} days={days} setDays={setDays} />}
+      {business.data && <Month data={business.data} />}
       {today.error && <p className="error">{today.error.message}</p>}
       {d && (
         <div className="cols">

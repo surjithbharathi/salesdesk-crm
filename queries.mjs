@@ -112,6 +112,28 @@ export function createQueries(db) {
     };
   }
 
+  // Orders won and their value in two months side by side, and the same per person for the current month.
+  // An order is the moment a lead moved to a Won stage, so a lead is counted in the month it was closed.
+  function business({ monthStart, prevStart, nextStart }) {
+    const orders = (from, to) =>
+      one(`SELECT count(DISTINCT a.lead_id) n, coalesce(sum(l.expected_value),0) value FROM activities a JOIN leads l ON l.id=a.lead_id
+            WHERE a.type='status_change' AND json_extract(a.data,'$.to') IN (SELECT id FROM statuses WHERE stage_group='WON')
+              AND a.occurred_at>=? AND a.occurred_at<?`, from, to);
+    const people = all(
+      `SELECT u.id,u.name,
+              (SELECT count(*) FROM calls c WHERE c.user_id=u.id AND c.direction='Outgoing' AND c.started_at>=? AND c.started_at<?) calls,
+              (SELECT count(DISTINCT a.lead_id) FROM activities a JOIN leads l ON l.id=a.lead_id WHERE l.owner_id=u.id AND a.type='status_change'
+                  AND json_extract(a.data,'$.to')='st_quotation' AND a.occurred_at>=? AND a.occurred_at<?) quotations,
+              (SELECT count(DISTINCT a.lead_id) FROM activities a JOIN leads l ON l.id=a.lead_id WHERE l.owner_id=u.id AND a.type='status_change'
+                  AND json_extract(a.data,'$.to') IN (SELECT id FROM statuses WHERE stage_group='WON') AND a.occurred_at>=? AND a.occurred_at<?) orders,
+              (SELECT coalesce(sum(l.expected_value),0) FROM leads l WHERE l.owner_id=u.id AND l.id IN (
+                  SELECT a.lead_id FROM activities a WHERE a.type='status_change' AND json_extract(a.data,'$.to') IN (SELECT id FROM statuses WHERE stage_group='WON')
+                  AND a.occurred_at>=? AND a.occurred_at<?)) value
+         FROM users u WHERE u.active=1 ORDER BY value DESC, orders DESC, u.name`,
+      monthStart, nextStart, monthStart, nextStart, monthStart, nextStart, monthStart, nextStart);
+    return { thisMonth: orders(monthStart, nextStart), lastMonth: orders(prevStart, monthStart), people };
+  }
+
   // Calls (to record what happened) and open tasks (what is promised next) for the lead panel.
   function leadWork(leadId) {
     return {
@@ -232,5 +254,5 @@ export function createQueries(db) {
     };
   }
 
-  return { meta, listLeads, getLead, leadWork, activities, dashboard, sourceReport };
+  return { meta, listLeads, getLead, leadWork, business, activities, dashboard, sourceReport };
 }

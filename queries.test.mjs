@@ -187,3 +187,21 @@ test("a dashboard card's number equals the leads listed when you click it", (t) 
   }
   assert.throws(() => q.listLeads({ queue: "nonsense" }), /Unknown queue/);
 });
+
+test("business: orders and value by month, and per person, counted from the moment a lead became Won", (t) => {
+  const { store, q, at } = fixture(t);
+  const win = (name, owner, value, when) => {
+    at(when);
+    const l = store.createLead({ name, phone: phone(), source: "IndiaMart", owner, expectedValue: value });
+    store.setStatus(l.id, "Quotation Shared", { userId: owner });
+    store.setStatus(l.id, "Won", { userId: owner });
+  };
+  win("A", "u1", 100000, "2026-09-10T05:00:00Z");
+  win("B", "u1", 50000, "2026-10-05T05:00:00Z");
+  win("C", "u2", 70000, "2026-10-06T05:00:00Z");
+  const out = q.business({ monthStart: "2026-10-01T00:00:00Z", prevStart: "2026-09-01T00:00:00Z", nextStart: "2026-11-01T00:00:00Z" });
+  assert.deepEqual([out.thisMonth.n, out.thisMonth.value, out.lastMonth.n, out.lastMonth.value], [2, 120000, 1, 100000]);
+  const byName = Object.fromEntries(out.people.map((p) => [p.name, p]));
+  assert.deepEqual([byName.Asha.orders, byName.Asha.value, byName.Ravi.orders, byName.Ravi.value], [1, 50000, 1, 70000]);
+  assert.equal(out.people[0].name, "Ravi"); // highest value first
+});

@@ -41,3 +41,14 @@ export function localDay() {
 
 // Changes go through the same rules as everywhere else in the CRM; the server answers with the updated lead.
 export const v2Send = (method, path, body = {}) => request("/api/v2" + path, { method, body });
+
+export function localMonths() {
+  const first = new Date();
+  first.setDate(1);
+  first.setHours(0, 0, 0, 0);
+  const prev = new Date(first);
+  prev.setMonth(prev.getMonth() - 1);
+  const next = new Date(first);
+  next.setMonth(next.getMonth() + 1);
+  return { monthStart: first.toISOString(), prevStart: prev.toISOString(), nextStart: next.toISOString() };
+}

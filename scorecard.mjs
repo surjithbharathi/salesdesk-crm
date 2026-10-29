@@ -162,5 +162,7 @@ export function createScorecard(db) {
     return rows;
   }
 
-  return { goals, events, myDay, leaderboard, team };
+  const allTargets = () => all("SELECT scope,metric,value FROM targets ORDER BY scope,metric");
+
+  return { goals, events, myDay, leaderboard, team, allTargets };
 }

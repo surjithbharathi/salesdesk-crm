@@ -12,6 +12,7 @@ import { migrate } from "./db-migrate.mjs";
 import { createQueries } from "./queries.mjs";
 import { createScorecard } from "./scorecard.mjs";
 import { createStore } from "./store.mjs";
+import { startFollowingLegacy } from "./legacy-import.mjs";
 import { createActions } from "./v2-actions.mjs";
 import { createMobileSync, MAX_AUDIO } from "./mobile-sync.mjs";
 import { createUserAuth } from "./user-auth.mjs";
@@ -344,6 +345,8 @@ if (v2) {
   queries = createQueries(db);
   scorecard = createScorecard(db);
   actions = createActions(db, createStore(db));
+  // Off by default. While the classic screens and the phone app still write to the old tables, copy new leads, calls, notes and tasks across.
+  if (process.env.V2_FOLLOW_LEGACY === "true") startFollowingLegacy(db);
 }
 async function handleV2(req, url, identity, send, sameOrigin) {
   if (req.method !== "GET") {
@@ -395,6 +398,13 @@ async function handleV2(req, url, identity, send, sameOrigin) {
     const userId = scope ?? p.get("user");
     if (!userId) bad("Choose a person with ?user=", 400);
     return send(200, scorecard.myDay({ userId, ...day }));
+  }
+  if (path === "/targets") return send(200, { targets: scorecard.allTargets() });
+  if (path === "/business") {
+    if (member) bad("Owners and managers only", 403);
+    const monthStart = p.get("monthStart"), prevStart = p.get("prevStart"), nextStart = p.get("nextStart");
+    if (![monthStart, prevStart, nextStart].every((d) => Number.isFinite(Date.parse(d)))) bad("monthStart, prevStart and nextStart are required", 400);
+    return send(200, queries.business({ monthStart, prevStart, nextStart }));
   }
   if (path === "/dashboard")
     return send(200, queries.dashboard({ ownerId: owner(), dayStart: p.get("dayStart") || undefined, dayEnd: p.get("dayEnd") || undefined }));

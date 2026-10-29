@@ -8,11 +8,13 @@ import Leads from "./pages/Leads.jsx";
 import SourceReport from "./pages/SourceReport.jsx";
 import MyDay from "./pages/MyDay.jsx";
 import Team from "./pages/Team.jsx";
+import Goals from "./pages/Goals.jsx";
 
 const NAV_OWNER = [
   ["/dashboard", "Business", "dashboard"],
   ["/my-day", "My day", "spark"],
   ["/team", "Team", "people"],
+  ["/goals", "Daily goals", "check"],
   ["/leads", "Leads", "leads"],
   ["/reports/sources", "Where leads come from", "report"],
 ];
@@ -130,6 +132,7 @@ export default function App() {
     path.startsWith("/leads") ? <Leads key="leads" meta={meta} params={params} /> :
     path.startsWith("/reports/sources") ? <SourceReport key="report" /> :
     path.startsWith("/team") && owner ? <Team key="team" /> :
+    path.startsWith("/goals") && owner ? <Goals key="goals" meta={meta} /> :
     path.startsWith("/my-day") || !owner ? (
       <>
         {owner && (

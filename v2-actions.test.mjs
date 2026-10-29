@@ -74,3 +74,17 @@ test("a call outcome applies its effect and only the lead's owner (or the owner)
   assert.equal(q.leadWork(lead.id).calls[0].outcome, "Interested");
   assert.throws(() => act.perform("POST", `/calls/${call.id}/outcome`, asha, { outcome: "Nonsense" }), (e) => e.status === 400);
 });
+
+test("only the owner changes goals; goals are whole numbers and an override can be removed", (t) => {
+  const { act, db, asha, admin } = fixture(t);
+  assert.throws(() => act.perform("POST", "/targets", asha, { metric: "calls", value: 10 }), (e) => e.status === 403);
+  assert.throws(() => act.perform("POST", "/targets", admin, { metric: "calls", value: -1 }), /whole number/);
+  assert.throws(() => act.perform("POST", "/targets", admin, { metric: "sales", value: 5 }), /Unknown goal/);
+  assert.throws(() => act.perform("POST", "/targets", admin, { scope: "nobody", metric: "calls", value: 5 }), /Unknown person/);
+  act.perform("POST", "/targets", admin, { metric: "calls", value: 50 });
+  act.perform("POST", "/targets", admin, { scope: "u1", metric: "calls", value: 25 });
+  const goal = (scope) => db.prepare("SELECT value FROM targets WHERE scope=? AND metric='calls'").get(scope)?.value;
+  assert.deepEqual([goal("default"), goal("u1")], [50, 25]);
+  act.perform("POST", "/targets", admin, { scope: "u1", metric: "calls", value: "" });
+  assert.equal(goal("u1"), undefined);
+});

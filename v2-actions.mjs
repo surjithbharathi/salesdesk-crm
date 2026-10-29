@@ -69,6 +69,20 @@ export function createActions(db, store) {
       store.setCallOutcome(callId, text(outcome, "Outcome", 80), { ...ctx(actor), note: note ? String(note).slice(0, 2000) : undefined });
       return { lead: detail(call.lead_id) };
     },
+    // Daily goals for the scorecard. 'default' applies to everyone, a user id overrides it for that person; an empty value removes an override.
+    setTarget(actor, _id, { scope = "default", metric, value }) {
+      if (!isAdmin(actor)) throw fail("Only the owner or a manager can change goals", 403);
+      if (!["calls", "answered", "quotations"].includes(metric)) throw fail("Unknown goal");
+      if (scope !== "default" && !one("SELECT 1 FROM users WHERE id=?", scope)) throw fail("Unknown person");
+      if (scope !== "default" && (value === "" || value === null)) {
+        db.prepare("DELETE FROM targets WHERE scope=? AND metric=?").run(scope, metric);
+      } else {
+        const n = Number(value);
+        if (!Number.isInteger(n) || n < 0 || n > 1000) throw fail("A goal is a whole number from 0 to 1000");
+        db.prepare("INSERT INTO targets(scope,metric,value) VALUES(?,?,?) ON CONFLICT(scope,metric) DO UPDATE SET value=excluded.value").run(scope, metric, n);
+      }
+      return { targets: db.prepare("SELECT scope,metric,value FROM targets ORDER BY scope,metric").all() };
+    },
     addTag(actor, id, { tag }) {
       leadFor(actor, id);
       return { lead: detail(store.addTag(id, text(tag, "Tag", 40)).id) };
@@ -85,6 +99,7 @@ export function createActions(db, store) {
     ["POST", /^\/leads\/([\w-]+)\/notes$/, "addNote"],
     ["POST", /^\/leads\/([\w-]+)\/tasks$/, "addTask"],
     ["POST", /^\/leads\/([\w-]+)\/tags$/, "addTag"],
+    ["POST", /^\/targets()$/, "setTarget"],
     ["POST", /^\/tasks\/([\w-]+)\/close$/, "closeTask"],
     ["POST", /^\/calls\/([\w-]+)\/outcome$/, "setCallOutcome"],
   ];

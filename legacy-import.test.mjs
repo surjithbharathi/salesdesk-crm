@@ -7,7 +7,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { migrate } from "./db-migrate.mjs";
-import { importLegacy } from "./legacy-import.mjs";
+import { importLegacy, startFollowingLegacy } from "./legacy-import.mjs";
+import { createStore } from "./store.mjs";
 
 const migrations = fileURLToPath(new URL("./migrations/", import.meta.url));
 
@@ -227,4 +228,31 @@ test("imports a database created by the real server (demo workspace)", async (t)
   assert.equal(db.prepare("SELECT first_source_id s FROM leads WHERE name='Created via API'").get().s, "src_walk_in");
   assert.equal(db.prepare("SELECT phone_e164 p FROM leads WHERE name='Created via API'").get().p, "919000011111");
   assert.deepEqual(report.issues, []); // a healthy database imports with no warnings
+});
+
+test("following the old data adds new leads and calls, keeps work done in the new app, and is quiet when nothing changed", (t) => {
+  const db = fixture(t);
+  const logs = [];
+  const follower = startFollowingLegacy(db, { intervalMs: 3600000, log: (...a) => logs.push(a) });
+  t.after(() => follower.stop());
+  assert.equal(follower.tick().applied, true);
+  const leads = count(db, "leads");
+  // someone works the lead in the new app
+  const store = createStore(db);
+  store.logCall({ phone: "919876543210", direction: "Outgoing", startedAt: "2026-10-10T05:00:00.000Z", duration: 45, deviceId: "web", localId: "n1", userId: "u-rep" });
+  store.addActivity("L1", "note", "Asked for 3-phase", { userId: "u-rep" });
+  // meanwhile the classic screens and the phone app add a lead and a call
+  const put = (kindName, value) => db.prepare("INSERT INTO records VALUES(?,?,?)").run(kindName, value.id, JSON.stringify(value));
+  put("leads", { id: "L9", name: "Fresh", phone: "9876543299", stage: "New", owner: "u-rep", source: "IndiaMART", createdAt: "2026-10-12T10:00:00.000Z", updatedAt: "2026-10-12T10:00:00.000Z" });
+  put("mobileCalls", { id: "C9", localId: "900", phone: "919876543299", direction: "Outgoing", startedAt: Date.parse("2026-10-12T11:00:00Z"), duration: 60, deviceId: "dev1", leadId: "L9" });
+  const before = lead(db, "L1").call_count;
+  const report = follower.tick();
+  assert.equal(report.applied, true, JSON.stringify(report.verification.checks.filter((c) => !c.ok)));
+  assert.equal(count(db, "leads"), leads + 1);
+  assert.equal(lead(db, "L9").call_count, 1);
+  assert.equal(lead(db, "L1").call_count, before); // the new-app call is still counted, none lost or doubled
+  assert.equal(db.prepare("SELECT count(*) c FROM activities WHERE text='Asked for 3-phase'").get().c, 1);
+  logs.length = 0;
+  follower.tick(); // nothing new
+  assert.equal(logs.length, 0);
 });

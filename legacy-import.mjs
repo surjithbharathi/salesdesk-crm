@@ -249,7 +249,8 @@ export function importLegacy(db, { dryRun = true } = {}) {
     check("total call seconds match", expectedSeconds, q("SELECT coalesce(sum(duration_seconds),0) c FROM calls WHERE legacy_id IS NOT NULL").c);
     check("activities imported + rejected = legacy activities", legacy.activities.length, q("SELECT count(*) c FROM activities WHERE legacy_id IS NOT NULL").c + orphanActivities);
     check("tasks imported + rejected = legacy tasks", legacy.tasks.length, q("SELECT count(*) c FROM tasks WHERE legacy_id IS NOT NULL").c + orphanTasks);
-    check("lead call counters equal call rows", q("SELECT count(*) c FROM calls WHERE legacy_id IS NOT NULL").c, q("SELECT coalesce(sum(call_count),0) c FROM leads WHERE legacy_id IS NOT NULL").c);
+    // Calls logged in the new app on an imported lead are real calls too, so compare against every call on those leads.
+    check("lead call counters equal call rows", q("SELECT count(*) c FROM calls WHERE lead_id IN (SELECT id FROM leads WHERE legacy_id IS NOT NULL)").c, q("SELECT coalesce(sum(call_count),0) c FROM leads WHERE legacy_id IS NOT NULL").c);
     check("every lost lead has a reason", 0, q("SELECT count(*) c FROM leads l JOIN statuses s ON s.id=l.status_id WHERE s.stage_group='LOST' AND l.lost_reason_id IS NULL").c);
     check("no broken references", 0, db.prepare("PRAGMA foreign_key_check").all().length);
     report.verification = { ok: checks.every((c) => c.ok), checks };
@@ -271,4 +272,25 @@ export function importLegacy(db, { dryRun = true } = {}) {
     throw error;
   }
   return report;
+}
+
+// While the classic screens and the phone app still write to the old tables, copy what is new into the new tables
+// on a timer. It only adds (leads, calls, notes, tasks); it never edits or removes anything, and it stops on a failed
+// verification. Switch it on with V2_FOLLOW_LEGACY=true until the cutover.
+export function startFollowingLegacy(db, { intervalMs = 60000, log = console.log } = {}) {
+  const tick = () => {
+    try {
+      const report = importLegacy(db, { dryRun: false });
+      const added = Object.values(report.imported).reduce((sum, n) => sum + n, 0);
+      if (!report.applied) log("Following the old data failed verification; nothing was copied", report.verification.checks.filter((c) => !c.ok));
+      else if (added) log("Copied from the old data:", report.imported);
+      return report;
+    } catch (error) {
+      log("Following the old data failed:", error.message);
+      return null;
+    }
+  };
+  const timer = setInterval(tick, intervalMs);
+  timer.unref();
+  return { tick, stop: () => clearInterval(timer) };
 }
