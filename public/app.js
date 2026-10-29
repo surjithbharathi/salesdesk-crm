@@ -137,7 +137,11 @@ async function api(path, method = "GET", body) {
 }
 async function refresh() {
   state = await api("state");
-  waStatus = await api("whatsapp/status");
+  try {
+    waStatus = await api("whatsapp/status");
+  } catch {
+    /* Restricted users lack integrations.manage; keep the default status so the CRM still loads. */
+  }
   mobileDevices = await api("mobile/devices");
   try{workspaceProfile=await api('workspace/access');}catch{workspaceProfile=null;}
   if(workspaceProfile?.permissions?.['integrations.manage'])try{smtpConfig=await api('email/settings');}catch{smtpConfig=null;}
@@ -1235,7 +1239,7 @@ function showLead(id, tab = "Timeline") {
           `<tr><td>${esc(t.title)}</td><td>${date(t.due)}</td><td>${pill(t.status)}</td><td><button data-edit-task="${t.id}">Edit</button></td></tr>`,
       ),
     )}`;
-  if (tab === "Documents"){const docs=state.documents.filter(document=>document.leadId===id);body=(!sharedIdentity||sharedIdentity.user.role==='admin'?'<button data-action="lead-document">Add text document</button>':'')+(docs.length?docs.map(document=>`<details class="lead-document"><summary>${esc(document.name)}</summary><pre>${esc(document.content)}</pre></details>`).join(''):'<p class="simple-empty">No documents attached to this lead.</p>');}
+  if (tab === "Documents"){const docs=state.documents.filter(document=>document.leadId===id);body=(!sharedIdentity||sharedIdentity.user.role==='admin'?'<button data-action="lead-document">Attach document</button>':'')+(docs.length?docs.map(document=>`<details class="lead-document"><summary>${esc(document.name)}</summary>${!document.mime||document.mime==='text/plain'?`<pre>${esc(document.content)}</pre>`:`<p class="muted" style="padding:18px">${esc(document.mime)} · binary file, not previewed.</p>`}<p style="padding:0 18px 18px"><a href="/api/documents/${encodeURIComponent(document.id)}/download">Download</a></p></details>`).join(''):'<p class="simple-empty">No documents attached to this lead.</p>');}
   if (tab === "Deals")
     body = `<button data-action="lead-deal">＋ Create deal</button>${table(
       ["Deal", "Value", "Stage"],
@@ -1504,7 +1508,7 @@ document.addEventListener("click", async (e) => {
       render();
     }
     if (a === "merge-leads") mergeLeadForm();
-    if(a === "lead-document"){form('documents',`<input type="hidden" name="leadId" value="${esc(detailId)}"><input type="hidden" name="mime" value="text/plain">`+field('name','Document name','note.txt','text',true)+'<label>Document text<textarea name="content" rows="8" maxlength="102400"></textarea></label>','','Add lead document');return;}
+    if(a === "lead-document"){moduleForm("documents",{leadId:detailId});return;}
     if(a === "manage-accounts"){await openAccounts();return;}
     if(a === "sign-out"){await signOut();return;}
     if (a === "bulk-import") navigate("import");
