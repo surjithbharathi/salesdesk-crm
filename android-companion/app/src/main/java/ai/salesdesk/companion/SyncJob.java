@@ -9,7 +9,8 @@ public class SyncJob extends JobService {
     public boolean onStopJob(JobParameters params) { SyncEngine.cancel(); return true; }
     static void schedule(Context c, boolean enabled) {
         JobScheduler scheduler = (JobScheduler)c.getSystemService(JOB_SCHEDULER_SERVICE);
-        if (!enabled || !SecureConfig.loggedIn(c)) { scheduler.cancel(710); SyncEngine.cancel(); return; }
+        if (!enabled || !SecureConfig.loggedIn(c)) { scheduler.cancel(710); scheduler.cancel(711); SyncEngine.cancel(); c.stopService(new Intent(c,CallMonitorService.class)); return; }
         scheduler.schedule(new JobInfo.Builder(710, new ComponentName(c, SyncJob.class)).setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY).setPeriodic(15 * 60 * 1000L).setPersisted(true).setBackoffCriteria(30000, JobInfo.BACKOFF_POLICY_EXPONENTIAL).build());
     }
+    static void requestNow(Context c){if(!SecureConfig.loggedIn(c)||!SecureConfig.prefs(c).getBoolean("enabled",false))return;JobScheduler scheduler=c.getSystemService(JobScheduler.class);if(scheduler.getPendingJob(711)==null)scheduler.schedule(new JobInfo.Builder(711,new ComponentName(c,SyncJob.class)).setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY).setBackoffCriteria(30000,JobInfo.BACKOFF_POLICY_EXPONENTIAL).build());}
 }

@@ -39,9 +39,10 @@ final class SyncEngine {
         } finally { connection.disconnect(); }
     }
     static String normalize(String value, String country) { String number = value.replaceAll("[^0-9]", ""); if (value.trim().startsWith("+")) return number; if (number.startsWith("00")) return number.substring(2); if (number.startsWith("0")) number = number.substring(1); return number.length() == 10 ? country + number : number; }
-    static File recording(Context c,String id) throws Exception {
+    static File recording(Context c,String id) throws Exception {return audio(c,id,false);}
+    static File audio(Context c,String id,boolean voice) throws Exception {
         if(!id.matches("[a-f0-9-]{36}"))throw new Exception("Invalid recording");
-        URL url=new URL(SecureConfig.prefs(c).getString("endpoint","")+"/v1/recordings/"+id);
+        URL url=new URL(SecureConfig.prefs(c).getString("endpoint","")+(voice?"/v1/voice-notes/":"/v1/recordings/")+id);
         if(!url.getProtocol().equals("https")&&!(BuildConfig.DEBUG&&url.getProtocol().equals("http")&&(url.getHost().equals("127.0.0.1")||url.getHost().equals("localhost"))))throw new Exception("HTTPS required");
         HttpURLConnection connection=(HttpURLConnection)url.openConnection();connection.setInstanceFollowRedirects(false);connection.setRequestProperty("Authorization","Bearer "+SecureConfig.token(c));connection.setConnectTimeout(15000);connection.setReadTimeout(30000);
         File file=File.createTempFile("crm-recording-",".audio",c.getCacheDir());boolean complete=false;
@@ -113,27 +114,32 @@ final class SyncEngine {
             catch(Exception e) { if(e instanceof HttpError && (((HttpError)e).code==401 || ((HttpError)e).code==403)) throw e; targets=new JSONArray(SecureConfig.prefs(c).getString("targets","[]")); online=false; }
             Set<String> phones=new HashSet<>(); for(int i=0;i<targets.length();i++) phones.add(targets.getJSONObject(i).getString("phone"));
             long since=SecureConfig.prefs(c).getLong("since",System.currentTimeMillis()); String country=SecureConfig.prefs(c).getString("country","91");
-            try(Cursor log=c.getContentResolver().query(CallLog.Calls.CONTENT_URI,new String[]{CallLog.Calls._ID,CallLog.Calls.NUMBER,CallLog.Calls.DATE,CallLog.Calls.DURATION,CallLog.Calls.TYPE},CallLog.Calls.DATE+">=?",new String[]{String.valueOf(Math.max(since,System.currentTimeMillis()-30L*86400000))},CallLog.Calls.DATE+" DESC")) {
-                int count=0; while(log!=null && log.moveToNext() && count++<5000) { check(c); String phone=normalize(log.getString(1)==null?"":log.getString(1),country); if(!phones.contains(phone)) continue;
+            try(Cursor log=c.getContentResolver().query(CallLog.Calls.CONTENT_URI,new String[]{CallLog.Calls._ID,CallLog.Calls.NUMBER,CallLog.Calls.DATE,CallLog.Calls.DURATION,CallLog.Calls.TYPE,CallLog.Calls.PHONE_ACCOUNT_ID},CallLog.Calls.DATE+">=?",new String[]{String.valueOf(Math.max(since,System.currentTimeMillis()-30L*86400000))},CallLog.Calls.DATE+" DESC")) {
+                int count=0; while(log!=null && log.moveToNext() && count++<5000) { check(c); String phone=normalize(log.getString(1)==null?"":log.getString(1),country); String account=SimTracking.key(log.getString(5));if(!phone.matches("[1-9][0-9]{7,14}")||!SimTracking.allows(c,account,phones.contains(phone)))continue;
                     int type=log.getInt(4); String direction=type==CallLog.Calls.INCOMING_TYPE?"Incoming":type==CallLog.Calls.OUTGOING_TYPE?"Outgoing":type==CallLog.Calls.MISSED_TYPE?"Missed":type==CallLog.Calls.REJECTED_TYPE?"Rejected":""; if(direction.isEmpty()) continue;
-                    long start=log.getLong(2), seconds=log.getLong(3); if(start+seconds*1000>System.currentTimeMillis()-15000) continue;
-                    ContentValues v=new ContentValues(); v.put("local_id",log.getString(0)+"-"+start); v.put("phone",phone); v.put("started",start); v.put("duration",seconds); v.put("direction",direction); db.insertWithOnConflict("calls",null,v,SQLiteDatabase.CONFLICT_IGNORE);
+                    long start=log.getLong(2), seconds=log.getLong(3);if(start<SecureConfig.prefs(c).getLong("trackingSince",0))continue; if(start+seconds*1000>System.currentTimeMillis()-15000) continue;
+                    ContentValues v=new ContentValues(); v.put("local_id",log.getString(0)+"-"+start); v.put("phone",phone);v.put("account",account); v.put("started",start); v.put("duration",seconds); v.put("direction",direction); db.insertWithOnConflict("calls",null,v,SQLiteDatabase.CONFLICT_IGNORE);
                 }
             }
             int synced=0, uploaded=0;
             if(!online) { SecureConfig.prefs(c).edit().putString("status","Offline: business calls queued locally using the last assigned-lead list. Retry when connected.").apply(); return; }
             for(JSONObject row:calls(db)) {
-                check(c); if(!phones.contains(row.getString("phone"))) continue;
+                check(c); if(!SimTracking.allows(c,row.optString("account"),phones.contains(row.getString("phone"))))continue;
                 String remote=row.getString("remote_id");
-                if(remote.isEmpty()) { JSONObject payload=new JSONObject().put("localId",row.getString("local_id")).put("phone",row.getString("phone")).put("startedAt",row.getLong("started")).put("duration",row.getLong("duration")).put("direction",row.getString("direction"));
-                    remote=new JSONObject(request(c,"/v1/calls","POST",payload.toString().getBytes("UTF-8"),Collections.singletonMap("Content-Type","application/json"))).getString("id"); ContentValues v=new ContentValues(); v.put("remote_id",remote); db.update("calls",v,"local_id=?",new String[]{row.getString("local_id")}); synced++; }
+                if(remote.isEmpty()) { JSONObject payload=new JSONObject().put("localId",row.getString("local_id")).put("phone",row.getString("phone")).put("startedAt",row.getLong("started")).put("duration",row.getLong("duration")).put("direction",row.getString("direction")).put("accountId",row.optString("account"));
+                    try{remote=new JSONObject(request(c,"/v1/calls","POST",payload.toString().getBytes("UTF-8"),Collections.singletonMap("Content-Type","application/json"))).getString("id");}catch(HttpError e){if(e.code==403){ContentValues excluded=new ContentValues();excluded.put("uploaded",-1);db.update("calls",excluded,"local_id=?",new String[]{row.getString("local_id")});continue;}throw e;} ContentValues v=new ContentValues(); v.put("remote_id",remote); db.update("calls",v,"local_id=?",new String[]{row.getString("local_id")}); synced++;CallPrompts.afterCall(c,remote,row.getString("phone"),row.getLong("duration")); }
             }
             // Publish call logs first: scanning/reading audio must not delay the CRM timeline.
+            if(!SecureConfig.prefs(c).getBoolean("recordingSync",true)){
+                SecureConfig.prefs(c).edit().putString("status","Updated "+android.text.format.DateFormat.getTimeFormat(c).format(new java.util.Date())+" · "+synced+" new calls · Recording sync paused").apply();
+                return;
+            }
             ArrayList<JSONObject> matchable=calls(db);
-            matchable.removeIf(row->!phones.contains(row.optString("phone")));
+            matchable.removeIf(row->!SimTracking.allows(c,row.optString("account"),phones.contains(row.optString("phone"))));
             matchFolder(c,db,matchable);
             for(JSONObject row:calls(db)) {
-                check(c); if(!phones.contains(row.getString("phone"))) continue;
+                if(!SecureConfig.prefs(c).getBoolean("recordingSync",true))break;
+                check(c); if(!SimTracking.allows(c,row.optString("account"),phones.contains(row.getString("phone"))))continue;
                 String remote=row.getString("remote_id");
                 if(remote.isEmpty() || row.getString("uri").isEmpty()) continue;
                 Uri uri=Uri.parse(row.getString("uri")); long seconds=duration(c,uri); if(seconds<1) continue;

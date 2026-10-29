@@ -31,9 +31,7 @@ function installAccountBar(identity, configured) {
   const bar = document.createElement("div");
   bar.id = "auth-account-bar";
   bar.className = "auth-account-bar";
-  bar.innerHTML = identity
-    ? `<span title="${escape(identity.company)}">${escape(identity.user.name)} · ${escape(identity.user.role)}</span>${identity.user.role === "admin" ? '<button type="button" name="accounts">Manage accounts</button>' : ""}<button type="button" name="logout">Sign out</button>`
-    : '<span>Demo access</span><button type="button" name="setup">Set up shared login</button>';
+  bar.innerHTML = identity ? `<span title="${escape(identity.company)}">${escape(identity.user.name)}</span>` : '<span>Workspace</span>';
   bar.addEventListener("click", async (event) => {
     event.stopPropagation();
     const button = event.target.closest("button");
@@ -60,7 +58,7 @@ function installAccountBar(identity, configured) {
   if (configured && !identity) bar.remove();
 }
 
-async function openAccounts() {
+export async function openAccounts() {
   if (document.getElementById("auth-accounts")) return;
   const dialog = document.createElement("dialog");
   dialog.id = "auth-accounts";
@@ -105,6 +103,8 @@ async function openAccounts() {
     dialog.querySelector('[role="status"]').textContent = error.message;
   }
 }
+
+export async function signOut(){await request("logout",{});location.reload();}
 
 export async function initializeAuth() {
   const status = await request("status");

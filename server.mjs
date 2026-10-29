@@ -1,4 +1,13 @@
+import {createSmtpEmail} from './smtp-email.mjs';
 import http from "node:http";
+import {createWorkspaceAccess} from './workspace-access.mjs';
+import {createWorkspaceRegistry} from './workspace-registry.mjs';
+import { createCrmMcp } from './crm-mcp.mjs';
+import { createMcpAccess } from './mcp-access.mjs';
+import { createMcpOAuth } from './mcp-oauth.mjs';
+import { createCallAI } from './call-ai.mjs';
+import { mergeLeads } from "./lead-merge.mjs";
+import { phoneParts, phoneKeyOf, assertUniqueLead, initializeLeadPhoneIndex } from "./lead-phone.mjs";
 import { readFile, mkdir } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
 import { randomUUID } from "node:crypto";
@@ -31,22 +40,26 @@ const db = new DatabaseSync(
 db.exec(
   "PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS records(kind TEXT, id TEXT, body TEXT, PRIMARY KEY(kind,id))",
 );
+initializeLeadPhoneIndex(db);
 const kinds = ["leads", "activities", "tasks", "deals", "payments", "products", "users", "lists"];
 const all = (kind) =>
   db
     .prepare("SELECT body FROM records WHERE kind=? ORDER BY rowid DESC")
     .all(kind)
-    .map((r) => JSON.parse(r.body));
+    .map((r) => {const value=JSON.parse(r.body);if(kind==="leads")try{return {...value,...phoneParts(value.phone)};}catch{}return value;});
 const get = (kind, id) => {
   const r = db.prepare("SELECT body FROM records WHERE kind=? AND id=?").get(kind, id);
-  return r ? JSON.parse(r.body) : null;
+  if(!r&&kind==="leads"){const alias=db.prepare("SELECT body FROM records WHERE kind='leadAliases' AND id=?").get(id);if(alias)return get(kind,JSON.parse(alias.body).targetId);}
+  const value=r?JSON.parse(r.body):null;if(value&&kind==="leads")try{return {...value,...phoneParts(value.phone)};}catch{}return value;
 };
-const put = (kind, v) =>
-  db
+const put = (kind, v) => {
+  if(kind === "leads"){Object.assign(v,phoneParts(v.phone)); const old=get("leads",v.id);if(!old||phoneKeyOf(old)!==phoneKeyOf(v))assertUniqueLead(all,v); }
+  return db
     .prepare(
       "INSERT INTO records VALUES(?,?,?) ON CONFLICT(kind,id) DO UPDATE SET body=excluded.body",
     )
     .run(kind, v.id, JSON.stringify(v));
+};
 const now = () => new Date().toISOString();
 const stamp = (p) => ({ ...p, id: randomUUID(), createdAt: now(), updatedAt: now() });
 function tx(fn) {
@@ -188,12 +201,12 @@ function validate(kind, p, old = {}) {
     for (const k of ["name", "company", "phone", "email", "source", "city", "disposition"])
       s(k, 200);
     if (!v.name) bad("Lead name required");
-    if (v.phone && !/^[+\d ()-]{7,30}$/.test(v.phone)) bad("Invalid phone");
+    if(["phone","countryCode","mobileNumber"].some(k=>Object.hasOwn(p,k)))Object.assign(v,phoneParts(p.mobileNumber ?? p.phone ?? v.mobileNumber ?? v.phone,p.countryCode ?? (Object.hasOwn(p,"mobileNumber")?v.countryCode||"91":"")));
     if (v.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.email)) bad("Invalid email");
     n("value");
     r("owner", "users");
     r("list", "lists");
-    c("stage", ["New", "Prospecting", "Opportunity", "Closed"]);
+    c("stage", ["New", "Prospecting", "Opportunity", "Quotation given", "Closed"]);
     b("archived");
     b("repeat");
   }
@@ -291,6 +304,26 @@ const mobile = createMobileSync({
     (process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname) + ".mobile-key",
 });
 const userAuth = createUserAuth({ db, getUser: (id) => get("users", id) });
+const workspaceAccess=createWorkspaceAccess({db,get,put,userAuth,crmOwnerId:process.env.CRM_OWNER_CONTEXT==='1'?process.env.CRM_OWNER_USER_ID||'':'',origin:publicOrigin});
+const workspaceRegistry=process.env.CRM_OWNER_CONTEXT==='1'?createWorkspaceRegistry({db,dbPath:process.env.CRM_DB||new URL('./data/crm.sqlite',import.meta.url).pathname,ownerId:process.env.CRM_OWNER_USER_ID||'',get,baseDomain:process.env.WORKSPACE_BASE_DOMAIN,mainOrigin:publicOrigin}):null;
+function permittedState(value,id){
+  if(!id)return value;const calls=workspaceAccess.can(id,'calls.read'),messages=workspaceAccess.can(id,'messages.read');
+  return {...value,mobileCalls:calls?value.mobileCalls:[],activities:(value.activities||[]).filter(a=>(calls||a.type!=='Call')&&(messages||a.type!=='Message')),messages:messages?value.messages:[],conversations:messages?value.conversations:[]};
+}
+const callAI = createCallAI({db,all,get,playback:mobile.playback,keyPath:(process.env.CRM_DB || new URL('./data/crm.sqlite',import.meta.url).pathname)+'.ai-key'});
+const smtpEmail=createSmtpEmail({db,keyPath:(process.env.CRM_DB||new URL('./data/crm.sqlite',import.meta.url).pathname)+'.smtp-key',origin:publicOrigin});
+const mcpAccess=createMcpAccess({db,get,canAdmin:id=>workspaceAccess.can(id,'integrations.manage')});
+const mcpOAuth=createMcpOAuth({db,origin:publicOrigin||`http://localhost:${port}`,access:mcpAccess});
+const mcpIdentity=owner=>({user:{id:owner,role:'admin'}});
+const crmMcp=createCrmMcp({db,authorize:mcpAccess.authorize,all,get,put,validate,tx,log,
+  authorizeOperation:(owner,tool)=>{
+    const permission={lead_edit:'leads.write',lead_assign:'leads.write',daily_report:'reports.read',lead_insights:'calls.read',call_ai_get:'calls.read',transcription_process:'leads.write'}[tool];
+    if(permission)workspaceAccess.requirePermission({user:{id:owner}},permission);
+  },
+  canTranscribe:()=>callAI.publicSettings().enabled,
+  readRecording:(id,owner)=>callAI.result(id,mcpIdentity(owner)),
+  processRecording:(id,owner)=>callAI.enqueue(id,mcpIdentity(owner)),
+  callOwner:id=>mobile.devices().find(device=>device.id===id)?.owner||''});
 const automation = createAutomationBridge({
   db,
   getUser: (id) => get("users", id),
@@ -373,15 +406,36 @@ const mobileServer = http.createServer(async (req, res) => {
     const device = identity
       ? loginDevice(identity)
       : mobile.authenticate(req.headers.authorization);
+    if(url.pathname.startsWith('/v1/recordings/'))workspaceAccess.requirePermission(identity||{user:{id:device.owner}},'calls.read');
+    if(!['GET','HEAD'].includes(req.method)&&url.pathname!=='/v1/logout'){
+      const actor=identity||{user:{id:device.owner}};
+      if(url.pathname.startsWith('/v1/leads'))workspaceAccess.requirePermission(actor,'leads.write');
+      else if(url.pathname.startsWith('/v1/tasks'))workspaceAccess.requirePermission(actor,'tasks.write');
+      else workspaceAccess.requirePermission(actor,'calls.sync');
+    }
     if (url.pathname === "/v1/logout" && req.method === "POST") {
       if (identity) userAuth.revoke(bearer);
       reply(200, { loggedOut: true });
       return;
     }
+    if(url.pathname === "/v1/leads/merge" && req.method === "POST" && identity){const p=await body(req);reply(200,mergeLeads({db,targetId:p.targetId,sourceIds:p.sourceIds,actorId:identity.user.id,admin:identity.user.role==="admin"}));return;}
+    if (url.pathname === "/v1/tracking-preferences" && identity) {
+      if (req.method === "GET") reply(200, mobile.preferences(device));
+      else if (req.method === "PUT") {
+        if (req.headers["content-type"]?.split(";")[0] !== "application/json") bad("JSON required", 415);
+        reply(200, mobile.preferences(device, await body(req)));
+      } else bad("Method not allowed", 405);
+      return;
+    }
+    if(url.pathname === "/v1/admin/users" && req.method === "GET" && identity){
+      if(identity.user.role !== "admin")bad("Administrator required",403);
+      workspaceAccess.requirePermission(identity,'users.manage');
+      reply(200,{users:userAuth.listAccounts()});return;
+    }
     if (url.pathname === "/v1/workspace" && req.method === "GET") {
       if (!identity) bad("Shared user login required", 401);
       reply(200, {
-        ...scopedState(all, identity.user.id),
+        ...permittedState(scopedState(all, identity.user.id),identity.user.id),
         user: identity.user,
         company: identity.company,
       });
@@ -410,7 +464,7 @@ const mobileServer = http.createServer(async (req, res) => {
         if (id && !old) bad("Record not found", 404);
         if (kind === "leads") {
           if (old) ownLead(userId, id);
-          const allowed = ["name", "phone", "company", "email", "city", "stage", "value"];
+          const allowed = ["name", "phone", "countryCode", "mobileNumber", "company", "email", "city", "stage", "value"];
           if (Object.keys(p).some((k) => !allowed.includes(k))) bad("Unsupported lead field");
           const value = validate("leads", { ...p, owner: userId }, old || {}),
             record = old ? { ...value, updatedAt: now() } : stamp({ ...value, firstTouchAt: null });
@@ -439,7 +493,8 @@ const mobileServer = http.createServer(async (req, res) => {
     if (identity && playback && req.method === "GET") {
       const call = all("mobileCalls").find((c) => c.recordingId === playback[1]);
       if (!call) bad("Recording not found", 404);
-      ownLead(identity.user.id, call.leadId);
+      const lead=get("leads",call.leadId);
+      if(!(lead?.owner === "" && lead.createdBy === identity.user.id && call.owner === identity.user.id))ownLead(identity.user.id, call.leadId);
       const audio = mobile.playback(playback[1]);
       res.writeHead(200, { "Content-Type": audio.mime, "Content-Length": audio.bytes.length });
       res.end(audio.bytes);
@@ -465,6 +520,19 @@ const mobileServer = http.createServer(async (req, res) => {
         bad("JSON required", 415);
       reply(200, mobile.call(device, await body(req)));
       return;
+    }
+    const feedback = /^\/v1\/calls\/([a-f0-9-]{36})\/feedback$/.exec(url.pathname);
+    if (identity && feedback && ["POST","PUT"].includes(req.method)) {
+      if(req.method === "POST") { const p=await body(req); reply(200,mobile.feedback(device,feedback[1],p.clientId,p.text)); }
+      else { let size=0;const chunks=[];for await(const chunk of req){size+=chunk.length;if(size>MAX_AUDIO)bad("Voice feedback too large",413);chunks.push(chunk);}reply(200,mobile.feedback(device,feedback[1],req.headers["x-feedback-id"],"",Buffer.concat(chunks))); }
+      return;
+    }
+    const voiceNote = /^\/v1\/voice-notes\/([a-f0-9-]{36})$/.exec(url.pathname);
+    if(identity && voiceNote && req.method === "GET") {
+      const activity=all("activities").find(a=>a.voiceNoteId===voiceNote[1]);
+      if(!activity)bad("Voice note not found",404);
+      const lead=get("leads",activity.leadId);if(!(lead?.owner === "" && lead.createdBy === identity.user.id && activity.userId === identity.user.id))ownLead(identity.user.id,activity.leadId);
+      const audio=mobile.playback(voiceNote[1]);res.writeHead(200,{"Content-Type":audio.mime,"Content-Length":audio.bytes.length});res.end(audio.bytes);return;
     }
     const match = /^\/v1\/calls\/([a-f0-9-]{36})\/recording$/.exec(url.pathname);
     if (req.method === "PUT" && match) {
@@ -538,7 +606,7 @@ const whatsapp = createWhatsApp({
   },
   receive(message) {
     const matches = all("leads").filter(
-      (l) => !l.archived && phoneDigits(l.phone) === message.phone,
+      (l) => !l.archived && phoneKeyOf(l) === phoneKeyOf({phone:message.phone}),
     );
     if (matches.length !== 1) return false;
     const lead = matches[0];
@@ -572,6 +640,11 @@ const whatsapp = createWhatsApp({
     return true;
   },
 });
+db.exec("CREATE TABLE IF NOT EXISTS whatsapp_control (id INTEGER PRIMARY KEY CHECK(id=1), enabled INTEGER NOT NULL)");
+const waControl = db.prepare("SELECT enabled FROM whatsapp_control WHERE id=1").get();
+const hasWaCredentials = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='whatsapp_auth'").get() && db.prepare("SELECT 1 FROM whatsapp_auth WHERE id='creds'").get();
+if (!waControl) db.prepare("INSERT INTO whatsapp_control VALUES(1,?)").run(hasWaCredentials ? 1 : 0);
+if (waControl?.enabled || (!waControl && hasWaCredentials)) void whatsapp.connect();
 const files = {
   "/": ["public/index.html", "text/html"],
   "/app.js": ["public/app.js", "text/javascript"],
@@ -583,6 +656,7 @@ const files = {
   "/reset-password.js": ["public/reset-password.js", "text/javascript"],
   "/style.css": ["public/style.css", "text/css"],
 };
+const oauthRate=new Map();
 const server = http.createServer(async (req, res) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Cache-Control", "no-store");
@@ -604,6 +678,31 @@ const server = http.createServer(async (req, res) => {
       ].includes(req.headers.host)
     )
       bad("Unrecognized host", 403);
+    if(url.pathname.startsWith('/.well-known/')){
+      res.setHeader('Access-Control-Allow-Origin','*');
+      if(!['GET','HEAD'].includes(req.method))bad('Method not allowed',405);
+      if(url.pathname==='/.well-known/oauth-authorization-server')send(200,mcpOAuth.metadata());
+      else if(['/.well-known/oauth-protected-resource','/.well-known/oauth-protected-resource/mcp'].includes(url.pathname))send(200,mcpOAuth.resourceMetadata());
+      else bad('Not found',404);return;
+    }
+    if(url.pathname==='/oauth/register'||url.pathname==='/oauth/token'){
+      res.setHeader('Access-Control-Allow-Origin','*');res.setHeader('Access-Control-Allow-Headers','Content-Type, Authorization');res.setHeader('Access-Control-Allow-Methods','POST, OPTIONS');
+      if(req.method==='OPTIONS'){res.writeHead(204);res.end();return;}
+      if(req.method!=='POST')bad('Method not allowed',405);
+      const rateKey=(req.socket.remoteAddress||'unknown')+url.pathname,window=Math.floor(Date.now()/60000),previous=oauthRate.get(rateKey);
+      if(previous?.window===window){if(previous.count++>=60)bad('OAuth request rate limit',429);}else oauthRate.set(rateKey,{window,count:1});
+      try{
+        let input;
+        if(url.pathname==='/oauth/token'&&req.headers['content-type']?.startsWith('application/x-www-form-urlencoded')){
+          let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>16000)bad('Request too large',413);}input=Object.fromEntries(new URLSearchParams(raw));
+        }else{if(!req.headers['content-type']?.startsWith('application/json'))bad('JSON content type required',415);input=await body(req);}
+        send(url.pathname==='/oauth/register'?201:200,url.pathname==='/oauth/register'?mcpOAuth.register(input):mcpOAuth.token(input,req.headers.authorization));
+      }catch(error){send(error.status||400,{error:['invalid_client','invalid_grant','invalid_scope','unsupported_grant_type'].includes(error.message)?error.message:'invalid_request',error_description:error.status?error.message:'OAuth request failed'});}return;
+    }
+    if(url.pathname==='/oauth/authorize'){
+      if(req.method!=='GET')bad('Method not allowed',405);
+      res.writeHead(302,{Location:mcpOAuth.authorize(Object.fromEntries(url.searchParams))});res.end();return;
+    }
     if (!["GET", "HEAD"].includes(req.method)) {
       if (req.headers.origin && !allowedOrigins.includes(req.headers.origin))
         bad("Cross-origin write refused", 403);
@@ -611,6 +710,13 @@ const server = http.createServer(async (req, res) => {
         bad("JSON content type required", 415);
     }
     const authRoute = url.pathname.startsWith("/api/auth/");
+    if(url.pathname==='/mcp'){
+      if(req.headers.origin&&!allowedOrigins.includes(req.headers.origin))bad('Origin refused',403);
+      try{mcpAccess.authorize(req.headers.authorization);}catch(error){res.setHeader('WWW-Authenticate',`Bearer realm="salesdesk-mcp", resource_metadata="${publicOrigin}/.well-known/oauth-protected-resource/mcp"`);throw error;}
+      if(req.method!=='POST'){res.setHeader('Allow','POST');bad('MCP uses POST JSON-RPC; SSE is not offered',405);}
+      const result=await crmMcp.rpc(req.headers.authorization,await body(req));
+      if(result===null){res.writeHead(202);res.end();}else send(200,result);return;
+    }
     let identity = null;
     if (userAuth.configured() && sessionToken(req)) {
       try {
@@ -681,6 +787,7 @@ const server = http.createServer(async (req, res) => {
       }
       if (action === "accounts") {
         if (identity.user.role !== "admin") bad("Administrator required", 403);
+        workspaceAccess.requirePermission(identity,'users.manage');
         if (req.method === "GET") {
           send(200, {
             accounts: userAuth.listAccounts(),
@@ -692,8 +799,7 @@ const server = http.createServer(async (req, res) => {
         }
         if (req.method === "POST") {
           sameOrigin();
-          send(200, userAuth.createAccount(identity, await body(req)));
-          return;
+          bad('Use Users & permissions to invite accounts',409);
         }
       }
       bad("Not found", 404);
@@ -701,6 +807,10 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname.startsWith("/api/") && userAuth.configured()) {
       if (!identity) bad("Login required", 401);
       if (!["GET", "HEAD"].includes(req.method)) sameOrigin();
+    }
+    if(identity){
+      if(url.pathname.startsWith('/api/automation/')||url.pathname.startsWith('/api/mcp/')||/^\/api\/call-ai\/(keys|models|settings)$/.test(url.pathname))workspaceAccess.requirePermission(identity,'integrations.manage');
+      if(url.pathname.startsWith('/api/call-ai/recordings/')){workspaceAccess.requirePermission(identity,'calls.read');if(req.method==='POST')workspaceAccess.requirePermission(identity,'leads.write');}
     }
     if (url.pathname.startsWith("/api/automation/")) {
       if (!identity) bad("Set up company login first", 401);
@@ -717,7 +827,70 @@ const server = http.createServer(async (req, res) => {
       } else bad("Not found", 404);
       return;
     }
+    if (url.pathname.startsWith('/api/call-ai/')) {
+      if(!identity)bad('Sign in first',401);
+      if(url.pathname==='/api/call-ai/keys') {
+        if(identity.user.role!=='admin')bad('Administrator required',403);
+        if(req.method==='GET')send(200,callAI.vaultList());
+        else if(req.method==='POST'){sameOrigin();send(200,callAI.saveKey(await body(req)));}
+        else bad('Method not allowed',405);
+      } else if(url.pathname==='/api/call-ai/models') {
+        if(identity.user.role!=='admin')bad('Administrator required',403);
+        if(req.method!=='POST')bad('Method not allowed',405);
+        sameOrigin();send(200,await callAI.models(await body(req)));
+      } else if(url.pathname==='/api/call-ai/settings') {
+        if(identity.user.role!=='admin')bad('Administrator required',403);
+        if(req.method==='GET')send(200,callAI.publicSettings());
+        else if(req.method==='POST'){sameOrigin();send(200,callAI.save(await body(req)));}
+        else bad('Method not allowed',405);
+      } else {
+        const match=/^\/api\/call-ai\/recordings\/([a-f0-9-]{36})$/.exec(url.pathname);
+        if(!match)bad('Not found',404);
+        if(req.method==='GET')send(200,callAI.result(match[1],identity));
+        else if(req.method==='POST'){sameOrigin();send(202,callAI.enqueue(match[1],identity));}
+        else bad('Method not allowed',405);
+      }
+      return;
+    }
+    if(url.pathname.startsWith('/api/mcp/')){
+      if(!identity||identity.user.role!=='admin')bad('Administrator required',403);
+      const oauthRequest=/^\/api\/mcp\/oauth\/([a-f0-9-]{36})$/.exec(url.pathname);
+      if(oauthRequest&&req.method==='GET')send(200,mcpOAuth.consent(identity,oauthRequest[1]));
+      else if(oauthRequest&&req.method==='POST'){sameOrigin();const p=await body(req);if(typeof p.approved!=='boolean')bad('Consent decision required');send(200,mcpOAuth.decide(identity,oauthRequest[1],p.approved));}
+      else if(url.pathname==='/api/mcp/keys'&&req.method==='GET')send(200,mcpAccess.list(identity));
+      else if(url.pathname==='/api/mcp/keys'&&req.method==='POST'){sameOrigin();send(201,mcpAccess.issue(identity,await body(req)));}
+      else if(url.pathname==='/api/mcp/approvals'&&req.method==='GET')send(200,crmMcp.pending(identity));
+      else if(req.method==='POST'){
+        sameOrigin();const revoke=/^\/api\/mcp\/keys\/([a-f0-9-]{36})\/revoke$/.exec(url.pathname),approve=/^\/api\/mcp\/approvals\/([a-f0-9-]{36})$/.exec(url.pathname);
+        if(revoke)send(200,mcpAccess.revoke(identity,revoke[1]));else if(approve)send(200,crmMcp.approve(identity,approve[1]));else bad('Not found',404);
+      }else bad('Method not allowed',405);
+      return;
+    }
     const member = identity && identity.user.role !== "admin";
+    if(identity){
+      if(url.pathname==='/api/email/settings'){workspaceAccess.requirePermission(identity,'integrations.manage');if(req.method==='GET')send(200,smtpEmail.settings());else if(req.method==='POST'){sameOrigin();send(200,smtpEmail.save(await body(req)));}else bad('Method not allowed',405);return;}
+      if(url.pathname==='/api/email/test'&&req.method==='POST'){workspaceAccess.requirePermission(identity,'integrations.manage');sameOrigin();send(200,await smtpEmail.send({to:(await body(req)).to,purpose:'test',actor:identity.user.id}));return;}
+      const emailUser=/^\/api\/workspace\/users\/([a-f0-9-]{36})\/email-setup$/.exec(url.pathname);
+      if(emailUser&&req.method==='POST'){sameOrigin();workspaceAccess.requirePermission(identity,'users.manage');const target=get('users',emailUser[1]);if(!target?.email)bad('Add an email address for this user first');const reset=workspaceAccess.reset(identity,emailUser[1]);send(200,await smtpEmail.send({to:target.email,purpose:'reset',setupUrl:reset.setupUrl,actor:identity.user.id}));return;}
+      if(url.pathname==='/api/workspace/access'&&req.method==='GET'){send(200,{...workspaceAccess.profile(identity.user.id),name:db.prepare("SELECT value FROM auth_settings WHERE key='company'").get()?.value||'Workspace'});return;}
+      if(url.pathname==='/api/workspace/users'&&req.method==='GET'){send(200,workspaceAccess.list(identity));return;}
+      if(url.pathname==='/api/workspace/users'&&req.method==='POST'){sameOrigin();const input=await body(req);if(input.sendEmail&&!smtpEmail.settings().enabled)bad('Configure and enable SMTP before sending invitations');const result=workspaceAccess.invite(identity,input);if(input.sendEmail){try{await smtpEmail.send({to:input.email,purpose:'invitation',setupUrl:result.setupUrl,actor:identity.user.id});result.emailStatus='accepted';}catch{result.emailStatus='failed';}}send(201,result);return;}
+      const accessUser=/^\/api\/workspace\/users\/([a-f0-9-]{36})(?:\/(setup-link))?$/.exec(url.pathname);
+      if(accessUser&&['PATCH','POST'].includes(req.method)){sameOrigin();send(200,accessUser[2]?workspaceAccess.reset(identity,accessUser[1]):workspaceAccess.update(identity,accessUser[1],await body(req)));return;}
+      if(url.pathname==='/api/workspaces'&&req.method==='GET'){if(!workspaceRegistry)bad('CRM Owner access required',403);send(200,workspaceRegistry.list(identity));return;}
+      if(url.pathname==='/api/workspaces'&&req.method==='POST'){sameOrigin();if(!workspaceRegistry)bad('CRM Owner access required',403);send(201,workspaceRegistry.create(identity,await body(req)));return;}
+      const workspaceUsers=/^\/api\/workspaces\/([a-f0-9-]{36})\/users(?:\/([a-f0-9-]{36})(?:\/(setup-link))?)?$/.exec(url.pathname);
+      if(workspaceUsers){if(!workspaceRegistry)bad('CRM Owner access required',403);if(req.method!=='GET')sameOrigin();const operation=req.method==='GET'?'list':workspaceUsers[3]?'reset':workspaceUsers[2]?'update':'invite';if(!['GET','POST','PATCH'].includes(req.method))bad('Method not allowed',405);send(200,workspaceRegistry.manage(identity,workspaceUsers[1],operation,['invite','update'].includes(operation)?await body(req):{},workspaceUsers[2]));return;}
+      const workspaceState=/^\/api\/workspaces\/([a-f0-9-]{36})$/.exec(url.pathname);
+      if(workspaceState&&req.method==='PATCH'){sameOrigin();if(!workspaceRegistry)bad('CRM Owner access required',403);send(200,workspaceRegistry.setState(identity,workspaceState[1],(await body(req)).state));return;}
+      const write=!['GET','HEAD'].includes(req.method);
+      if(/^\/api\/users(?:\/|$)/.test(url.pathname)){workspaceAccess.requirePermission(identity,'users.manage');if(write)bad('Use Users & permissions to manage user access',409);}
+      if(/^\/api\/(leads|import|click-to-call)(?:\/|$)/.test(url.pathname)&&write)workspaceAccess.requirePermission(identity,'leads.write');
+      if(/^\/api\/tasks(?:\/|$)/.test(url.pathname)&&write)workspaceAccess.requirePermission(identity,'tasks.write');
+      if(/^\/api\/activities(?:\/|$)/.test(url.pathname)&&write)workspaceAccess.requirePermission(identity,'leads.write');
+      if(/^\/api\/mobile\/recordings\//.test(url.pathname))workspaceAccess.requirePermission(identity,'calls.read');
+      if(/^\/api\/whatsapp\//.test(url.pathname))workspaceAccess.requirePermission(identity,'integrations.manage');
+    }
     if (member) {
       const allowedRead =
         [
@@ -747,13 +920,13 @@ const server = http.createServer(async (req, res) => {
     }
     if (url.pathname === "/api/state" && req.method === "GET") {
       if (member) {
-        send(200, scopedState(all, identity.user.id));
+        send(200, permittedState(scopedState(all, identity.user.id),identity.user.id));
         return;
       }
-      send(200, {
+      send(200, permittedState({
         ...Object.fromEntries(kinds.map((k) => [k, all(k)])),
         mobileCalls: all("mobileCalls"),
-      });
+      },identity?.user.id));
       return;
     }
     if (url.pathname === "/api/mobile/devices" && req.method === "GET") {
@@ -783,8 +956,9 @@ const server = http.createServer(async (req, res) => {
     if (recording && req.method === "GET") {
       if (member) {
         const call = all("mobileCalls").find((c) => c.recordingId === recording[1]);
-        if (!call) bad("Not found", 404);
-        ownLead(identity.user.id, call.leadId);
+        const feedback=all("activities").find(a=>a.voiceNoteId===recording[1]);
+        if (!call && !feedback) bad("Not found", 404);
+        ownLead(identity.user.id, (call||feedback).leadId);
       }
       const audio = mobile.playback(recording[1]);
       send(200, audio.bytes, {
@@ -811,18 +985,35 @@ const server = http.createServer(async (req, res) => {
       if (url.pathname === "/api/whatsapp/connect") {
         if (p.acknowledged !== true)
           bad("Acknowledge the unofficial-client and local message-storage risks first");
+        db.prepare("UPDATE whatsapp_control SET enabled=1 WHERE id=1").run();
         send(200, await whatsapp.connect());
         return;
       }
       if (url.pathname === "/api/whatsapp/disconnect") {
+        db.prepare("UPDATE whatsapp_control SET enabled=0 WHERE id=1").run();
         whatsapp.stop();
         send(200, whatsapp.snapshot());
+        return;
+      }
+      if (["/api/whatsapp/logout", "/api/whatsapp/repair"].includes(url.pathname)) {
+        if (p.confirmed !== true) bad("Confirm clearing the linked session first");
+        if (url.pathname.endsWith("repair") && p.acknowledged !== true) bad("Acknowledge WhatsApp pairing first");
+        db.prepare("UPDATE whatsapp_control SET enabled=0 WHERE id=1").run();
+        const signedOut = await whatsapp.logout();
+        if (url.pathname.endsWith("repair")) {
+          db.prepare("UPDATE whatsapp_control SET enabled=1 WHERE id=1").run();
+          send(200, await whatsapp.connect());
+        } else send(200, signedOut);
         return;
       }
       if (url.pathname === "/api/whatsapp/send") {
         bad("WhatsApp is sync-only. Open WhatsApp Web and send manually.", 405);
       }
       bad("Unknown WhatsApp operation", 404);
+    }
+    if(url.pathname === "/api/leads/merge" && req.method === "POST"){
+      if(!allowedOrigins.includes(req.headers.origin))bad("Same-origin request required",403);
+      const p=await body(req);send(200,mergeLeads({db,targetId:p.targetId,sourceIds:p.sourceIds,actorId:identity?.user.id||"local-admin",admin:!identity||identity.user.role==="admin"}));return;
     }
     if (url.pathname === "/api/import" && req.method === "POST") {
       const p = await body(req);
@@ -831,11 +1022,11 @@ const server = http.createServer(async (req, res) => {
       const result = tx(() => {
         let added = 0,
           skipped = 0;
-        const phones = new Set(all("leads").map((l) => l.phone.replace(/\D/g, "")));
+        const phones = new Set(all("leads").map(phoneKeyOf).filter(Boolean));
         for (const row of p.leads) {
           if (!row || typeof row !== "object" || Array.isArray(row)) bad("Invalid row");
           const v = validate("leads", row),
-            phone = v.phone.replace(/\D/g, "");
+            phone = phoneKeyOf(v);
           if (phone && phones.has(phone)) {
             skipped++;
             continue;
@@ -992,6 +1183,7 @@ server.listen(port, bindHost, () =>
 );
 for (const signal of ["SIGINT", "SIGTERM"])
   process.on(signal, () => {
+    callAI.close();
     mobileServer.close();
     whatsapp.stop();
     server.close(() => {
