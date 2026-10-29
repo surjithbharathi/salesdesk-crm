@@ -235,6 +235,28 @@ test("CRM lifecycle, transaction rollback, validation, and persistent storage", 
     const download = await fetch(base + "/api/documents/" + doc.data.id + "/download");
     assert.equal(await download.text(), "தமிழ் requirements\nSecond line");
     assert.match(download.headers.get("content-disposition"), /^attachment;/);
+    const pdfBytes = Buffer.from("%PDF-1.4\n\u0000\u00ff binary\n");
+    const pdf = await request("documents", "POST", {
+      leadId: id,
+      name: "quote.pdf",
+      content: pdfBytes.toString("base64"),
+      mime: "application/pdf",
+    });
+    assert.equal(pdf.status, 200);
+    const pdfDownload = await fetch(base + "/api/documents/" + pdf.data.id + "/download");
+    assert.equal(pdfDownload.headers.get("content-type"), "application/pdf");
+    assert.deepEqual(Buffer.from(await pdfDownload.arrayBuffer()), pdfBytes);
+    assert.equal(
+      (
+        await request("documents", "POST", {
+          leadId: id,
+          name: "evil.pdf",
+          content: Buffer.from("<html>").toString("base64"),
+          mime: "application/pdf",
+        })
+      ).status,
+      400,
+    );
     assert.equal(
       (
         await request("attendance", "POST", {

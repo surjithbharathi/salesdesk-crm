@@ -1,3 +1,27 @@
+const MAX_BINARY_DOCUMENT = 524288;
+const DOCUMENT_TYPES = {
+  "text/plain": [],
+  "application/pdf": [Buffer.from("%PDF-")],
+  "image/png": [Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])],
+  "image/jpeg": [Buffer.from([0xff, 0xd8, 0xff])],
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [
+    Buffer.from([0x50, 0x4b, 0x03, 0x04]),
+  ],
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [
+    Buffer.from([0x50, 0x4b, 0x03, 0x04]),
+  ],
+};
+const DOCUMENT_EXTENSIONS = {
+  "application/pdf": /\.pdf$/i,
+  "image/png": /\.png$/i,
+  "image/jpeg": /\.jpe?g$/i,
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": /\.docx$/i,
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": /\.xlsx$/i,
+};
+function decodeBase64(x) {
+  if (x.length > 716800 || !/^[A-Za-z0-9+/]*={0,2}$/.test(x) || x.length % 4) return Buffer.alloc(0);
+  return Buffer.from(x, "base64");
+}
 export function createExtensions({ all, get, put, tx, stamp, log, bad }) {
   const kinds = [
     "conversations",
@@ -163,21 +187,23 @@ export function createExtensions({ all, get, put, tx, stamp, log, bad }) {
     if (kind === "documents") {
       ref("leadId", "leads");
       s("name", 200, true);
-      field(
-        "content",
-        (x) => {
-          if (
-            typeof x !== "string" ||
-            Buffer.byteLength(x) > 102400 ||
-            x.includes("\0") ||
-            /[\uD800-\uDFFF]/u.test(x)
-          )
-            bad("Text document exceeds limit or contains invalid text");
-          return x;
-        },
-        "",
-      );
-      choice("mime", ["text/plain"]);
+      choice("mime", Object.keys(DOCUMENT_TYPES));
+      field("content", (x) => (typeof x === "string" ? x : bad("Invalid content")), "");
+      if (v.mime === "text/plain") {
+        if (
+          Buffer.byteLength(v.content) > 102400 ||
+          v.content.includes("\0") ||
+          /[\uD800-\uDFFF]/u.test(v.content)
+        )
+          bad("Text document exceeds limit or contains invalid text");
+      } else {
+        const bytes = decodeBase64(v.content);
+        if (!bytes.length || bytes.length > MAX_BINARY_DOCUMENT)
+          bad("Binary document must be 1 byte to 512 KB");
+        if (!DOCUMENT_TYPES[v.mime].some((sig) => bytes.subarray(0, sig.length).equals(sig)))
+          bad("File contents do not match " + v.mime);
+        if (!DOCUMENT_EXTENSIONS[v.mime].test(v.name)) bad("Filename does not match " + v.mime);
+      }
     }
     if (kind === "attendance") {
       ref("userId", "users", true);
@@ -328,8 +354,9 @@ export function createExtensions({ all, get, put, tx, stamp, log, bad }) {
     if (download && req.method === "GET") {
       const d = get("documents", download[1]);
       if (!d) bad("Document not found", 404);
-      send(200, d.content, {
-        "Content-Type": "text/plain; charset=utf-8",
+      const binary = d.mime && d.mime !== "text/plain";
+      send(200, binary ? Buffer.from(d.content, "base64") : d.content, {
+        "Content-Type": binary ? d.mime : "text/plain; charset=utf-8",
         "Content-Disposition":
           'attachment; filename="' + d.name.replace(/[^a-zA-Z0-9._-]/g, "_") + '"',
       });

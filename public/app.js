@@ -116,6 +116,7 @@ $("#today").textContent = new Date().toLocaleDateString("en-IN", {
   year: "numeric",
 });
 $("#menu").onclick = () => document.body.classList.toggle("nav-open");
+$("#scrim").onclick = () => document.body.classList.remove("nav-open");
 let toastTimer;
 function toast(text, error = false) {
   $("#toast").hidden = false;
@@ -1950,8 +1951,8 @@ function collaborationPage() {
     );
   if (view === "documents")
     return (
-      `<p>Attach plain text documents up to 100 KB. Downloads preserve the recorded text.</p>` +
-      add("documents", "Attach text document") +
+      `<p>Attach plain text (up to 100 KB) or upload PDF, PNG, JPEG, DOCX and XLSX files (up to 512 KB). Downloads preserve the stored content.</p>` +
+      add("documents", "Attach document") +
       table(
         ["Name", "Lead", "Actions"],
         records("documents").map(
@@ -2075,7 +2076,8 @@ function moduleForm(kind, record = {}) {
     fields =
       linked +
       field("name", "Filename", "note.txt", "text", true) +
-      textField("content", "Plain text content") +
+      `<label class="full">Upload file (PDF, PNG, JPEG, DOCX or XLSX, up to 512 KB)<input type="file" id="document-file" accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx"></label>` +
+      `<label class="full">Plain text content (leave empty when uploading a file)<textarea name="content" maxlength="100000"></textarea></label>` +
       '<input type="hidden" name="mime" value="text/plain">';
   if (kind === "attendance")
     fields =
@@ -2117,6 +2119,31 @@ function moduleForm(kind, record = {}) {
   );
 }
 document.addEventListener("change", (e) => {
+  if (e.target.id === "document-file") {
+    const form = e.target.closest("form"),
+      file = e.target.files[0];
+    if (!file) return;
+    const types = {
+      pdf: "application/pdf",
+      png: "image/png",
+      jpg: "image/jpeg",
+      jpeg: "image/jpeg",
+      docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    };
+    const mime = types[file.name.split(".").pop().toLowerCase()];
+    if (!mime || file.size > 524288) {
+      e.target.value = "";
+      return toast("Choose a PDF, PNG, JPEG, DOCX or XLSX file up to 512 KB");
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      form.elements.content.value = String(reader.result).split(",")[1] || "";
+      form.elements.mime.value = mime;
+      form.elements.name.value = file.name;
+    };
+    reader.readAsDataURL(file);
+  }
   if (
     e.target.name === "entity" &&
     e.target.closest("#record-form")?.dataset.kind === "savedReports"
@@ -2260,7 +2287,12 @@ document.addEventListener("click", async (e) => {
       await change("attendance", id, { checkOut: new Date().toISOString() });
     if (action === "document") {
       const d = records("documents").find((d) => d.id === id);
-      modal(d.name, `<pre class="document-preview">${esc(d.content)}</pre>`);
+      modal(
+        d.name,
+        !d.mime || d.mime === "text/plain"
+          ? `<pre class="document-preview">${esc(d.content)}</pre>`
+          : `<p>${esc(d.mime)} · ${Math.round((d.content.length * 3) / 4 / 1024)} KB. Binary files are not previewed; use Download.</p>`,
+      );
     }
     if (action === "resolve") {
       await change("conversations", id, { status: "Resolved" });

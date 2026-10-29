@@ -58,8 +58,8 @@ No Salesmax records were edited, exported, sent, or copied into the reconstructe
 | Phone call logs / existing recordings    | Partial       | Android companion + scoped upload API implemented; real-phone sync unverified. No dialer/recorder or cloud calling is implemented. |
 | WhatsApp/email/SMS transport             | Partial       | Baileys individual-text adapter implemented; live pairing/delivery unverified. Email/SMS remain disconnected. See WHATSAPP.md.     |
 | GPS/location/device attendance           | Unimplemented | Needs device app and explicit location permissions                                                                                 |
-| Authentication/permissions/workspaces    | Unimplemented | Team roles are metadata; app is single-operator and bound to loopback                                                              |
-| Production deployment                    | Unimplemented | Repository published; local server only                                                                                            |
+| Authentication/permissions/workspaces    | Partial       | Opt-in shared login, admin/member ownership checks, password recovery; no multiple isolated company workspaces                      |
+| Production deployment                    | Partial       | Container image and Hostinger deployment documented in DEPLOYMENT.md; see HANDOFF.md for current state                             |
 
 ## Verification
 

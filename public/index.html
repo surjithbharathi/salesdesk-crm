@@ -3,10 +3,13 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#6246ea" />
     <title>Salesdesk CRM</title>
     <link rel="stylesheet" href="/style.css" />
   </head>
   <body>
+    <div id="scrim" aria-hidden="true"></div>
     <aside>
       <a class="brand" href="#dashboard"><span>S</span> salesdesk<span class="dot">●</span></a>
       <div class="workspace">
@@ -21,7 +24,7 @@
     <main>
       <header>
         <div>
-          <button id="menu" aria-label="Toggle navigation">☰</button
+          <button id="menu" aria-label="Toggle navigation" aria-controls="nav">☰</button
           ><span class="muted">Workspace</span><span class="divider">/</span
           ><b id="breadcrumb">Dashboard</b>
         </div>
