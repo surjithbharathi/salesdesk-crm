@@ -162,3 +162,30 @@ test("saved chart definitions validate measures and date windows", () => {
     ext.validate("savedReports", { name: "Bad", entity: "payments", groupBy: "direction" }),
   );
 });
+test("binary documents require matching signature, extension and size", async () => {
+  const { ext, put } = fixture();
+  const png = Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    Buffer.from("data"),
+  ]).toString("base64");
+  const ok = ext.validate("documents", { name: "logo.PNG", mime: "image/png", content: png });
+  assert.equal(ok.mime, "image/png");
+  assert.throws(() => ext.validate("documents", { name: "logo.png", mime: "application/pdf", content: png }));
+  assert.throws(() => ext.validate("documents", { name: "logo.pdf", mime: "image/png", content: png }));
+  assert.throws(() => ext.validate("documents", { name: "a.png", mime: "image/png", content: "not base64!" }));
+  assert.throws(() => ext.validate("documents", { name: "a.png", mime: "image/png", content: "" }));
+  const big = Buffer.concat([Buffer.from("%PDF-"), Buffer.alloc(524288)]).toString("base64");
+  assert.throws(() => ext.validate("documents", { name: "big.pdf", mime: "application/pdf", content: big }));
+  assert.throws(() => ext.validate("documents", { name: "x.svg", mime: "image/svg+xml", content: png }));
+  put("documents", { id: "b", name: "logo.png", mime: "image/png", content: png });
+  let body, headers;
+  await ext.handle(
+    { method: "GET" },
+    new URL("http://localhost/api/documents/b/download"),
+    null,
+    (_, v, h) => ((body = v), (headers = h)),
+  );
+  assert.ok(Buffer.isBuffer(body));
+  assert.equal(body.toString("base64"), png);
+  assert.equal(headers["Content-Type"], "image/png");
+});

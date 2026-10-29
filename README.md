@@ -6,7 +6,7 @@ Android 0.9.0 UI source now includes a modern violet/neutral theme, Lucide icons
 
 Recording auto-match source now uses call end time and actual audio duration, independent of filenames, with unique-match and personal-call ambiguity checks. Twelve matcher regression cases pass. This requires the updated signed Android app; the original installed app has not received it.
 
-Latest Android v0.8.3 improves the five native screens and introduces event-triggered business call sync (20-second settle delay, recording retries, minute fallback while active). Web call views now refresh changed synced-call data every three seconds without interrupting forms/audio. All 42 CRM tests and Android assemble/lint pass. The APK was installed; final device UI/latency checks remain incomplete after USB disconnected. See [design-qa.md](design-qa.md). The user confirmed actual mobile login/background SIM calling before this UI pass; this is not verification of every call/recording/device scenario.
+Latest Android v0.8.3 improves the five native screens and introduces event-triggered business call sync (20-second settle delay, recording retries, minute fallback while active). Web call views now refresh changed synced-call data every three seconds without interrupting forms/audio. All 42 CRM tests (47 as of this update) and Android assemble/lint pass. The APK was installed; final device UI/latency checks remain incomplete after USB disconnected. See [design-qa.md](design-qa.md). The user confirmed actual mobile login/background SIM calling before this UI pass; this is not verification of every call/recording/device scenario.
 
 The paragraphs below preserve feature history. Current status/limitations in HANDOFF.md, WHATSAPP.md, CLICK_TO_CALL.md and design-qa.md supersede older test counts or earlier unverified/no-dialing boundaries.
 
@@ -36,7 +36,7 @@ npm run check
 npm test
 ```
 
-The 25 tests use isolated fixtures and temporary databases/ports. They cover the core CRM, WhatsApp mock transport, device-token scope/revocation, call replay conflicts, encrypted recording storage/tamper rejection, ambiguous matching and a synthetic HTTP audio upload/playback/timeline roundtrip. No personal phone data or real messages are used by tests.
+The 47 tests use isolated fixtures and temporary databases/ports. They cover the core CRM, WhatsApp mock transport, device-token scope/revocation, call replay conflicts, encrypted recording storage/tamper rejection, ambiguous matching and a synthetic HTTP audio upload/playback/timeline roundtrip. No personal phone data or real messages are used by tests.
 
 ## Implemented
 
