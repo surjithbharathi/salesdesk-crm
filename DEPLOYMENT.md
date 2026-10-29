@@ -22,3 +22,9 @@ Before a major upgrade, back up the SQLite database consistently plus adjacent e
 - `DEFAULT_COUNTRY_CODE` (default `91`) — country code added to 10-digit numbers when comparing phone numbers (web, mobile sync, WhatsApp, imports). The Android app uses the country code saved in its settings.
 - A public deployment (`PUBLIC_ORIGIN` set) no longer creates demo data on an empty database; it refuses to start until a company account database exists.
 - Phone (device) sessions now last 30 days and remain revocable; browser sessions stay at 12 hours.
+
+## Phase 1 data layer (new tables)
+
+1. `node scripts/migrate.mjs <db> --dry-run`, then without `--dry-run`: creates the new tables and seed data (the old `records` data is untouched).
+2. `node scripts/import-legacy.mjs <db>`: dry run that prints exactly what would be copied, with warnings (duplicates, bad phones, orphans). Add `--apply` (CRM stopped) to write a backup first and import.
+3. `ENABLE_V2=true` exposes the read-only `/api/v2/*` endpoints (`meta`, `leads`, `leads/:id`, `leads/:id/activities`, `dashboard`, `reports/sources`). Off by default. Existing screens and the phone app keep using the old data until the write cut-over, so the v2 numbers are a snapshot from the last import.

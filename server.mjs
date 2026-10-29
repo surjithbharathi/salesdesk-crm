@@ -6,6 +6,9 @@ import { createExtensions } from "./extensions.mjs";
 import { encryptedAuth } from "./whatsapp-auth.mjs";
 import { createWhatsApp } from "./whatsapp.mjs";
 import { canonicalPhone } from "./phone.mjs";
+import { fileURLToPath } from "node:url";
+import { migrate } from "./db-migrate.mjs";
+import { createQueries } from "./queries.mjs";
 import { createMobileSync, MAX_AUDIO } from "./mobile-sync.mjs";
 import { createUserAuth } from "./user-auth.mjs";
 import { scopedState } from "./user-scope.mjs";
@@ -326,6 +329,49 @@ if (publicOrigin && !userAuth.configured())
   throw Error(
     "Public deployment requires an existing company account database; refusing unauthenticated setup",
   );
+// Phase 1 read API over the new tables. Off by default: it needs `node scripts/import-legacy.mjs --apply`
+// first, and it only reads, so the existing screens and the phone app are unaffected.
+const v2 = process.env.ENABLE_V2 === "true";
+let queries = null;
+if (v2) {
+  migrate(db, fileURLToPath(new URL("./migrations/", import.meta.url)));
+  queries = createQueries(db);
+}
+function handleV2(req, url, identity, send) {
+  if (req.method !== "GET") bad("The v2 API is read-only for now", 405);
+  const member = identity && identity.user.role !== "admin";
+  const scope = member ? identity.user.id : undefined;
+  const p = url.searchParams;
+  const number = (name) => (p.has(name) ? Number(p.get(name)) : undefined);
+  const owner = () => (scope ?? (p.get("owner") === "none" ? null : p.get("owner") || undefined));
+  const path = url.pathname.slice("/api/v2".length);
+  if (path === "/meta") return send(200, queries.meta());
+  if (path === "/leads")
+    return send(
+      200,
+      queries.listLeads({
+        ownerId: owner(), statusId: p.get("status") || undefined, group: p.get("group") || undefined,
+        sourceId: p.get("source") || undefined, tagId: p.get("tag") || undefined, q: p.get("q") || undefined,
+        archived: p.get("archived") === "true", limit: number("limit"), cursor: p.get("cursor") || undefined,
+      }),
+    );
+  const lead = /^\/leads\/([a-zA-Z0-9-]+)(\/activities)?$/.exec(path);
+  if (lead) {
+    const detail = queries.getLead(lead[1]);
+    if (!detail || (scope && detail.owner_id !== scope)) bad("Lead not found", 404);
+    return send(
+      200,
+      lead[2]
+        ? queries.activities(detail.id, { limit: number("limit"), cursor: p.get("cursor") || undefined, type: p.get("type") || undefined })
+        : detail,
+    );
+  }
+  if (path === "/dashboard")
+    return send(200, queries.dashboard({ ownerId: owner(), dayStart: p.get("dayStart") || undefined, dayEnd: p.get("dayEnd") || undefined }));
+  if (path === "/reports/sources")
+    return send(200, queries.sourceReport({ from: p.get("from"), to: p.get("to"), ownerId: owner() }));
+  bad("Not found", 404);
+}
 const clickToCall = createClickToCall({
   db,
   getLead: (id) => get("leads", id),
@@ -747,6 +793,10 @@ const server = http.createServer(async (req, res) => {
         sameOrigin();
         send(200, automation.issue(identity, sessionToken(req), (await body(req)).browserId));
       } else bad("Not found", 404);
+      return;
+    }
+    if (v2 && url.pathname.startsWith("/api/v2/")) {
+      handleV2(req, url, identity, send);
       return;
     }
     const member = identity && identity.user.role !== "admin";
