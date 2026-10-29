@@ -15,3 +15,6 @@ android-companion/.gradle/
 android-companion/**/build/
 android-companion/local.properties
 node-compile-cache/
+
+web/node_modules/
+web/dist/

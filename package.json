@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "start": "node workspace-gateway.mjs",
-    "check": "node --check server.mjs && node --check public/app.js && node --check workspace-gateway.mjs && node --check smtp-email.mjs",
-    "test": "node --test workspace.test.mjs smtp-email.test.mjs mcp-access.test.mjs crm-mcp.test.mjs call-ai.test.mjs mcp-oauth.test.mjs"
+    "web:build": "npm --prefix web ci && npm --prefix web run build",
+    "check": "node --check server.mjs && node --check public/app.js && node --check workspace-gateway.mjs && node --check smtp-email.mjs && node --check kpi.mjs",
+    "test": "node --test kpi.test.mjs kpi-http.test.mjs workspace.test.mjs smtp-email.test.mjs mcp-access.test.mjs crm-mcp.test.mjs call-ai.test.mjs mcp-oauth.test.mjs"
   },
   "dependencies": {
     "baileys": "7.0.0-rc14",

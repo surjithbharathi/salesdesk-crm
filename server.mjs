@@ -1,4 +1,7 @@
 import {createSmtpEmail} from './smtp-email.mjs';
+import { createKpi } from "./kpi.mjs";
+import { extname, resolve as resolvePath, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import http from "node:http";
 import {createWorkspaceAccess} from './workspace-access.mjs';
 import {createWorkspaceRegistry} from './workspace-registry.mjs';
@@ -306,6 +309,69 @@ const mobile = createMobileSync({
 const userAuth = createUserAuth({ db, getUser: (id) => get("users", id) });
 const workspaceAccess=createWorkspaceAccess({db,get,put,userAuth,crmOwnerId:process.env.CRM_OWNER_CONTEXT==='1'?process.env.CRM_OWNER_USER_ID||'':'',origin:publicOrigin});
 const workspaceRegistry=process.env.CRM_OWNER_CONTEXT==='1'?createWorkspaceRegistry({db,dbPath:process.env.CRM_DB||new URL('./data/crm.sqlite',import.meta.url).pathname,ownerId:process.env.CRM_OWNER_USER_ID||'',get,baseDomain:process.env.WORKSPACE_BASE_DOMAIN,mainOrigin:publicOrigin}):null;
+// KPI scorecard (My day, Team, Business, goals). Counted from the existing records; only daily goals are stored.
+const kpi = createKpi({
+  db, all, get, put,
+  deviceOwners: () => new Map(db.prepare("SELECT body FROM mobile_devices").all().map((r) => JSON.parse(r.body)).map((d) => [d.id, d.owner])),
+});
+function handleKpi(req, url, identity, send, body) {
+  const p = url.searchParams;
+  const number = (name) => (p.has(name) ? Number(p.get(name)) : undefined);
+  const role = identity ? workspaceAccess.profile(identity.user.id).role : "owner";
+  const lead = ["owner", "admin", "manager"].includes(role); // who may see the whole team
+  const tz = Number.isFinite(number("tz")) ? number("tz") : 330;
+  const path = url.pathname.slice("/api/kpi".length);
+  if (req.method === "POST" && path === "/targets") {
+    if (!["owner", "admin"].includes(role)) bad("Only the owner or an admin can change goals", 403);
+    return body().then((input) => send(200, kpi.setTarget(input)));
+  }
+  if (req.method !== "GET") bad("Not found", 404);
+  if (path === "/day") {
+    const userId = lead ? p.get("user") || identity?.user.id : identity.user.id; // a caller only ever sees their own day
+    if (!userId || !get("users", userId)) bad("Choose a person with ?user=", 400);
+    return send(200, kpi.myDay({ userId, dayStart: number("dayStart"), dayEnd: number("dayEnd"), tz }));
+  }
+  if (path === "/leaderboard") return send(200, kpi.leaderboard({ tz }));
+  if (path === "/team") {
+    if (!lead) bad("Managers and owners only", 403);
+    return send(200, kpi.team({ dayStart: number("dayStart"), dayEnd: number("dayEnd"), tz }));
+  }
+  if (path === "/targets") return send(200, { targets: kpi.allTargets() });
+  if (path === "/business") {
+    if (!lead) bad("Managers and owners only", 403);
+    const [monthStart, prevStart, nextStart] = ["monthStart", "prevStart", "nextStart"].map((k) => Date.parse(p.get(k)));
+    if (![monthStart, prevStart, nextStart].every(Number.isFinite)) bad("monthStart, prevStart and nextStart are required", 400);
+    return send(200, kpi.business({ monthStart, prevStart, nextStart }));
+  }
+  if (path === "/me") return send(200, { id: identity?.user.id || null, role, lead, users: all("users").filter((u) => u.active !== false).map((u) => ({ id: u.id, name: u.name })) });
+  bad("Not found", 404);
+}
+// The new web app (built into web/dist) is served under /next/. Static files only; its data comes from /api/kpi.
+const WEB_ROOT = fileURLToPath(new URL("./web/dist/", import.meta.url));
+const WEB_TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon", ".json": "application/json", ".woff2": "font/woff2", ".woff": "font/woff" };
+async function serveWebApp(pathname, res) {
+  let relative;
+  try {
+    relative = decodeURIComponent(pathname.slice("/next/".length)) || "index.html";
+  } catch {
+    relative = "";
+  }
+  const root = WEB_ROOT.endsWith(sep) ? WEB_ROOT.slice(0, -1) : WEB_ROOT;
+  const file = resolvePath(root, relative);
+  const type = WEB_TYPES[extname(file)];
+  if (!relative || !file.startsWith(root + sep) || !type) {
+    res.writeHead(404, { "Content-Type": "text/plain" });
+    return res.end("Not found");
+  }
+  try {
+    const data = await readFile(file);
+    res.writeHead(200, { "Content-Type": type, "Cache-Control": relative.startsWith("assets/") ? "public, max-age=31536000, immutable" : "no-store" });
+    res.end(data);
+  } catch {
+    res.writeHead(404, { "Content-Type": "text/plain" });
+    res.end("The new web app has not been built. Run: npm run web:build");
+  }
+}
 function permittedState(value,id){
   if(!id)return value;const calls=workspaceAccess.can(id,'calls.read'),messages=workspaceAccess.can(id,'messages.read');
   return {...value,mobileCalls:calls?value.mobileCalls:[],activities:(value.activities||[]).filter(a=>(calls||a.type!=='Call')&&(messages||a.type!=='Message')),messages:messages?value.messages:[],conversations:messages?value.conversations:[]};
@@ -891,6 +957,11 @@ const server = http.createServer(async (req, res) => {
       if(/^\/api\/mobile\/recordings\//.test(url.pathname))workspaceAccess.requirePermission(identity,'calls.read');
       if(/^\/api\/whatsapp\//.test(url.pathname))workspaceAccess.requirePermission(identity,'integrations.manage');
     }
+    if (url.pathname.startsWith("/api/kpi/")) {
+      if (req.method !== "GET") sameOrigin();
+      await handleKpi(req, url, identity, send, () => body(req));
+      return;
+    }
     if (member) {
       const allowedRead =
         [
@@ -1165,6 +1236,13 @@ const server = http.createServer(async (req, res) => {
       });
       send(200, result);
       return;
+    }
+    if (req.method === "GET" && (url.pathname === "/next" || url.pathname.startsWith("/next/"))) {
+      if (url.pathname === "/next") {
+        res.writeHead(301, { Location: "/next/" });
+        return res.end();
+      }
+      return serveWebApp(url.pathname, res);
     }
     if (req.method === "GET" && files[url.pathname]) {
       const [path, type] = files[url.pathname];
