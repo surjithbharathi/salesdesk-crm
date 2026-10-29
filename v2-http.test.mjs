@@ -31,7 +31,7 @@ const stop = async (child) => {
   }
 };
 
-test("v2 read API: paging, detail, dashboard, source report, read-only, member scope", async (t) => {
+test("v2 API: paging, detail, dashboard, source report, writes, member scope", async (t) => {
   const dir = await mkdtemp(join(tmpdir(), "salesdesk-v2-"));
   const file = join(dir, "crm.sqlite");
   const port = 3293, base = `http://127.0.0.1:${port}`;
@@ -83,7 +83,7 @@ test("v2 read API: paging, detail, dashboard, source report, read-only, member s
   assert.equal((await get("/reports/sources")).status, 400);
   assert.equal((await get("/nothing")).status, 404);
   const write = await fetch(base + "/api/v2/leads", { method: "POST", headers: { "Content-Type": "application/json", Origin: base }, body: "{}" });
-  assert.equal(write.status, 405);
+  assert.equal(write.status, 400); // writes are open now; an empty lead is refused by the CRM rules, not by the API
   // legacy endpoints are untouched
   assert.equal((await (await fetch(base + "/api/state")).json()).leads.length, legacy.leads.length);
 
@@ -114,6 +114,21 @@ test("v2 read API: paging, detail, dashboard, source report, read-only, member s
   assert.equal((await get("/leads/" + others.id, { Cookie: adminCookie })).status, 200);
   const adminAll = await get("/leads", { Cookie: adminCookie });
   assert.equal(adminAll.data.total, legacy.leads.length);
+
+  // 5) writes: same-origin and signed in; callers only on their own leads
+  const post = (path, cookie, payload, origin = base) =>
+    fetch(base + "/api/v2" + path, { method: "POST", headers: { "Content-Type": "application/json", Origin: origin, ...(cookie ? { Cookie: cookie } : {}) }, body: JSON.stringify(payload) });
+  const own = legacy.leads.find((l) => l.owner === member);
+  assert.equal((await post("/leads/" + own.id + "/notes", null, { text: "x" })).status, 401);
+  assert.equal((await post("/leads/" + own.id + "/notes", memberCookie, { text: "x" }, "http://evil.example")).status, 403);
+  assert.equal((await post("/leads/" + others.id + "/notes", memberCookie, { text: "x" })).status, 404);
+  const noted = await post("/leads/" + own.id + "/notes", memberCookie, { text: "Called, wants 3-phase" });
+  assert.equal(noted.status, 200);
+  const timeline = await get("/leads/" + own.id + "/activities", { Cookie: memberCookie });
+  assert.equal(timeline.data.items[0].text, "Called, wants 3-phase");
+  const work = await get("/leads/" + own.id + "/work", { Cookie: memberCookie });
+  assert.equal(work.status, 200);
+  assert.ok(Array.isArray(work.data.calls) && Array.isArray(work.data.tasks));
 });
 
 test("the new web app is served under /next/ without exposing other files", async (t) => {

@@ -112,6 +112,17 @@ export function createQueries(db) {
     };
   }
 
+  // Calls (to record what happened) and open tasks (what is promised next) for the lead panel.
+  function leadWork(leadId) {
+    return {
+      calls: all(
+        `SELECT c.id,c.direction,c.started_at,c.duration_seconds,c.connected,c.outcome_id,o.label outcome,c.note,u.name caller
+           FROM calls c LEFT JOIN call_outcomes o ON o.id=c.outcome_id LEFT JOIN users u ON u.id=c.user_id
+          WHERE c.lead_id=? ORDER BY c.started_at DESC LIMIT 20`, leadId),
+      tasks: all("SELECT id,title,due_at,status,owner_id FROM tasks WHERE lead_id=? AND status NOT IN ('Done','Cancelled') ORDER BY due_at", leadId),
+    };
+  }
+
   function activities(leadId, { limit, cursor, type } = {}) {
     const after = decode(cursor);
     const size = clampLimit(limit);
@@ -221,5 +232,5 @@ export function createQueries(db) {
     };
   }
 
-  return { meta, listLeads, getLead, activities, dashboard, sourceReport };
+  return { meta, listLeads, getLead, leadWork, activities, dashboard, sourceReport };
 }

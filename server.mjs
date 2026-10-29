@@ -11,6 +11,8 @@ import { resolve as resolvePath, sep, extname } from "node:path";
 import { migrate } from "./db-migrate.mjs";
 import { createQueries } from "./queries.mjs";
 import { createScorecard } from "./scorecard.mjs";
+import { createStore } from "./store.mjs";
+import { createActions } from "./v2-actions.mjs";
 import { createMobileSync, MAX_AUDIO } from "./mobile-sync.mjs";
 import { createUserAuth } from "./user-auth.mjs";
 import { scopedState } from "./user-scope.mjs";
@@ -336,13 +338,22 @@ if (publicOrigin && !userAuth.configured())
 const v2 = process.env.ENABLE_V2 === "true";
 let queries = null;
 let scorecard = null;
+let actions = null;
 if (v2) {
   migrate(db, fileURLToPath(new URL("./migrations/", import.meta.url)));
   queries = createQueries(db);
   scorecard = createScorecard(db);
+  actions = createActions(db, createStore(db));
 }
-function handleV2(req, url, identity, send) {
-  if (req.method !== "GET") bad("The v2 API is read-only for now", 405);
+async function handleV2(req, url, identity, send, sameOrigin) {
+  if (req.method !== "GET") {
+    sameOrigin();
+    // Without company logins (local demo) the single user acts as the owner; with them, a sign-in is required.
+    const actor = identity?.user ?? (userAuth.configured() ? null : { id: null, role: "admin" });
+    if (!actor) bad("Sign in to make changes", 401);
+    const input = req.method === "POST" || req.method === "PATCH" ? await body(req) : {};
+    return send(200, actions.perform(req.method, url.pathname.slice("/api/v2".length), actor, input));
+  }
   const member = identity && identity.user.role !== "admin";
   const scope = member ? identity.user.id : undefined;
   const p = url.searchParams;
@@ -360,13 +371,15 @@ function handleV2(req, url, identity, send) {
         archived: p.get("archived") === "true", limit: number("limit"), cursor: p.get("cursor") || undefined,
       }),
     );
-  const lead = /^\/leads\/([a-zA-Z0-9-]+)(\/activities)?$/.exec(path);
+  const lead = /^\/leads\/([a-zA-Z0-9-]+)(\/activities|\/work)?$/.exec(path);
   if (lead) {
     const detail = queries.getLead(lead[1]);
     if (!detail || (scope && detail.owner_id !== scope)) bad("Lead not found", 404);
     return send(
       200,
-      lead[2]
+      lead[2] === "/work"
+        ? queries.leadWork(detail.id)
+        : lead[2]
         ? queries.activities(detail.id, { limit: number("limit"), cursor: p.get("cursor") || undefined, type: p.get("type") || undefined })
         : detail,
     );
@@ -842,7 +855,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (v2 && url.pathname.startsWith("/api/v2/")) {
-      handleV2(req, url, identity, send);
+      await handleV2(req, url, identity, send, sameOrigin);
       return;
     }
     const member = identity && identity.user.role !== "admin";

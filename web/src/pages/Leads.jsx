@@ -3,6 +3,7 @@ import { v2, localDay } from "../api.js";
 import { hashFor, phoneText, dueText, ago, initials, avatarClass, plural } from "../format.js";
 import Icon from "../icons.jsx";
 import LeadPanel from "./LeadPanel.jsx";
+import NewLead from "./NewLead.jsx";
 
 const QUEUES = [
   ["", "All leads"],
@@ -27,6 +28,7 @@ export default function Leads({ meta, params }) {
   const [error, setError] = useState("");
   const [text, setText] = useState(q);
   const [row, setRow] = useState(-1);
+  const [adding, setAdding] = useState(false);
   const generation = useRef(0);
   const searchBox = useRef(null);
   const userName = (id) => meta.users.find((u) => u.id === id)?.name || "No owner";
@@ -89,7 +91,9 @@ export default function Leads({ meta, params }) {
       <div className="work-head">
         <h1 className="work-title">Leads</h1>
         <span className="work-date num">{plural(total, "lead")}{filtered ? " match" : ""}</span>
+        <button className="btn btn-primary" onClick={() => setAdding(true)}>New lead</button>
       </div>
+      {adding && <NewLead meta={meta} onCancel={() => setAdding(false)} onDone={(id) => { setAdding(false); load(null); set({ lead: id }); }} />}
       <div className="bar">
         <div className="pills" role="group" aria-label="Work queue">
           {QUEUES.map(([key, label]) => (
@@ -163,7 +167,7 @@ export default function Leads({ meta, params }) {
       </div>
       {cursor && <p className="keys"><button className="btn" disabled={loading} onClick={() => load(cursor)}>{loading ? "Loading…" : `Show more leads (${total - items.length} left)`}</button></p>}
       <p className="keys"><kbd>J</kbd> and <kbd>K</kbd> move down and up, <kbd>Enter</kbd> opens a lead, <kbd>/</kbd> searches, <kbd>Esc</kbd> closes.</p>
-      {openId && <LeadPanel id={openId} meta={meta} onClose={() => set({ lead: "" })} />}
+      {openId && <LeadPanel id={openId} meta={meta} onClose={() => set({ lead: "" })} onChanged={() => load(null)} />}
     </>
   );
 }

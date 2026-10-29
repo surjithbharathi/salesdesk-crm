@@ -38,3 +38,6 @@ export function localDay() {
   end.setMilliseconds(-1);
   return { dayStart: start.toISOString(), dayEnd: end.toISOString() };
 }
+
+// Changes go through the same rules as everywhere else in the CRM; the server answers with the updated lead.
+export const v2Send = (method, path, body = {}) => request("/api/v2" + path, { method, body });

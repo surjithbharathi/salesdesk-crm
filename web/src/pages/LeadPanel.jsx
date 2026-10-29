@@ -4,6 +4,7 @@ import { useLoad } from "../hooks.js";
 import { useToast } from "../toast.jsx";
 import { when, day, rupees, phoneText, minutes, dueText, timeOnly, dayLabel, initials, avatarClass } from "../format.js";
 import Icon from "../icons.jsx";
+import LeadWork from "./LeadWork.jsx";
 
 const ICON = {
   call: "phone", call_outcome: "check", status_change: "swap", assignment: "swap", note: "note", message: "chat",
@@ -65,8 +66,9 @@ function Timeline({ id }) {
   );
 }
 
-export default function LeadPanel({ id, meta, onClose }) {
-  const { data: lead, error, loading } = useLoad(() => v2(`/leads/${id}`), [id]);
+export default function LeadPanel({ id, meta, onClose, onChanged = () => {} }) {
+  const [rev, setRev] = useState(0);
+  const { data: lead, error, loading } = useLoad(() => v2(`/leads/${id}`), [id, rev]);
   const [tab, setTab] = useState("overview");
   const notify = useToast();
   const closeButton = useRef(null);
@@ -117,12 +119,12 @@ export default function LeadPanel({ id, meta, onClose }) {
         {lead && (
           <>
             <div className="tabs" role="tablist" aria-label="Lead sections">
-              {[["overview", "Overview"], ["timeline", "Timeline"]].map(([key, label]) => (
+              {[["overview", "Overview"], ["work", "Update"], ["timeline", "Timeline"]].map(([key, label]) => (
                 <button key={key} className="tab" role="tab" aria-selected={tab === key} onClick={() => setTab(key)}>{label}</button>
               ))}
             </div>
             <div className="drawer-body" role="tabpanel">
-              {tab === "timeline" ? <Timeline id={lead.id} /> : (
+              {tab === "timeline" ? <Timeline id={lead.id} /> : tab === "work" ? <LeadWork lead={lead} meta={meta} onChanged={() => { setRev((r) => r + 1); onChanged(); }} /> : (
                 <>
                   <h3>Work so far</h3>
                   <Facts rows={[
