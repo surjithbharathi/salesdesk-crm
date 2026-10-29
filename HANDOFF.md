@@ -10,7 +10,7 @@ SMTP is disabled until an administrator configures a mailbox. OTP login and unau
 
 ## Continue on another computer
 
-Use Node 22.13+ and run `npm ci`, `npm run check`, `npm test`, `npm start`. SMTP tests can use `SALESDESK_TEST_TMP=/tmp`. Docker builds from source and includes ffmpeg for audio conversion. Persist `/app/data`, including SQLite and companion encryption key files, on private storage. Never commit or overwrite a production data directory.
+Read `CLAUDE.md` and `docs/CLAUDE_HANDOFF.md` first. Use Node 22.13+ and run `npm ci`, `npm run check`, `npm test`. Initialize synthetic local data with `node scripts/init-local.mjs`, then `. ./.env.local` and `node server.mjs`. `npm start` runs the HTTPS workspace gateway and needs a configured origin. SMTP tests can use `SALESDESK_TEST_TMP=/tmp`. Docker builds from source and includes ffmpeg for audio conversion. Persist `/app/data`, including SQLite and companion encryption key files, on private storage. Never commit or overwrite a production data directory.
 
 Gateway uses web port 3100; main mobile API 3101. Set `PUBLIC_ORIGIN` to the exact HTTPS origin and `CRM_OWNER_USER_ID` to an existing approved account ID. Additional workspace addresses require matching DNS and reverse proxy TLS routes. The current gateway supports five workspace slots. Never copy a real owner ID, API key or password into repository configuration.
 
