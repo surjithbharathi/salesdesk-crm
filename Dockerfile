@@ -6,6 +6,8 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 COPY *.mjs ./
 COPY public ./public
+COPY migrations ./migrations
+COPY scripts ./scripts
 RUN mkdir /app/data && chown node:node /app/data
 USER node
 ENV PORT=3100 MOBILE_PORT=3101 BIND_HOST=0.0.0.0 CRM_DB=/app/data/crm.sqlite

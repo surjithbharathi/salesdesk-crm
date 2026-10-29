@@ -10,3 +10,6 @@ android-companion/local.properties
 *.apk
 *.aab
 .automation-source/
+
+# Private research notes about the business and third-party tools; never publish (this repository is public)
+docs/private/
