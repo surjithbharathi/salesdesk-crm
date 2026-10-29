@@ -5,6 +5,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { once } from "node:events";
+import { existsSync } from "node:fs";
 
 async function start(file, port) {
   const child = spawn(process.execPath, ["server.mjs"], {
@@ -64,9 +65,12 @@ test("KPI endpoints: team vs caller scope, goals need the owner, same-origin wri
   assert.equal((await post("/api/kpi/targets", { metric: "calls", value: -3 })).status, 400);
 
   // the new app is the front door; the earlier screens stay at /classic/
-  const front = await fetch(base + "/");
-  assert.equal(front.status, 200);
-  assert.match(await front.text(), /id="root"/);
+  // (the screens are built into web/dist; the container build does that, a bare checkout may not have it)
+  if (existsSync(new URL("./web/dist/index.html", import.meta.url))) {
+    const front = await fetch(base + "/");
+    assert.equal(front.status, 200);
+    assert.match(await front.text(), /id="root"/);
+  }
   const classic = await fetch(base + "/classic/");
   assert.equal(classic.status, 200);
   assert.match(await classic.text(), /id="nav"/);
