@@ -88,6 +88,8 @@ export function importLegacy(db, { dryRun = true } = {}) {
       if (stage === "Prospecting") return [connectedLeads.has(lead.id) ? "st_requirement" : "st_contact_attempted", null];
       if (stage === "Opportunity") return ["st_interested", null];
       if (stage === "Closed") return lead.disposition === "Won" ? ["st_won", null] : ["st_lost", "lr_unknown"];
+      const alias = db.prepare("SELECT status_id FROM status_aliases WHERE alias=? COLLATE NOCASE").get(stage.trim());
+      if (alias) return [alias.status_id, null];
       report.unmappedStages[stage || "(empty)"] = (report.unmappedStages[stage || "(empty)"] || 0) + 1;
       issue("unmapped-stage", lead.id, `Stage "${stage}" is not known; imported as New Lead`);
       return ["st_new_lead", null];
