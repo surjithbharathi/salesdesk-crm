@@ -348,7 +348,7 @@ function handleKpi(req, url, identity, send, body) {
 }
 // The new web app (built into web/dist) is served under /next/. Static files only; its data comes from /api/kpi.
 const WEB_ROOT = fileURLToPath(new URL("./web/dist/", import.meta.url));
-const WEB_TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon", ".json": "application/json", ".woff2": "font/woff2", ".woff": "font/woff" };
+const WEB_TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon", ".json": "application/json", ".webmanifest": "application/manifest+json", ".woff2": "font/woff2", ".woff": "font/woff" };
 async function serveWebApp(pathname, res) {
   let relative;
   try {

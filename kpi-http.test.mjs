@@ -70,6 +70,17 @@ test("KPI endpoints: team vs caller scope, goals need the owner, same-origin wri
     const front = await fetch(base + "/");
     assert.equal(front.status, 200);
     assert.match(await front.text(), /id="root"/);
+    // installable on a phone's home screen: the manifest and its icons are public and typed correctly
+    const manifest = await fetch(base + "/next/manifest.webmanifest");
+    assert.equal(manifest.status, 200);
+    assert.match(manifest.headers.get("content-type"), /application\/manifest\+json/);
+    const parsed = await manifest.json();
+    assert.equal(parsed.display, "standalone");
+    for (const icon of parsed.icons) {
+      const r = await fetch(base + icon.src);
+      assert.equal(r.status, 200, icon.src);
+      assert.equal(r.headers.get("content-type"), "image/png");
+    }
   }
   const classic = await fetch(base + "/classic/");
   assert.equal(classic.status, 200);
