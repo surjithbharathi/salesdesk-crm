@@ -134,6 +134,16 @@ test("KPI endpoints: team vs caller scope, goals need the owner, same-origin wri
   assert.equal(phoneBoard.status, 200);
   assert.ok(Array.isArray((await phoneBoard.json()).rows));
   assert.equal((await fetch(mobileBase + "/v1/kpi/leaderboard/month/330")).status, 401);
+  // omitting call sync for one caller: only an administrator can, the phone then gets no numbers and cannot upload, and nobody is signed out
+  assert.equal((await post("/api/workspace/call-sync", { userId: second.id, skip: true }, callerCookie)).status, 403);
+  assert.equal((await post("/api/workspace/call-sync", { userId: second.id, skip: true }, ownerCookie)).status, 200);
+  assert.deepEqual((await json("/api/workspace/call-sync", { headers: { Cookie: ownerCookie } })).data.skipped, [second.id]);
+  assert.deepEqual(await (await fetch(mobileBase + "/v1/targets", { headers: { Authorization: `Bearer ${phoneToken}` } })).json(), []);
+  const skippedCall = await fetch(mobileBase + "/v1/calls", { method: "POST", headers: { Authorization: `Bearer ${phoneToken}`, "Content-Type": "application/json" }, body: JSON.stringify({ localId: "skip-1", phone: "919000000000", startedAt: Date.now() - 60000, duration: 5, direction: "Outgoing" }) });
+  assert.equal(skippedCall.status, 403);
+  assert.equal((await json("/api/kpi/me", { headers: { Cookie: callerCookie } })).status, 200); // still signed in
+  assert.equal((await post("/api/workspace/call-sync", { userId: second.id, skip: false }, ownerCookie)).status, 200);
+  assert.deepEqual((await json("/api/workspace/call-sync", { headers: { Cookie: ownerCookie } })).data.skipped, []);
   // WhatsApp, call AI and AI connections are administrator-only
   for (const path of ["/api/whatsapp/status", "/api/call-ai/settings", "/api/call-ai/keys", "/api/mcp/keys", "/api/mcp/approvals"]) {
     const asCaller = await json(path, { headers: { Cookie: callerCookie } });

@@ -314,6 +314,9 @@ const kpi = createKpi({
   db, all, get, put,
   deviceOwners: () => new Map(db.prepare("SELECT body FROM mobile_devices").all().map((r) => JSON.parse(r.body)).map((d) => [d.id, d.owner])),
 });
+// People whose phone calls are not copied into the CRM. An administrator turns this on per person; it does not sign anyone out.
+db.exec("CREATE TABLE IF NOT EXISTS call_sync_skip(user_id TEXT PRIMARY KEY, set_by TEXT, set_at INTEGER)");
+const callSyncSkipped = (id) => Boolean(id && db.prepare("SELECT 1 FROM call_sync_skip WHERE user_id=?").get(id));
 function handleKpi(req, url, identity, send, body) {
   const p = url.searchParams;
   const number = (name) => (p.has(name) ? Number(p.get(name)) : undefined);
@@ -475,6 +478,7 @@ const mobileServer = http.createServer(async (req, res) => {
     if(url.pathname.startsWith('/v1/recordings/'))workspaceAccess.requirePermission(identity||{user:{id:device.owner}},'calls.read');
     if(!['GET','HEAD'].includes(req.method)&&url.pathname!=='/v1/logout'){
       const actor=identity||{user:{id:device.owner}};
+      if(url.pathname.startsWith('/v1/calls')&&callSyncSkipped(actor.user.id))bad('Call sync is turned off for your account',403);
       if(url.pathname.startsWith('/v1/leads'))workspaceAccess.requirePermission(actor,'leads.write');
       else if(url.pathname.startsWith('/v1/tasks'))workspaceAccess.requirePermission(actor,'tasks.write');
       else workspaceAccess.requirePermission(actor,'calls.sync');
@@ -593,7 +597,7 @@ const mobileServer = http.createServer(async (req, res) => {
       return;
     }
     if (req.method === "GET" && url.pathname === "/v1/targets") {
-      reply(200, mobile.targets(device));
+      reply(200, callSyncSkipped(identity?.user.id || device.owner) ? [] : mobile.targets(device));
       return;
     }
     if (req.method === "POST" && url.pathname === "/v1/calls") {
@@ -954,6 +958,8 @@ const server = http.createServer(async (req, res) => {
       const emailUser=/^\/api\/workspace\/users\/([a-f0-9-]{36})\/email-setup$/.exec(url.pathname);
       if(emailUser&&req.method==='POST'){sameOrigin();workspaceAccess.requirePermission(identity,'users.manage');const target=get('users',emailUser[1]);if(!target?.email)bad('Add an email address for this user first');const reset=workspaceAccess.reset(identity,emailUser[1]);send(200,await smtpEmail.send({to:target.email,purpose:'reset',setupUrl:reset.setupUrl,actor:identity.user.id}));return;}
       if(url.pathname==='/api/workspace/access'&&req.method==='GET'){send(200,{...workspaceAccess.profile(identity.user.id),name:db.prepare("SELECT value FROM auth_settings WHERE key='company'").get()?.value||'Workspace'});return;}
+      if(url.pathname==='/api/workspace/call-sync'&&req.method==='GET'){workspaceAccess.requirePermission(identity,'users.manage');send(200,{skipped:db.prepare('SELECT user_id FROM call_sync_skip').all().map(r=>r.user_id)});return;}
+      if(url.pathname==='/api/workspace/call-sync'&&req.method==='POST'){sameOrigin();workspaceAccess.requirePermission(identity,'users.manage');const input=await body(req);if(typeof input.userId!=='string'||!get('users',input.userId)||typeof input.skip!=='boolean')bad('Choose a person and turn call sync on or off');if(input.skip)db.prepare('INSERT INTO call_sync_skip VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET set_by=excluded.set_by,set_at=excluded.set_at').run(input.userId,identity.user.id,Date.now());else db.prepare('DELETE FROM call_sync_skip WHERE user_id=?').run(input.userId);send(200,{userId:input.userId,skip:input.skip});return;}
       if(url.pathname==='/api/workspace/users'&&req.method==='GET'){send(200,workspaceAccess.list(identity));return;}
       if(url.pathname==='/api/workspace/users'&&req.method==='POST'){sameOrigin();const input=await body(req);if(input.sendEmail&&!smtpEmail.settings().enabled)bad('Configure and enable SMTP before sending invitations');const result=workspaceAccess.invite(identity,input);if(input.sendEmail){try{await smtpEmail.send({to:input.email,purpose:'invitation',setupUrl:result.setupUrl,actor:identity.user.id});result.emailStatus='accepted';}catch{result.emailStatus='failed';}}send(201,result);return;}
       const accessUser=/^\/api\/workspace\/users\/([a-f0-9-]{36})(?:\/(setup-link))?$/.exec(url.pathname);

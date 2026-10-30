@@ -89,6 +89,8 @@ export default function Users({ access }) {
   const notify = useToast();
   const [version, setVersion] = useState(0);
   const { data: users, error } = useLoad(() => crmGet("workspace/users"), [version]);
+  const sync = useLoad(() => crmGet("workspace/call-sync"), [version]);
+  const skipped = new Set(sync.data?.skipped || []);
   const [editing, setEditing] = useState("");
   const [link, setLink] = useState("");
   const [busy, setBusy] = useState(false);
@@ -108,6 +110,15 @@ export default function Users({ access }) {
       notify(e.message);
     } finally {
       setBusy(false);
+    }
+  }
+  async function setSync(user, on) {
+    try {
+      await crmSend("POST", "workspace/call-sync", { userId: user.id, skip: !on });
+      notify(on ? `Calls from ${user.name} are synced again` : `Calls from ${user.name} are no longer synced`);
+      reload();
+    } catch (e) {
+      notify(e.message);
     }
   }
   async function setup(user) {
@@ -144,9 +155,10 @@ export default function Users({ access }) {
         <span className="newlead-actions"><button className="btn btn-primary" disabled={busy}>Add and create setup link</button></span>
       </form>
       <h2 className="section-title section-gap">People</h2>
+      <p className="muted report-meta">Call sync copies a person's phone calls and recordings into the CRM. Turn it off for people whose calls should stay out. Their phone then sends nothing, and nobody is signed out. Calls already synced stay in the CRM.</p>
       <div className="table-frame">
         <table className="grid">
-          <thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Status</th><th><span className="sr">Actions</span></th></tr></thead>
+          <thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Status</th><th>Call sync</th><th><span className="sr">Actions</span></th></tr></thead>
           <tbody>
             {(users || []).map((u) => (
               <React.Fragment key={u.id}>
@@ -155,6 +167,12 @@ export default function Users({ access }) {
                   <td>{u.username || <span className="muted">No login</span>}</td>
                   <td>{ROLES.find(([r]) => r === u.role)?.[1] || u.role}</td>
                   <td>{u.active ? "Active" : <span className="muted">Disabled</span>}</td>
+                  <td>
+                    <label className="check sync-switch">
+                      <input type="checkbox" checked={!skipped.has(u.id)} disabled={!sync.data} onChange={(e) => setSync(u, e.target.checked)} aria-label={`Sync calls from ${u.name}`} />
+                      {skipped.has(u.id) ? <span className="muted">Off</span> : "On"}
+                    </label>
+                  </td>
                   <td className="right">
                     {u.hasLogin ? (
                       <span className="quick-actions">
@@ -165,7 +183,7 @@ export default function Users({ access }) {
                   </td>
                 </tr>
                 {editing === u.id && (
-                  <tr className="reasons"><td colSpan={5}><Edit user={u} access={access} onCancel={() => setEditing("")} onSaved={() => { setEditing(""); reload(); }} /></td></tr>
+                  <tr className="reasons"><td colSpan={6}><Edit user={u} access={access} onCancel={() => setEditing("")} onSaved={() => { setEditing(""); reload(); }} /></td></tr>
                 )}
               </React.Fragment>
             ))}
