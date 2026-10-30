@@ -67,12 +67,107 @@ public class MainActivity extends Activity {
         primary(b,"Sign in",()->{
             String username=user.getText().toString().trim(),secret=password.getText().toString();if(username.isEmpty()||secret.isEmpty()){notice("Enter your CRM username and password.");return;}password.setText("");
             SecureConfig.prefs(this).edit().putString("endpoint",BuildConfig.CRM_API_ORIGIN).commit();
-            work(()->{try{JSONObject r=SyncEngine.requestApi(this,"/v1/login","POST",new JSONObject().put("username",username).put("password",secret).put("deviceId",SecureConfig.deviceId(this)));JSONObject a=r.getJSONObject("user");SecureConfig.token(this,r.getString("token"));SecureConfig.prefs(this).edit().putString("userId",a.getString("id")).putString("user",a.toString()).remove("workspace").remove("targets").putLong("since",System.currentTimeMillis()).putBoolean("enabled",false).putBoolean("clickToCall",false).putBoolean("callWhileLocked",false).commit();workspace=new JSONObject();runOnUiThread(this::render);loadWorkspace();}catch(Exception e){runOnUiThread(()->notice(e instanceof SyncEngine.HttpError?(((SyncEngine.HttpError)e).code==401?"Username or password is incorrect. Use the account created in web CRM.":"Company CRM is not ready or access was refused. Contact your administrator."):"Cannot reach your company CRM. Check your internet connection and try again."));}});
+            work(()->{try{JSONObject r=SyncEngine.requestApi(this,"/v1/login","POST",new JSONObject().put("username",username).put("password",secret).put("deviceId",SecureConfig.deviceId(this)));JSONObject a=r.getJSONObject("user");SecureConfig.token(this,r.getString("token"));SecureConfig.prefs(this).edit().putString("userId",a.getString("id")).putString("user",a.toString()).remove("workspace").remove("kpiDay").remove("targets").putLong("since",System.currentTimeMillis()).putBoolean("enabled",false).putBoolean("clickToCall",false).putBoolean("callWhileLocked",false).commit();workspace=new JSONObject();runOnUiThread(this::render);loadWorkspace();}catch(Exception e){runOnUiThread(()->notice(e instanceof SyncEngine.HttpError?(((SyncEngine.HttpError)e).code==401?"Username or password is incorrect. Use the account created in web CRM.":"Company CRM is not ready or access was refused. Contact your administrator."):"Cannot reach your company CRM. Check your internet connection and try again."));}});
         });caption(b,"Password is never saved. Business call sync and background calling stay off until you enable them in Settings.");
     }
     void refresh(){work(()->{try{loadWorkspace();}catch(Exception e){failure(e);}});}
-    void loadWorkspace()throws Exception{try{JSONObject policy=SyncEngine.requestApi(this,"/v1/tracking-preferences","GET",null);SecureConfig.prefs(this).edit().putString("trackingPolicy",policy.toString()).commit();}catch(SyncEngine.HttpError e){if(e.code!=404)throw e;}JSONObject d=SyncEngine.requestApi(this,"/v1/workspace","GET",null);SecureConfig.prefs(this).edit().putString("workspace",d.toString()).putLong("workspaceAt",System.currentTimeMillis()).commit();workspace=d;runOnUiThread(this::render);}
-    void home(){JSONObject user=workspace.optJSONObject("user");if(user==null)try{user=new JSONObject(SecureConfig.prefs(this).getString("user","{}"));}catch(Exception ignored){}LinearLayout welcome=card();String name=user==null?"there":user.optString("name","there");text(welcome,"Hello, "+name.split(" ")[0],22,true);caption(welcome,"Leads, follow-ups and calls at a glance.");int open=0;for(int i=0;i<rows("tasks").length();i++){JSONObject t=rows("tasks").optJSONObject(i);if(t!=null&&!t.optString("status").equals("Done"))open++;}LinearLayout metrics=horizontal();welcome.addView(metrics);metric(metrics,"New today",todayLeads(),"Leads");metric(metrics,"Open tasks",open,"To-do");pair(welcome,"+ Add lead",this::leadForm,"+ New task",this::taskForm);long at=SecureConfig.prefs(this).getLong("workspaceAt",0);caption(welcome,at==0?"Pull your workspace with refresh.":"Updated "+android.text.format.DateFormat.getTimeFormat(this).format(new Date(at)));homeOverview();section("Recent activity","Latest updates");JSONArray a=rows("activities");if(a.length()==0){LinearLayout empty=card();identity(empty,"You’re all set","Updates will appear as your team works.",R.drawable.ic_calendar_check);}for(int i=a.length()-1;i>=Math.max(0,a.length()-12);i--){JSONObject r=a.optJSONObject(i);if(r==null)continue;LinearLayout entry=card();identity(entry,leadName(r.optString("leadId")),dateLabel(r.optString("createdAt",r.optString("date"))),R.drawable.ic_users_round);text(entry,r.optString("text",r.optString("title",r.optString("type","Activity"))),13,false);}}
+    void loadWorkspace()throws Exception{try{JSONObject policy=SyncEngine.requestApi(this,"/v1/tracking-preferences","GET",null);SecureConfig.prefs(this).edit().putString("trackingPolicy",policy.toString()).commit();}catch(SyncEngine.HttpError e){if(e.code!=404)throw e;}JSONObject d=SyncEngine.requestApi(this,"/v1/workspace","GET",null);SecureConfig.prefs(this).edit().putString("workspace",d.toString()).putLong("workspaceAt",System.currentTimeMillis()).commit();workspace=d;loadKpi();runOnUiThread(this::render);}
+    /** Today's goals, streak and next call from the CRM. An older server without this endpoint just leaves the card out. */
+    void loadKpi(){
+        try{
+            java.time.ZoneId zone=java.time.ZoneId.systemDefault();
+            long start=java.time.LocalDate.now(zone).atStartOfDay(zone).toInstant().toEpochMilli();
+            int offset=java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis())/60000;
+            JSONObject day=SyncEngine.requestApi(this,"/v1/kpi/day/"+offset+"/"+start+"/"+(start+86399999L),"GET",null);
+            SecureConfig.prefs(this).edit().putString("kpiDay",day.toString()).commit();
+        }catch(Exception e){
+            SecureConfig.prefs(this).edit().remove("kpiDay").commit();
+        }
+    }
+    void goalRow(LinearLayout card,String label,int value,int goal){
+        boolean met=goal>0&&value>=goal;int color=met?0xff17806c:PURPLE;
+        LinearLayout row=horizontal();
+        text(row,label,14,false).setLayoutParams(new LinearLayout.LayoutParams(0,-2,1));
+        text(row,value+" of "+goal,14,true).setTextColor(color);
+        card.addView(row);
+        ProgressBar bar=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);
+        bar.setMax(Math.max(1,goal));bar.setProgress(Math.min(value,Math.max(1,goal)));
+        bar.setProgressTintList(android.content.res.ColorStateList.valueOf(color));
+        bar.setContentDescription(label+", "+value+" of "+goal);
+        LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,dp(8));p.setMargins(0,0,0,dp(8));
+        card.addView(bar,p);
+    }
+    void homeKpi(){
+        JSONObject d;
+        try{d=new JSONObject(SecureConfig.prefs(this).getString("kpiDay","{}"));}catch(Exception e){return;}
+        JSONObject goal=d.optJSONObject("goal"),today=d.optJSONObject("today");
+        if(goal==null||today==null)return;
+        section("Your day","Goals and points");
+        LinearLayout c=card();
+        JSONObject level=d.optJSONObject("level");
+        if(level!=null){
+            text(c,"Level "+level.optInt("level")+" · "+level.optString("name"),20,true).setTextColor(PURPLE);
+            int floor=level.optInt("floor"),next=level.optInt("next",-1),points=level.optInt("points");
+            ProgressBar lv=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);
+            lv.setMax(next>floor?next-floor:1);lv.setProgress(next>floor?points-floor:1);
+            lv.setProgressTintList(android.content.res.ColorStateList.valueOf(PURPLE));
+            lv.setContentDescription("Level progress");
+            LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(8));lp.setMargins(0,dp(2),0,dp(4));c.addView(lv,lp);
+            caption(c,(next>floor?level.optInt("toNext")+" points to "+level.optString("nextName"):"Top level")+" · "+points+" points in all");
+        }
+        int streak=d.optInt("streak");
+        JSONObject week=d.optJSONObject("week"),month=d.optJSONObject("month");
+        StringBuilder standing=new StringBuilder(streak>0?streak+(streak==1?" working day":" working days")+" in a row":"No streak yet");
+        if(week!=null&&week.optInt("rank")>0)standing.append(" · #").append(week.optInt("rank")).append(" of ").append(week.optInt("of")).append(" this week");
+        if(month!=null&&month.optInt("rank")>0)standing.append(" · #").append(month.optInt("rank")).append(" this month");
+        caption(c,standing.toString());
+        text(c,today.optInt("points")+" points today",18,true);
+        goalRow(c,"Calls",today.optInt("calls"),goal.optInt("calls"));
+        goalRow(c,"Answered",today.optInt("answered"),goal.optInt("answered"));
+        goalRow(c,"Quotations",today.optInt("quotations"),goal.optInt("quotations"));
+        JSONObject team=d.optJSONObject("teamToday");
+        if(team!=null&&team.optInt("goal")>0)goalRow(c,"Team calls today",team.optInt("calls"),team.optInt("goal"));
+        int late=d.optInt("lateLeft");
+        if(late>0){TextView t=text(c,late+(late==1?" follow-up is late":" follow-ups are late"),14,true);t.setTextColor(0xffb54725);}
+        JSONObject next=d.optJSONObject("next");
+        if(next!=null){
+            text(c,"Call next: "+next.optString("name"),16,true);
+            caption(c,joined(next.optString("reason"),joined(next.optString("company"),next.optString("city"))));
+            final String phone=next.optString("phone");
+            if(!phone.isEmpty())primary(c,"Open dialer",()->startActivity(new Intent(Intent.ACTION_DIAL,Uri.fromParts("tel",phone,null))));
+        }
+        JSONArray challenges=d.optJSONArray("challenges");
+        if(challenges!=null&&challenges.length()>0){
+            int done=0;for(int i=0;i<challenges.length();i++)if(challenges.optJSONObject(i)!=null&&challenges.optJSONObject(i).optBoolean("done"))done++;
+            LinearLayout box=card();
+            text(box,"Challenges this week · "+done+" of "+challenges.length(),16,true);
+            for(int i=0;i<challenges.length();i++){JSONObject ch=challenges.optJSONObject(i);if(ch!=null)goalRow(box,ch.optString("label"),ch.optInt("value"),ch.optInt("target"));}
+        }
+        StringBuilder earned=new StringBuilder();JSONArray badges=d.optJSONArray("badges");
+        if(badges!=null)for(int i=0;i<badges.length();i++){JSONObject b=badges.optJSONObject(i);if(b!=null&&b.optBoolean("earned"))earned.append(earned.length()==0?"":" · ").append(b.optString("label"));}
+        JSONArray marks=d.optJSONArray("milestones");int won=0;if(marks!=null)for(int i=0;i<marks.length();i++)if(marks.optJSONObject(i)!=null&&marks.optJSONObject(i).optBoolean("earned"))won++;
+        if(earned.length()>0)caption(c,"Earned today: "+earned);
+        if(marks!=null&&marks.length()>0)caption(c,"Milestones: "+won+" of "+marks.length());
+        JSONArray board=d.optJSONArray("weekBoard");
+        if(board!=null&&board.length()>0){
+            section("Leaderboard","This week");
+            LinearLayout lb=card();String me=SecureConfig.prefs(this).getString("userId","");
+            for(int i=0;i<Math.min(5,board.length());i++){
+                JSONObject r=board.optJSONObject(i);if(r==null)continue;
+                LinearLayout row=horizontal();boolean mine=me.equals(r.optString("userId"));
+                text(row,String.valueOf(r.optInt("rank")),16,true).setTextColor(PURPLE);
+                TextView name=text(row,"  "+r.optString("name")+(mine?" (you)":""),14,mine);name.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1));
+                text(row,String.valueOf(r.optInt("points")),16,true);
+                lb.addView(row);
+            }
+            JSONArray stars=d.optJSONArray("hallOfFame");
+            if(stars!=null&&stars.length()>0){
+                JSONObject w=stars.optJSONObject(0);
+                if(w!=null)caption(lb,"Star of last week: "+w.optString("name")+" · "+w.optInt("points")+" points");
+            }
+        }
+    }
+    void home(){JSONObject user=workspace.optJSONObject("user");if(user==null)try{user=new JSONObject(SecureConfig.prefs(this).getString("user","{}"));}catch(Exception ignored){}LinearLayout welcome=card();String name=user==null?"there":user.optString("name","there");text(welcome,"Hello, "+name.split(" ")[0],22,true);caption(welcome,"Leads, follow-ups and calls at a glance.");int open=0;for(int i=0;i<rows("tasks").length();i++){JSONObject t=rows("tasks").optJSONObject(i);if(t!=null&&!t.optString("status").equals("Done"))open++;}LinearLayout metrics=horizontal();welcome.addView(metrics);metric(metrics,"New today",todayLeads(),"Leads");metric(metrics,"Open tasks",open,"To-do");pair(welcome,"+ Add lead",this::leadForm,"+ New task",this::taskForm);long at=SecureConfig.prefs(this).getLong("workspaceAt",0);caption(welcome,at==0?"Pull your workspace with refresh.":"Updated "+android.text.format.DateFormat.getTimeFormat(this).format(new Date(at)));homeKpi();homeOverview();section("Recent activity","Latest updates");JSONArray a=rows("activities");if(a.length()==0){LinearLayout empty=card();identity(empty,"You’re all set","Updates will appear as your team works.",R.drawable.ic_calendar_check);}for(int i=a.length()-1;i>=Math.max(0,a.length()-12);i--){JSONObject r=a.optJSONObject(i);if(r==null)continue;LinearLayout entry=card();identity(entry,leadName(r.optString("leadId")),dateLabel(r.optString("createdAt",r.optString("date"))),R.drawable.ic_users_round);text(entry,r.optString("text",r.optString("title",r.optString("type","Activity"))),13,false);}}
     void metric(LinearLayout row,String label,int value,String target){LinearLayout tile=column();tile.setPadding(dp(14),dp(12),dp(10),dp(12));tile.setBackground(surface(target.equals("Leads")?0xfff0edfc:0xffeaf6f1,14));text(tile,String.valueOf(value),27,true).setTextColor(target.equals("Leads")?PURPLE:0xff17806c);text(tile,label,12,false);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-2,1);p.setMargins(0,dp(10),dp(6),dp(8));row.addView(tile,p);tile.setContentDescription(label+", "+value+". Open "+target);tile.setFocusable(true);tile.setOnClickListener(v->{screen=target;render();});}
     void homeOverview(){
         section("Your pipeline","Assigned leads");

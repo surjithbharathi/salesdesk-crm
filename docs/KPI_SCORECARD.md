@@ -35,3 +35,14 @@ The earlier screens remain at `/classic/` only for what is not rebuilt yet: Mess
 Settings is rebuilt in the new app: People and access (invite, change role and permissions, setup links), Email (SMTP and test message), Add leads from a file (CSV), Merge duplicates, Archived leads, Download data, Your account. They call the same server routes as the earlier screens, so the permission checks are unchanged.
 
 Still only in `/classic/`: WhatsApp, other integrations, MCP connections, API key vault, call transcription settings, n8n, lead assignment rules, and workspace management for the Ultra Admin.
+
+## Gamification (0.20.0)
+
+Everything below is counted from the same records as points, so none of it can be earned by tapping buttons, and nothing new is stored.
+
+- **Levels** come from lifetime points and only rise: Starter 0, Dialer 100, Connector 300, Negotiator 700, Quote Maker 1,500, Deal Closer 3,000, Senior Closer 6,000, Champion 10,000, Legend 20,000.
+- **Milestones** are lasting badges from lifetime counts: first call, 100/500/1,000 calls, first/10/50 quotations, first/5/25 orders won, and 7 or 30 working days in a row meeting the calls goal (best run, kept after a break).
+- **Weekly challenges** are derived from the daily goals: calls = 5 × the daily calls goal, customers reached = 5 × the answered goal, quotations = 3 × the quotation goal, and win one order. Change the daily goals and the challenges follow.
+- **Rank** this week and this month among active people, a **team goal** for today (team calls against the sum of everyone's goal), and the **stars of the week**: the top scorer of each of the last four finished weeks, shown only when they scored.
+- A short "Well done" message appears when a badge, milestone, challenge or level is newly earned since the last refresh.
+- The phone app's Home shows the same: level, rank, goals, team goal, challenges and the leaderboard, from `GET /v1/kpi/day/<tz minutes>/<day start ms>/<day end ms>` (path parameters, because the app refuses query strings). `GET /api/kpi/leaderboard?period=month` gives the monthly board.

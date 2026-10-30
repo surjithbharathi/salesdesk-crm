@@ -66,6 +66,39 @@ export function dailyEvents({ leads, calls, activities, tasks, devices = new Map
   return [...rows.values()];
 }
 
+// Levels come from lifetime points, so they only ever rise. The names follow a machinery sale from first call to closing.
+export const LEVELS = [[0, "Starter"], [100, "Dialer"], [300, "Connector"], [700, "Negotiator"], [1500, "Quote Maker"], [3000, "Deal Closer"], [6000, "Senior Closer"], [10000, "Champion"], [20000, "Legend"]];
+export function levelFor(points) {
+  let i = 0;
+  LEVELS.forEach(([floor], k) => { if (points >= floor) i = k; });
+  const next = LEVELS[i + 1];
+  return { level: i + 1, name: LEVELS[i][1], points, floor: LEVELS[i][0], next: next ? next[0] : null, nextName: next ? next[1] : null, toNext: next ? next[0] - points : 0 };
+}
+// Lasting badges, earned once from lifetime counts (or the best streak) and kept.
+const MILESTONES = [
+  ["first-call", "First call", "calls", 1, "Make your first call."], ["calls-100", "100 calls", "calls", 100, "Make 100 calls."],
+  ["calls-500", "500 calls", "calls", 500, "Make 500 calls."], ["calls-1000", "1,000 calls", "calls", 1000, "Make 1,000 calls."],
+  ["first-quote", "First quotation", "quotations", 1, "Give your first quotation."], ["quotes-10", "10 quotations", "quotations", 10, "Give 10 quotations."],
+  ["quotes-50", "50 quotations", "quotations", 50, "Give 50 quotations."], ["first-order", "First order won", "won", 1, "Win your first order."],
+  ["orders-5", "5 orders won", "won", 5, "Win 5 orders."], ["orders-25", "25 orders won", "won", 25, "Win 25 orders."],
+  ["streak-7", "7 days in a row", "best", 7, "Meet the calls goal 7 working days in a row."], ["streak-30", "30 days in a row", "best", 30, "Meet the calls goal 30 working days in a row."],
+];
+// Current and best run of working days (days anyone called) on which the person met the calls goal. Today may still be unfinished.
+export function streaks(events, userId, goal, todayKey) {
+  const mine = new Map();
+  const team = new Set();
+  for (const e of events) {
+    if (e.calls > 0) team.add(e.day);
+    if (e.userId === userId) mine.set(e.day, e);
+  }
+  let run = 0, best = 0;
+  for (const day of [...team].sort()) {
+    if (goal > 0 && (mine.get(day)?.calls || 0) >= goal) best = Math.max(best, ++run);
+    else if (day !== todayKey) run = 0;
+  }
+  return { current: run, best };
+}
+
 function weekRange(now, tz) {
   const local = new Date(now + tz * 60000);
   const monday = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate() - ((local.getUTCDay() + 6) % 7)) - tz * 60000;
@@ -98,22 +131,6 @@ export function createKpi({ db, all, get, put, deviceOwners = () => new Map() })
     return { targets: allTargets() };
   }
 
-  // Consecutive working days (days anyone called) on which the person met the calls goal; today is allowed to be unfinished.
-  function streak(d, userId, now, tz, goal) {
-    const events = dailyEvents(d, { from: now - 61 * DAY, to: now + DAY, tz });
-    const mine = new Map(events.filter((e) => e.userId === userId).map((e) => [e.day, e]));
-    const team = new Set(events.filter((e) => e.calls > 0).map((e) => e.day));
-    const today = localDay(now, tz);
-    let count = 0;
-    for (let i = 0; i < 60; i++) {
-      const day = localDay(now - i * DAY, tz);
-      if (!team.has(day)) continue;
-      if (goal > 0 && (mine.get(day)?.calls || 0) >= goal) count++;
-      else if (day !== today) break;
-    }
-    return count;
-  }
-
   function lateCount(d, userId, dayStart) {
     const open = new Set(d.leads.filter((l) => l.owner === userId && OPEN_STAGES(l)).map((l) => l.id));
     const late = new Set(d.tasks.filter((t) => t.owner === userId && !["Done", "Cancelled"].includes(t.status) && t.leadId && open.has(t.leadId) && ms(t.due) < dayStart).map((t) => t.leadId));
@@ -133,22 +150,62 @@ export function createKpi({ db, all, get, put, deviceOwners = () => new Map() })
     return today ? pick(byId.get(today.leadId), "Follow-up due today") : null;
   }
 
+  // Everything that needs history: level, lasting badges, this week's challenges, the month and the weekly winners. One pass over the records.
+  function progress(d, userId, now, tz, goal) {
+    const all = dailyEvents(d, { from: 0, to: now + DAY, tz });
+    const between = (from, to) => { const a = localDay(from, tz), b = localDay(to - 1, tz); return all.filter((e) => e.day >= a && e.day <= b); };
+    const mineIn = (rows) => sum(rows.filter((e) => e.userId === userId));
+    const life = mineIn(all);
+    const { current, best } = streaks(all, userId, goal.calls, localDay(now, tz));
+    const week = weekRange(now, tz);
+    const wk = mineIn(between(week.from, week.to));
+    const local = new Date(now + tz * 60000);
+    const monthFrom = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), 1) - tz * 60000;
+    const monthTo = Date.UTC(local.getUTCFullYear(), local.getUTCMonth() + 1, 1) - tz * 60000;
+    const people = activeUsers();
+    const rank = (rows) => {
+      const scored = people.map((u) => ({ userId: u.id, name: u.name, ...sum(rows.filter((e) => e.userId === u.id)) })).sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
+      return scored.map((r, i) => ({ rank: i + 1, ...r }));
+    };
+    const weekRows = rank(between(week.from, week.to)), monthRows = rank(between(monthFrom, monthTo));
+    const place = (rows) => ({ rank: rows.find((r) => r.userId === userId)?.rank || null, of: rows.length, points: rows.find((r) => r.userId === userId)?.points || 0 });
+    const challenges = [
+      { id: "wk-calls", label: "Calls this week", value: wk.calls, target: goal.calls * 5, unit: "calls" },
+      { id: "wk-answered", label: "Customers reached", value: wk.answered, target: goal.answered * 5, unit: "answered calls" },
+      { id: "wk-quotes", label: "Quotations out", value: wk.quotations, target: goal.quotations * 3, unit: "quotations" },
+      { id: "wk-order", label: "Win an order", value: wk.won, target: 1, unit: "orders" },
+    ].filter((c) => c.target > 0).map((c) => ({ ...c, done: c.value >= c.target }));
+    const counts = { calls: life.calls, quotations: life.quotations, won: life.won, best };
+    const milestones = MILESTONES.map(([id, label, key, target, hint]) => ({ id, label, hint, target, value: Math.min(counts[key], target), earned: counts[key] >= target }));
+    // The top scorer of each of the last four finished weeks, only when they scored.
+    const hallOfFame = [1, 2, 3, 4].map((k) => {
+      const from = week.from - k * 7 * DAY, rows = rank(between(from, from + 7 * DAY));
+      return rows[0]?.points > 0 ? { weekStart: localDay(from, tz), userId: rows[0].userId, name: rows[0].name, points: rows[0].points } : null;
+    }).filter(Boolean);
+    return {
+      level: levelFor(life.points), lifetime: { calls: life.calls, answered: life.answered, quotations: life.quotations, won: life.won, points: life.points },
+      streak: current, bestStreak: best, weekPoints: wk.points,
+      week: place(weekRows), month: place(monthRows), weekBoard: weekRows.slice(0, 10), challenges, milestones, hallOfFame,
+    };
+  }
+
   function myDay({ userId, now = Date.now(), dayStart, dayEnd, tz = 330 }) {
     const d = data();
     dayStart ??= Math.floor((now + tz * 60000) / DAY) * DAY - tz * 60000;
     dayEnd ??= dayStart + DAY - 1;
     const goal = goals(userId);
-    const today = sum(dailyEvents(d, { from: dayStart, to: dayEnd + 1, tz }).filter((e) => e.userId === userId));
+    const dayRows = dailyEvents(d, { from: dayStart, to: dayEnd + 1, tz });
+    const today = sum(dayRows.filter((e) => e.userId === userId));
+    const crew = activeUsers();
+    const teamToday = { calls: sum(dayRows.filter((e) => crew.some((u) => u.id === e.userId))).calls, goal: crew.reduce((s, u) => s + goals(u.id).calls, 0) };
     const firstCall = d.calls
       .filter((c) => c.direction === "Outgoing" && ms(c.startedAt) >= dayStart && ms(c.startedAt) <= dayEnd && (d.devices.get(c.deviceId) || d.leads.find((l) => l.id === c.leadId)?.owner) === userId)
       .map((c) => ms(c.startedAt)).sort((a, b) => a - b)[0];
     const firstHour = firstCall === undefined ? null : new Date(firstCall + tz * 60000).getUTCHours();
     const lateLeft = lateCount(d, userId, dayStart);
-    const week = weekRange(now, tz);
     return {
-      goal, today, pointRules: POINTS, minCallSeconds: MIN_CALL_SECONDS,
-      streak: streak(d, userId, now, tz, goal.calls),
-      weekPoints: sum(dailyEvents(d, { ...week, tz }).filter((e) => e.userId === userId)).points,
+      goal, today, pointRules: POINTS, minCallSeconds: MIN_CALL_SECONDS, teamToday,
+      ...progress(d, userId, now, tz, goal),
       lateLeft, next: nextUp(d, userId, dayStart, dayEnd),
       badges: [
         { id: "goal", label: "Daily goal reached", earned: goal.calls > 0 && today.calls >= goal.calls, hint: `Make ${goal.calls} calls today.` },
@@ -160,8 +217,13 @@ export function createKpi({ db, all, get, put, deviceOwners = () => new Map() })
     };
   }
 
-  function leaderboard({ now = Date.now(), tz = 330 } = {}) {
-    const events = dailyEvents(data(), { ...weekRange(now, tz), tz });
+  function leaderboard({ now = Date.now(), tz = 330, period = "week" } = {}) {
+    let range = weekRange(now, tz);
+    if (period === "month") {
+      const local = new Date(now + tz * 60000);
+      range = { from: Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), 1) - tz * 60000, to: Date.UTC(local.getUTCFullYear(), local.getUTCMonth() + 1, 1) - tz * 60000 };
+    }
+    const events = dailyEvents(data(), { ...range, tz });
     const rows = activeUsers().map((u) => ({ userId: u.id, name: u.name, ...sum(events.filter((e) => e.userId === u.id)) }));
     rows.sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
     return rows.map((r, i) => ({ rank: i + 1, ...r }));

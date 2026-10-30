@@ -1,0 +1,33 @@
+/* ---- Levels, challenges, milestones and the weekly stars ---- */
+.levelstrip { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 16px; padding: 14px 18px; margin-bottom: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.level-badge { width: 56px; height: 56px; display: grid; place-items: center; border-radius: 12px; background: var(--press); color: var(--on-press); font-family: var(--display); font-weight: 800; font-size: 30px; line-height: 1; }
+.level-main { display: grid; gap: 4px; min-width: 0; }
+.level-name { font-family: var(--display); font-weight: 800; font-size: 24px; line-height: 1; }
+.levelstrip progress, .challenges progress, .teamgoal progress { width: 100%; height: 10px; accent-color: var(--oil); }
+.level-rank { display: grid; justify-items: end; text-align: right; }
+.level-rank b { font-family: var(--display); font-size: 30px; line-height: 1; }
+.level-rank small { color: var(--muted); }
+.cheer { margin: 0 0 14px; padding: 12px 16px; border-radius: 8px; background: var(--leaf-soft); border: 1px solid var(--leaf); font-weight: 600; }
+.teamgoal { display: grid; grid-template-columns: minmax(110px, 160px) minmax(0, 1fr) auto; align-items: center; gap: 12px; margin-top: 12px; color: var(--ink-2); }
+.challenges { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.challenges li { display: grid; grid-template-columns: minmax(120px, 200px) minmax(0, 1fr) auto; align-items: center; gap: 12px; }
+.challenges li span { display: inline-flex; align-items: center; gap: 6px; }
+.challenge-done span { color: var(--leaf); font-weight: 700; }
+.challenge-done progress { accent-color: var(--leaf); }
+.milestones { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.milestone { display: grid; justify-items: start; gap: 2px; padding: 10px 12px; border: 1px dashed var(--line-strong); border-radius: 8px; color: var(--muted); }
+.milestone b { font-weight: 600; }
+.milestone-on { border-style: solid; border-color: var(--oil); background: var(--oil-soft); color: var(--oil-ink); }
+.period-tabs { padding: 0; gap: 18px; margin-bottom: 10px; }
+.hall li { display: grid; gap: 2px; }
+.hall li span { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+@media (max-width: 640px) {
+  .levelstrip { grid-template-columns: auto minmax(0, 1fr); }
+  .level-rank { grid-column: 1 / -1; justify-items: start; text-align: left; grid-auto-flow: column; gap: 8px; align-items: baseline; }
+  .teamgoal, .challenges li { grid-template-columns: 1fr auto; }
+  .teamgoal progress, .challenges li progress { grid-column: 1 / -1; grid-row: 2; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .cheer { animation: cheer-in 0.5s ease-out; }
+  @keyframes cheer-in { from { transform: translateY(-6px); opacity: 0; } to { transform: none; opacity: 1; } }
+}

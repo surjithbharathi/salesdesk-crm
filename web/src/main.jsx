@@ -8,6 +8,7 @@ import App from "./App.jsx";
 import { ToastProvider } from "./toast.jsx";
 import "./styles.css";
 import "./settings.css";
+import "./game.css";
 
 createRoot(document.getElementById("root")).render(
   <ToastProvider>

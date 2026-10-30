@@ -120,6 +120,16 @@ test("KPI endpoints: team vs caller scope, goals need the owner, same-origin wri
     assert.equal((await json(path, { headers: { Cookie: ownerCookie } })).status, 200, path);
   }
   assert.equal((await json("/api/workspace/access", { headers: { Cookie: callerCookie } })).status, 200);
+  // the phone app reads the signed-in person's own day from the device API
+  const mobileBase = `http://127.0.0.1:${port + 1}`;
+  assert.equal((await fetch(mobileBase + "/v1/kpi/day")).status, 401);
+  const phoneLogin = await fetch(mobileBase + "/v1/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: "caller@example.test", password: "synthetic-password-123", deviceId: "11111111-2222-4333-8444-555555555555" }) });
+  assert.equal(phoneLogin.status, 200);
+  const phoneToken = (await phoneLogin.json()).token;
+  const phoneDay = await fetch(mobileBase + `/v1/kpi/day/330/${Date.now() - 3600000}/${Date.now() + 3600000}`, { headers: { Authorization: `Bearer ${phoneToken}` } });
+  assert.equal(phoneDay.status, 200);
+  const phoneKpi = await phoneDay.json();
+  assert.ok(phoneKpi.goal.calls > 0 && phoneKpi.today && Array.isArray(phoneKpi.badges) && "streak" in phoneKpi, JSON.stringify(Object.keys(phoneKpi)));
   // WhatsApp, call AI and AI connections are administrator-only
   for (const path of ["/api/whatsapp/status", "/api/call-ai/settings", "/api/call-ai/keys", "/api/mcp/keys", "/api/mcp/approvals"]) {
     const asCaller = await json(path, { headers: { Cookie: callerCookie } });

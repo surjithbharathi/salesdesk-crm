@@ -331,7 +331,7 @@ function handleKpi(req, url, identity, send, body) {
     if (!userId || !get("users", userId)) bad("Choose a person with ?user=", 400);
     return send(200, kpi.myDay({ userId, dayStart: number("dayStart"), dayEnd: number("dayEnd"), tz }));
   }
-  if (path === "/leaderboard") return send(200, kpi.leaderboard({ tz }));
+  if (path === "/leaderboard") return send(200, kpi.leaderboard({ tz, period: p.get("period") === "month" ? "month" : "week" }));
   if (path === "/team") {
     if (!lead) bad("Managers and owners only", 403);
     return send(200, kpi.team({ dayStart: number("dayStart"), dayEnd: number("dayEnd"), tz }));
@@ -497,6 +497,15 @@ const mobileServer = http.createServer(async (req, res) => {
       if(identity.user.role !== "admin")bad("Administrator required",403);
       workspaceAccess.requirePermission(identity,'users.manage');
       reply(200,{users:userAuth.listAccounts()});return;
+    }
+    const phoneDay = /^\/v1\/kpi\/day(?:\/(-?\d{1,4})\/(\d{10,14})\/(\d{10,14}))?$/.exec(url.pathname);
+    if (phoneDay && req.method === "GET") {
+      // The phone shows the signed-in person's own day: goals, streak, badges and who to call next.
+      // It sends its own time zone and day bounds in the path, because the app refuses query strings.
+      if (!identity) bad("Shared user login required", 401);
+      const [, tz, dayStart, dayEnd] = phoneDay;
+      reply(200, kpi.myDay({ userId: identity.user.id, tz: tz === undefined ? 330 : Number(tz), dayStart: dayStart === undefined ? undefined : Number(dayStart), dayEnd: dayEnd === undefined ? undefined : Number(dayEnd) }));
+      return;
     }
     if (url.pathname === "/v1/workspace" && req.method === "GET") {
       if (!identity) bad("Shared user login required", 401);
