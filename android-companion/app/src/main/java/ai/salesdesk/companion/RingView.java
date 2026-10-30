@@ -27,7 +27,7 @@ final class RingView extends View {
         arc.setColor(color);
         big.setColor(ink);
         big.setTextAlign(Paint.Align.CENTER);
-        big.setTypeface(Typeface.create("sans-serif-condensed", Typeface.BOLD));
+        big.setTypeface(Typeface.create(MainActivity.CONDENSED ? "sans-serif-condensed" : "sans-serif-medium", Typeface.BOLD));
         small.setColor(muted);
         small.setTextAlign(Paint.Align.CENTER);
         setContentDescription(label + ", " + value + " of " + goal);
@@ -46,7 +46,7 @@ final class RingView extends View {
         canvas.drawArc(box, 0, 360, false, track);
         boolean met = goal > 0 && value >= goal;
         float share = goal > 0 ? Math.min(1f, value / (float) goal) : 0f;
-        arc.setColor(met ? 0xff4fc08e : color);
+        arc.setColor(met ? MainActivity.PANELGOOD : color);
         if (share > 0) canvas.drawArc(box, -90, 360 * share, false, arc);
         if (met) {
             float c = size / 2;

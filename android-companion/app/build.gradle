@@ -6,7 +6,7 @@ android {
     namespace 'ai.salesdesk.companion'
     compileSdk 36
     buildFeatures { buildConfig true; resValues true }
-    defaultConfig { applicationId 'ai.salesdesk.companion'; minSdk 26; targetSdk 36; versionCode 14; versionName '0.14.0'; resValue 'string', 'app_name', 'Salesdesk'; buildConfigField 'String', 'CRM_API_ORIGIN', groovy.json.JsonOutput.toJson(crmOrigin) }
+    defaultConfig { applicationId 'ai.salesdesk.companion'; minSdk 26; targetSdk 36; versionCode 15; versionName '0.15.0'; resValue 'string', 'app_name', 'Salesdesk'; buildConfigField 'String', 'CRM_API_ORIGIN', groovy.json.JsonOutput.toJson(crmOrigin) }
     if (providers.gradleProperty('crmPreview').orNull == 'true') { defaultConfig { applicationIdSuffix '.preview'; versionNameSuffix '-preview'; resValue 'string', 'app_name', 'Salesdesk Preview' } }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
 }

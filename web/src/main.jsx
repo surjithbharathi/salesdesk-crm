@@ -9,6 +9,7 @@ import { ToastProvider } from "./toast.jsx";
 import "./styles.css";
 import "./settings.css";
 import "./game.css";
+import "./skins.css";
 
 createRoot(document.getElementById("root")).render(
   <ToastProvider>

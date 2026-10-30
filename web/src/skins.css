@@ -1,0 +1,87 @@
+/* Skins: the app's own look is the default. "salesmax" and "telecrm" follow the palettes those two apps use, so people moving over
+   find familiar colours. Colours were read from the colour resources and style sheet of the two apps installed on the owner's phone;
+   no artwork, icon, layout or code was copied. Each skin has a light and a dark set; an explicit data-theme still wins. */
+
+/* ---- Salesmax style: indigo on white ---- */
+:root[data-skin="salesmax"] {
+  --display: var(--font);
+  --iron: #ffffff; --iron-2: #eef0fd; --iron-text: #3a3d47; --iron-muted: #8a8fa0;
+  --bg: #f4f5f8; --surface: #ffffff; --sunken: #eceef3; --line: #e3e5ea; --line-strong: #c1c5cf;
+  --ink: #15161b; --ink-2: #3a3d47; --muted: #5a5e6b;
+  --oil: #5b63eb; --oil-soft: #eef0fd; --oil-ink: #4a52d8;
+  --leaf: #17845c; --leaf-soft: #e6f7ef; --kumkum: #e0524e; --kumkum-soft: #fdeeee; --steel: #3aa0e8; --steel-soft: #e3f1fc;
+  --press: #5b63eb; --on-press: #ffffff; --ghost: #eef0fd;
+  --shadow: 0 18px 44px rgba(21, 22, 27, 0.14);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-skin="salesmax"]:not([data-theme="light"]) {
+    --iron: #0e0f13; --iron-2: #1f2130; --iron-text: #d6d8e6; --iron-muted: #8a8fa0;
+    --bg: #121318; --surface: #1a1b22; --sunken: #0e0f13; --line: #2a2c35; --line-strong: #3b3e4b;
+    --ink: #e3e2e9; --ink-2: #c4c6d0; --muted: #9094a3;
+    --oil: #8d94ef; --oil-soft: #23264a; --oil-ink: #b4bbff;
+    --leaf: #4fc08e; --leaf-soft: #14332a; --kumkum: #ff8a85; --kumkum-soft: #3b1d1d; --steel: #6cb8f0; --steel-soft: #17303d;
+    --press: #8d94ef; --on-press: #121318; --ghost: #23264a;
+  }
+}
+:root[data-skin="salesmax"][data-theme="dark"] {
+  --iron: #0e0f13; --iron-2: #1f2130; --iron-text: #d6d8e6; --iron-muted: #8a8fa0;
+  --bg: #121318; --surface: #1a1b22; --sunken: #0e0f13; --line: #2a2c35; --line-strong: #3b3e4b;
+  --ink: #e3e2e9; --ink-2: #c4c6d0; --muted: #9094a3;
+  --oil: #8d94ef; --oil-soft: #23264a; --oil-ink: #b4bbff;
+  --leaf: #4fc08e; --leaf-soft: #14332a; --kumkum: #ff8a85; --kumkum-soft: #3b1d1d; --steel: #6cb8f0; --steel-soft: #17303d;
+  --press: #8d94ef; --on-press: #121318; --ghost: #23264a;
+}
+:root[data-skin="salesmax"] .rail { border-right: 1px solid var(--line); }
+:root[data-skin="salesmax"] .brand-name { color: var(--ink); font-weight: 700; }
+:root[data-skin="salesmax"] .rail-link[aria-current="page"] { color: var(--oil-ink); border-left-color: transparent; border-radius: 10px; }
+:root[data-skin="salesmax"] .rail-foot a:hover, :root[data-skin="salesmax"] .rail-foot button:hover { color: var(--ink); }
+:root[data-skin="salesmax"] .brand-mark { border-radius: 10px; color: #ffffff; }
+:root[data-skin="salesmax"] .who .avatar { color: #ffffff; }
+:root[data-skin="salesmax"] .work-title { font-weight: 700; font-size: 30px; letter-spacing: 0; }
+:root[data-skin="salesmax"] .sheet { border-radius: 14px; }
+
+/* ---- TeleCRM style: deep purple ---- */
+:root[data-skin="telecrm"] {
+  --display: var(--font);
+  --iron: #4f38a2; --iron-2: #6452b3; --iron-text: #ece8ff; --iron-muted: #cfc7f2;
+  --bg: #f6f5fb; --surface: #ffffff; --sunken: #efefef; --line: #e5e5e5; --line-strong: #cfcfcf;
+  --ink: #1b1b1f; --ink-2: #3a3a42; --muted: #707070;
+  --oil: #4f38a2; --oil-soft: #e8e4ff; --oil-ink: #4f38a2;
+  --leaf: #1f8a5b; --leaf-soft: #e0f4ea; --kumkum: #d64545; --kumkum-soft: #fbe3e3; --steel: #0077df; --steel-soft: #e0efff;
+  --press: #4f38a2; --on-press: #ffffff; --ghost: #efefef;
+  --shadow: 0 18px 44px rgba(19, 0, 89, 0.18);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-skin="telecrm"]:not([data-theme="light"]) {
+    --iron: #130059; --iron-2: #2a1a78; --iron-text: #ece8ff; --iron-muted: #b3a8ea;
+    --bg: #14111f; --surface: #1d1930; --sunken: #100d1a; --line: #2d2748; --line-strong: #40396a;
+    --ink: #eeeaff; --ink-2: #cfc9ee; --muted: #9d96c0;
+    --oil: #7868ee; --oil-soft: #2a2250; --oil-ink: #bdb2ff;
+    --leaf: #4fc08e; --leaf-soft: #14332a; --kumkum: #ff8a85; --kumkum-soft: #3b1d1d; --steel: #5aa9f0; --steel-soft: #17303d;
+    --press: #7868ee; --on-press: #ffffff; --ghost: #2a2250;
+  }
+}
+:root[data-skin="telecrm"][data-theme="dark"] {
+  --iron: #130059; --iron-2: #2a1a78; --iron-text: #ece8ff; --iron-muted: #b3a8ea;
+  --bg: #14111f; --surface: #1d1930; --sunken: #100d1a; --line: #2d2748; --line-strong: #40396a;
+  --ink: #eeeaff; --ink-2: #cfc9ee; --muted: #9d96c0;
+  --oil: #7868ee; --oil-soft: #2a2250; --oil-ink: #bdb2ff;
+  --leaf: #4fc08e; --leaf-soft: #14332a; --kumkum: #ff8a85; --kumkum-soft: #3b1d1d; --steel: #5aa9f0; --steel-soft: #17303d;
+  --press: #7868ee; --on-press: #ffffff; --ghost: #2a2250;
+}
+:root[data-skin="telecrm"] .brand-mark { background: #ffffff; color: #4f38a2; border-radius: 8px; }
+:root[data-skin="telecrm"] .rail-link[aria-current="page"] { border-left-color: #ffffff; }
+:root[data-skin="telecrm"] .who .avatar { background: #ffffff; color: #4f38a2; }
+:root[data-skin="telecrm"] .work-title { font-weight: 700; font-size: 30px; letter-spacing: 0; }
+
+/* ---- the picker in Settings ---- */
+.skin-list { display: grid; gap: 10px; max-width: 520px; }
+.skin-option { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 12px; align-items: center; text-align: left; padding: 12px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.skin-option[aria-checked="true"] { border-color: var(--oil); background: var(--oil-soft); }
+.skin-swatch { grid-row: span 2; display: inline-flex; width: 52px; height: 32px; border-radius: 6px; overflow: hidden; border: 1px solid var(--line-strong); }
+.skin-swatch i { flex: 1; }
+.swatch-salesdesk i:nth-child(1) { background: #1e2629; } .swatch-salesdesk i:nth-child(2) { background: #e9a800; } .swatch-salesdesk i:nth-child(3) { background: #eceeec; }
+.swatch-salesmax i:nth-child(1) { background: #ffffff; } .swatch-salesmax i:nth-child(2) { background: #5b63eb; } .swatch-salesmax i:nth-child(3) { background: #f4f5f8; }
+.swatch-telecrm i:nth-child(1) { background: #4f38a2; } .swatch-telecrm i:nth-child(2) { background: #e8e4ff; } .swatch-telecrm i:nth-child(3) { background: #f6f5fb; }
+.skin-option b { font-weight: 700; }
+.skin-option small { color: var(--muted); }

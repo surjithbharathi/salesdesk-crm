@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useState } from "react";
+import { SKINS, applySkin, readSkin } from "../skin.js";
 import { crmGet, logout } from "../api.js";
 import { useLoad } from "../hooks.js";
 import { hashFor } from "../format.js";
@@ -10,6 +11,25 @@ import Mcp from "./settings/Mcp.jsx";
 import Assign from "./settings/Assign.jsx";
 import Workspaces from "./settings/Workspaces.jsx";
 import { Import, Export, Archived, Merge } from "./settings/LeadData.jsx";
+
+function Appearance() {
+  const [skin, setSkin] = useState(readSkin);
+  return (
+    <>
+      <h2 className="section-title">Appearance</h2>
+      <p className="muted report-meta">Pick the look you are used to. It stays in this browser, and the light or dark choice still works with each one.</p>
+      <div className="skin-list" role="radiogroup" aria-label="Appearance">
+        {SKINS.map((s) => (
+          <button key={s.id} role="radio" aria-checked={skin === s.id} className="skin-option" onClick={() => { applySkin(s.id); setSkin(s.id); }}>
+            <span className={`skin-swatch swatch-${s.id}`} aria-hidden="true"><i /><i /><i /></span>
+            <b>{s.name}</b>
+            <small>{s.note}</small>
+          </button>
+        ))}
+      </div>
+    </>
+  );
+}
 
 export default function Settings({ params, me }) {
   const { data: access, error } = useLoad(() => crmGet("workspace/access"), []);
@@ -47,6 +67,7 @@ export default function Settings({ params, me }) {
         {tab[0] === "account" ? (
           <>
             <p><b>{me.users.find((u) => u.id === me.id)?.name || "You"}</b><br /><span className="muted">{roleLabel}</span></p>
+            <Appearance />
             <span className="newlead-actions">
               <button className="btn" onClick={async () => { await logout(); location.reload(); }}>Sign out</button>
             </span>

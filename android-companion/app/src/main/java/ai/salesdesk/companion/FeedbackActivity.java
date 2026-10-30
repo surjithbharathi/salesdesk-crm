@@ -14,7 +14,7 @@ public class FeedbackActivity extends Activity {
     EditText note;TextView status;Button record,send,listen;android.media.MediaPlayer player;boolean pendingMic;long recordingAt;
     final Handler timerHandler=new Handler(Looper.getMainLooper());
     final Runnable tick=new Runnable(){public void run(){if(recorder!=null){long seconds=(SystemClock.elapsedRealtime()-recordingAt)/1000;status.setText(String.format(java.util.Locale.ROOT,"Recording %d:%02d · Tap Stop when done",seconds/60,seconds%60));timerHandler.postDelayed(this,500);}}};
-    @Override public void onCreate(Bundle state){super.onCreate(state);callId=getIntent().getStringExtra("callId");userId=getIntent().getStringExtra("userId");
+    @Override public void onCreate(Bundle state){super.onCreate(state);Theme.load(this);callId=getIntent().getStringExtra("callId");userId=getIntent().getStringExtra("userId");
         if(callId==null||!callId.matches("[a-f0-9-]{36}")||!validUser()){finish();return;}
         getWindow().setFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE,android.view.WindowManager.LayoutParams.FLAG_SECURE);
         new FeedbackLayout(this).render();

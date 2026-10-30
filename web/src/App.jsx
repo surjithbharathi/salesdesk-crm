@@ -3,6 +3,7 @@ import { authStatus, login, logout, AuthError, v2 } from "./api.js";
 import { parseHash, hashFor, initials } from "./format.js";
 import { useHash } from "./hooks.js";
 import Icon from "./icons.jsx";
+import { applySkin, readSkin } from "./skin.js";
 import Business from "./pages/Business.jsx";
 import Leads from "./pages/Leads.jsx";
 import Calls from "./pages/Calls.jsx";
@@ -93,6 +94,7 @@ export default function App() {
   const [session, setSession] = useState({ state: "loading" });
   const [meta, setMeta] = useState(null);
   const [dark, toggleTheme] = useTheme();
+  useEffect(() => applySkin(readSkin()), []);
 
   async function boot() {
     try {

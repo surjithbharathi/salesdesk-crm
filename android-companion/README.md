@@ -25,3 +25,7 @@ gradle :app:assembleDebug -PcrmPreview=true -PcrmApiOrigin=https://salesdesk-crm
 ```
 
 Production CRM is `salesdesk-crm.srv2101310.hstgr.cloud`. The old `srv1696974` host is not the live CRM.
+
+## 0.15.0: choose the look
+
+Settings starts with **Appearance**: Salesdesk (our own), Salesmax style and TeleCRM style. The colours of the last two were read from the colour resources (Salesmax) and the style sheet (TeleCRM) of the apps installed on the owner's phone; no artwork, icon, layout file or code was copied. Only palette, corner radius and typeface weight change; the screens and navigation are the same in every skin. The same three skins exist in the web app (Settings, Your account).
