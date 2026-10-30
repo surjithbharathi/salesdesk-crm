@@ -15,19 +15,19 @@ final class RingView extends View {
     private final Path tick = new Path();
     private final int value, goal, color;
 
-    RingView(Context context, String label, int value, int goal, int color, int ink, int muted) {
+    RingView(Context context, String label, int value, int goal, int color, int ink, int muted, int trackColor) {
         super(context);
         this.value = value;
         this.goal = goal;
         this.color = color;
         track.setStyle(Paint.Style.STROKE);
-        track.setColor(0xffeceef5);
+        track.setColor(trackColor);
         arc.setStyle(Paint.Style.STROKE);
         arc.setStrokeCap(Paint.Cap.ROUND);
         arc.setColor(color);
         big.setColor(ink);
         big.setTextAlign(Paint.Align.CENTER);
-        big.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        big.setTypeface(Typeface.create("sans-serif-condensed", Typeface.BOLD));
         small.setColor(muted);
         small.setTextAlign(Paint.Align.CENTER);
         setContentDescription(label + ", " + value + " of " + goal);
@@ -46,7 +46,7 @@ final class RingView extends View {
         canvas.drawArc(box, 0, 360, false, track);
         boolean met = goal > 0 && value >= goal;
         float share = goal > 0 ? Math.min(1f, value / (float) goal) : 0f;
-        arc.setColor(met ? 0xff17806c : color);
+        arc.setColor(met ? 0xff4fc08e : color);
         if (share > 0) canvas.drawArc(box, -90, 360 * share, false, arc);
         if (met) {
             float c = size / 2;
