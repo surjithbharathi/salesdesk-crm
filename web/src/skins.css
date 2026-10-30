@@ -316,3 +316,34 @@
 .tele-tasklist { padding: 4px 12px 12px; }
 .tele-tasklist .late { color: var(--kumkum); }
 @media (max-width: 760px) { .tele-config-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---- TeleCRM style: a folded left menu opens while the pointer is over it (or a menu item has keyboard focus),
+   floating over the page so nothing underneath moves ---- */
+@media (hover: hover) and (min-width: 761px) {
+  :root[data-skin="telecrm"][data-rail="collapsed"] .rail { width: 56px; z-index: 20; background: var(--iron); transition: width 0.15s ease, box-shadow 0.15s ease; overflow: hidden; }
+  :root[data-skin="telecrm"][data-rail="collapsed"] .rail:hover,
+  :root[data-skin="telecrm"][data-rail="collapsed"] .rail:focus-within { width: 190px; align-items: stretch; padding: 14px 10px; box-shadow: var(--shadow); }
+  :root[data-skin="telecrm"][data-rail="collapsed"] .rail:hover .brand-text,
+  :root[data-skin="telecrm"][data-rail="collapsed"] .rail:focus-within .brand-text { display: block; }
+  :root[data-skin="telecrm"][data-rail="collapsed"] .rail:hover .brand-co,
+  :root[data-skin="telecrm"][data-rail="collapsed"] .rail:focus-within .brand-co { display: none; }
+  :root[data-skin="telecrm"][data-rail="collapsed"] .rail:hover .brand-name,
+  :root[data-skin="telecrm"][data-rail="collapsed"] .rail:focus-within .brand-name { color: #4f38a2; font-size: 22px; font-weight: 700; }
+  :root[data-skin="telecrm"][data-rail="collapsed"] .rail:hover .rail-nav,
+  :root[data-skin="telecrm"][data-rail="collapsed"] .rail:focus-within .rail-nav,
+  :root[data-skin="telecrm"][data-rail="collapsed"] .rail:hover .rail-foot,
+  :root[data-skin="telecrm"][data-rail="collapsed"] .rail:focus-within .rail-foot { align-items: stretch; }
+  :root[data-skin="telecrm"][data-rail="collapsed"] .rail:hover .rail-link,
+  :root[data-skin="telecrm"][data-rail="collapsed"] .rail:focus-within .rail-link { width: auto; height: 38px; padding: 0 12px; justify-content: flex-start; gap: 12px; border: 0; color: var(--ink-2); white-space: nowrap; }
+  :root[data-skin="telecrm"][data-rail="collapsed"] .rail:hover .rail-link[aria-current="page"],
+  :root[data-skin="telecrm"][data-rail="collapsed"] .rail:focus-within .rail-link[aria-current="page"] { background: #f1eeff; border: 0; color: #4f38a2; font-weight: 600; }
+  :root[data-skin="telecrm"][data-rail="collapsed"] .rail:hover .label,
+  :root[data-skin="telecrm"][data-rail="collapsed"] .rail:focus-within .label { display: inline; }
+  :root[data-skin="telecrm"][data-rail="collapsed"] .rail:hover .rail-foot a,
+  :root[data-skin="telecrm"][data-rail="collapsed"] .rail:hover .rail-foot button,
+  :root[data-skin="telecrm"][data-rail="collapsed"] .rail:focus-within .rail-foot a,
+  :root[data-skin="telecrm"][data-rail="collapsed"] .rail:focus-within .rail-foot button { justify-content: flex-start; padding: 8px 12px; gap: 12px; white-space: nowrap; }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root[data-skin="telecrm"][data-rail="collapsed"] .rail { transition: none; }
+}
