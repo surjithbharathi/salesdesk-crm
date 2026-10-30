@@ -4,6 +4,9 @@ import { useLoad } from "../hooks.js";
 import { hashFor } from "../format.js";
 import Users, { ROLES } from "./settings/Users.jsx";
 import Email from "./settings/Email.jsx";
+import WhatsApp from "./settings/WhatsApp.jsx";
+import CallAI from "./settings/CallAI.jsx";
+import Mcp from "./settings/Mcp.jsx";
 import { Import, Export, Archived, Merge } from "./settings/LeadData.jsx";
 
 export default function Settings({ params, me }) {
@@ -11,10 +14,15 @@ export default function Settings({ params, me }) {
   if (error) return <p className="error">{error.message}</p>;
   if (!access) return <p className="muted">Loading settings…</p>;
   const can = (p) => Boolean(access.permissions?.[p]);
-  const full = { ...access, users: me.users };
+  // The server also requires the Administrator role for call AI and AI connections.
+  const admin = can("integrations.manage") && (access.crmOwner || ["owner", "admin"].includes(access.role));
+  const full ={ ...access, users: me.users };
   const sections = [
     ["users", "People and access", can("users.manage"), <Users access={full} />],
     ["email", "Email", can("integrations.manage"), <Email />],
+    ["whatsapp", "WhatsApp", can("integrations.manage"), <WhatsApp />],
+    ["callai", "Call AI", admin, <CallAI />],
+    ["mcp", "AI connections", admin, <Mcp />],
     ["import", "Add leads from a file", can("leads.write") && can("data.export"), <Import access={full} />],
     ["merge", "Merge duplicates", can("leads.write") && me.lead, <Merge />],
     ["archived", "Archived leads", can("leads.write"), <Archived />],

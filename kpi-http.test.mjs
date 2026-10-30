@@ -109,4 +109,21 @@ test("KPI endpoints: team vs caller scope, goals need the owner, same-origin wri
     assert.equal((await json(path, { headers: { Cookie: ownerCookie } })).status, 200, path);
   }
   assert.equal((await json("/api/workspace/access", { headers: { Cookie: callerCookie } })).status, 200);
+  // WhatsApp, call AI and AI connections are administrator-only
+  for (const path of ["/api/whatsapp/status", "/api/call-ai/settings", "/api/call-ai/keys", "/api/mcp/keys", "/api/mcp/approvals"]) {
+    const asCaller = await json(path, { headers: { Cookie: callerCookie } });
+    assert.equal(asCaller.status, 403, path); // a caller never gets the pairing code, keys or connections
+    const owner = await json(path, { headers: { Cookie: ownerCookie } });
+    assert.equal(owner.status, 200, `${path} ${JSON.stringify(owner.data)}`);
+  }
+  // keys: save, list without the secret, turn off
+  const saved = await post("/api/call-ai/keys", { provider: "openai", label: "Test key", key: "sk-synthetic-test-key" }, ownerCookie);
+  assert.equal(saved.status, 200, JSON.stringify(saved.data));
+  const listed = await json("/api/call-ai/keys", { headers: { Cookie: ownerCookie } });
+  assert.equal(JSON.stringify(listed.data).includes("sk-synthetic"), false);
+  // MCP connection: created once with a token, then listed without it
+  const conn = await post("/api/mcp/keys", { label: "Test connection", scopes: ["leads:read"] }, ownerCookie);
+  assert.equal(conn.status, 201, JSON.stringify(conn.data));
+  assert.match(conn.data.token, /^sdmcp_/);
+  assert.equal(JSON.stringify((await json("/api/mcp/keys", { headers: { Cookie: ownerCookie } })).data).includes(conn.data.token), false);
 });
