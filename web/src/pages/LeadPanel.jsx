@@ -18,7 +18,7 @@ function atTen(daysAhead) {
   return localInput(d);
 }
 
-function Facts({ rows }) {
+export function Facts({ rows }) {
   return (
     <dl className="facts">
       {rows.map(([label, value]) => (
@@ -54,7 +54,7 @@ function Timeline({ items }) {
   ));
 }
 
-function Update({ lead, crm }) {
+export function Update({ lead, crm }) {
   const notify = useToast();
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState(lead.stage);

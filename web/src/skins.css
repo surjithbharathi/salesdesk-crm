@@ -169,3 +169,78 @@
 .tele-fresh { color: var(--muted); }
 .tele-empty { display: grid; justify-items: center; gap: 6px; padding: 38px 18px; color: var(--muted); text-align: center; }
 .tele-cta { display: grid; place-items: center; padding-bottom: 24px; margin: 0; }
+
+/* ---- TeleCRM style: calls, search and lead views ---- */
+:root[data-skin="telecrm"] .work:has(.tele-split) { padding: 0; }
+.tele-split { display: grid; grid-template-columns: minmax(300px, 400px) minmax(0, 1fr); min-height: calc(100vh - 52px); }
+.tele-list { border-right: 1px solid var(--line); overflow: auto; max-height: calc(100vh - 52px); padding: 14px 12px 40px; background: var(--sunken); }
+.tele-list-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.tele-list-head h1 { font-size: 15px; font-weight: 600; margin: 0; }
+.tele-list ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.tele-pills { margin-bottom: 10px; }
+.tele-call { width: 100%; text-align: left; display: grid; gap: 2px; padding: 10px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.tele-call[aria-current="true"], .tele-hit[aria-current="true"] { border-color: var(--oil); background: var(--oil-soft); }
+.tele-call-name { color: var(--oil-ink); font-size: 16px; font-weight: 600; overflow-wrap: anywhere; }
+.tele-call-phone { color: var(--muted); font-size: 13px; }
+.tele-call-status { font-size: 13px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+.tele-call-line { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--ink-2); flex-wrap: wrap; }
+.tele-connected { font-style: italic; color: var(--ink-2); }
+.tele-missed { font-style: italic; color: var(--kumkum); }
+.tele-more { margin: 12px auto 0; display: block; }
+.tele-count { margin: 6px 4px; font-size: 13px; color: var(--ink-2); }
+.tele-search-big { margin: 0 0 8px; }
+.tele-hit { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 10px; text-align: left; padding: 10px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.tele-hit-main b { display: block; color: var(--oil-ink); font-size: 15.5px; font-weight: 600; overflow-wrap: anywhere; }
+.tele-hit-main small { color: var(--muted); font-size: 12.5px; overflow-wrap: anywhere; }
+.tele-hit .avatar { width: 26px; height: 26px; background: var(--oil-soft); color: var(--oil-ink); font-size: 10px; }
+.tele-hit mark, .tele-search mark { background: var(--oil); color: var(--on-press); padding: 0 1px; border-radius: 2px; }
+.tele-detail { padding: 18px 24px 60px; min-width: 0; max-height: calc(100vh - 52px); overflow: auto; }
+.tele-detail-empty { display: grid; place-content: center; justify-items: center; gap: 8px; color: var(--muted); padding: 40px; }
+.tele-detail-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.tele-detail-head h2 { font-size: 18px; font-weight: 600; overflow-wrap: anywhere; }
+.tele-detail-line { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.tele-owner { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; }
+.tele-owner .avatar { width: 28px; height: 28px; background: var(--oil-soft); color: var(--oil-ink); font-size: 10px; }
+.tele-detail-tabs { padding: 0; gap: 22px; margin: 16px 0 12px; }
+.tele-detail-body { min-height: 120px; }
+.tele-copy { background: none; border: 0; color: var(--muted); padding: 2px; }
+.tele-actions { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin: 18px 0; padding: 12px 6px; background: var(--sunken); border: 1px solid var(--line); border-radius: 8px; }
+.tele-action { display: grid; justify-items: center; gap: 4px; padding: 6px; background: none; border: 0; color: var(--ink-2); font-size: 11px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; }
+.tele-action:hover { color: var(--oil); }
+.tele-action:disabled, .tele-action[disabled] { opacity: 0.45; cursor: default; }
+.tele-log-tabs { padding: 0; gap: 22px; display: flex; align-items: center; }
+.tele-log-filter { margin-left: auto; }
+.tele-log { list-style: none; margin: 8px 0 0; padding: 0; }
+.tele-log li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 11px 6px; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+.tele-log-icon { color: var(--muted); display: grid; place-items: center; width: 24px; }
+.tele-log-text { overflow-wrap: anywhere; }
+.tele-log-text small { color: var(--muted); }
+.tele-log-when { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+.tele-log-when .avatar { width: 22px; height: 22px; background: var(--oil-soft); color: var(--oil-ink); font-size: 9px; }
+.tele-views { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--line); margin-bottom: 12px; }
+.tele-view { background: none; border: 0; border-bottom: 3px solid transparent; padding: 8px 12px; font-size: 13.5px; font-weight: 600; color: var(--muted); }
+.tele-view[aria-selected="true"] { color: var(--oil); border-bottom-color: var(--oil); }
+.tele-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; position: relative; }
+.tele-spacer { flex: 1; }
+.tele-filters summary { list-style: none; display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--oil-soft); color: var(--oil-ink); font-size: 13px; font-weight: 600; cursor: pointer; }
+.tele-filters summary::-webkit-details-marker { display: none; }
+.tele-badge { display: inline-grid; place-items: center; min-width: 18px; height: 18px; border-radius: 9px; background: var(--oil); color: var(--on-press); font-size: 11px; }
+.tele-filter-pop { position: absolute; z-index: 6; top: 42px; left: 0; display: grid; gap: 10px; padding: 14px; width: min(320px, 92vw); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); }
+.tele-filter-pop label { display: grid; gap: 4px; font-size: 12.5px; font-weight: 600; }
+.tele-filter-pop select { padding: 7px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+.tele-search-inline { margin: 0; min-width: 220px; }
+.tele-leads-wrap { border: 1px solid var(--line); border-radius: 8px; overflow: auto; background: var(--surface); }
+.tele-leads { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.tele-leads th { text-align: left; padding: 11px 16px; font-size: 12px; font-weight: 600; color: var(--ink-2); background: var(--sunken); border-bottom: 1px solid var(--line); white-space: nowrap; }
+.tele-leads td { padding: 12px 16px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.tele-leads tr[aria-selected="true"] td { background: var(--oil-soft); }
+.tele-check { width: 40px; }
+.tele-lead-link { color: var(--oil-ink); font-weight: 500; overflow-wrap: anywhere; }
+.tele-rel { display: block; font-weight: 600; }
+.tele-leads small { display: block; }
+.tele-pager { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 12px 4px; font-size: 13px; color: var(--ink-2); }
+@media (max-width: 900px) {
+  .tele-split { grid-template-columns: minmax(0, 1fr); }
+  .tele-list { max-height: 46vh; border-right: 0; border-bottom: 1px solid var(--line); }
+  .tele-detail { max-height: none; padding: 14px 14px 60px; }
+}

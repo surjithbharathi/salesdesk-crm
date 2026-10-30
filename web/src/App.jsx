@@ -5,6 +5,9 @@ import { useHash } from "./hooks.js";
 import Icon from "./icons.jsx";
 import { applySkin, readSkin, useSkin } from "./skin.js";
 import TeleDashboard from "./pages/TeleDashboard.jsx";
+import TeleLeads from "./pages/TeleLeads.jsx";
+import TeleCalls from "./pages/TeleCalls.jsx";
+import TeleSearch from "./pages/TeleSearch.jsx";
 import Business from "./pages/Business.jsx";
 import Leads from "./pages/Leads.jsx";
 import Calls from "./pages/Calls.jsx";
@@ -120,12 +123,15 @@ export default function App() {
 
   const { path, params } = parseHash();
   const owner = meta.lead; // owners, admins and managers see the whole team; callers see only their own day
-  const NAV = owner ? NAV_LEAD : NAV_CALLER;
+  const baseNav = owner ? NAV_LEAD : NAV_CALLER;
+  // that look has a search page of its own, right after Leads
+  const NAV = skin === "telecrm" ? baseNav.flatMap((item) => (item[0] === "/leads" ? [item, ["/search", "Search", "search"]] : [item])) : baseNav;
   const callers = meta.users;
   const viewing = owner ? (params.user || meta.id || callers[0]?.id) : meta.id;
   const page =
-    path.startsWith("/leads") ? <Leads key="leads" params={params} /> :
-    path.startsWith("/calls") ? <Calls key="calls" /> :
+    path.startsWith("/leads") ? (skin === "telecrm" ? <TeleLeads key="tleads" params={params} /> : <Leads key="leads" params={params} />) :
+    path.startsWith("/search") && skin === "telecrm" ? <TeleSearch key="tsearch" params={params} /> :
+    path.startsWith("/calls") ? (skin === "telecrm" ? <TeleCalls key="tcalls" /> : <Calls key="calls" />) :
     path.startsWith("/todo") ? <Tasks key="todo" /> :
     path.startsWith("/messages") ? <Messages key="messages" /> :
     path.startsWith("/settings") ? <Settings key="settings" params={params} me={meta} /> :
