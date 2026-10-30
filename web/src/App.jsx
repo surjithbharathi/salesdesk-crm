@@ -99,6 +99,22 @@ export default function App() {
   const [meta, setMeta] = useState(null);
   const [dark, toggleTheme] = useTheme();
   const skin = useSkin();
+  // In the TeleCRM look the left menu opens with names and can be folded to icons; the choice is kept in this browser.
+  const [railOpen, setRailOpen] = useState(() => {
+    try {
+      return localStorage.getItem("salesdesk-rail") !== "collapsed";
+    } catch {
+      return true;
+    }
+  });
+  useEffect(() => {
+    document.documentElement.setAttribute("data-rail", railOpen ? "open" : "collapsed");
+    try {
+      railOpen ? localStorage.removeItem("salesdesk-rail") : localStorage.setItem("salesdesk-rail", "collapsed");
+    } catch {
+      /* the choice then lasts for this visit only */
+    }
+  }, [railOpen]);
   useEffect(() => applySkin(readSkin()), []);
 
   async function boot() {
@@ -163,8 +179,8 @@ export default function App() {
         </a>
         <nav className="rail-nav" aria-label="Main">
           {NAV.map(([to, label, icon]) => (
-            <a key={to} className="rail-link" href={hashFor(to)} title={label} aria-current={path.startsWith(to) ? "page" : undefined}>
-              <Icon name={icon} /><span className="label">{label}</span>
+            <a key={to} className="rail-link" href={hashFor(to)} title={skin === "telecrm" && label === "Business" ? "Dashboard" : label} aria-current={path.startsWith(to) ? "page" : undefined}>
+              <Icon name={icon} /><span className="label">{skin === "telecrm" && label === "Business" ? "Dashboard" : label}</span>
             </a>
           ))}
         </nav>
@@ -178,6 +194,9 @@ export default function App() {
           <button onClick={toggleTheme} aria-label={dark ? "Switch to light theme" : "Switch to dark theme"}>
             <Icon name={dark ? "sun" : "moon"} /><span className="label">{dark ? "Light theme" : "Dark theme"}</span>
           </button>
+          {skin === "telecrm" && (
+            <button onClick={() => setRailOpen((v) => !v)} aria-expanded={railOpen}><Icon name="swap" /><span className="label">{railOpen ? "Collapse" : "Expand"}</span></button>
+          )}
           {session.user && (
             <button onClick={async () => { await logout(); location.reload(); }}>
               <Icon name="close" /><span className="label">Sign out</span>

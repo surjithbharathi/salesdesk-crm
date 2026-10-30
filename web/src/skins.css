@@ -247,3 +247,38 @@
   .tele-list { max-height: 46vh; border-right: 0; border-bottom: 1px solid var(--line); }
   .tele-detail { max-height: none; padding: 14px 14px 60px; }
 }
+
+/* ---- TeleCRM style: customizing the dashboard ---- */
+.tele-gear { margin-left: auto; width: 36px; height: 36px; display: grid; place-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; color: var(--oil); }
+.tele-gear[aria-expanded="true"] { background: var(--oil-soft); border-color: var(--oil); }
+.tele-wide { grid-column: 1 / -1; min-width: 0; }
+.tele-grid > div { min-width: 0; }
+.tele-custom { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px 18px; margin-bottom: 16px; }
+.tele-custom header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
+.tele-custom h2 { font-size: 16px; font-weight: 600; margin: 0 0 2px; }
+.tele-custom h3 { font-size: 13px; font-weight: 600; margin: 16px 0 6px; color: var(--ink-2); }
+.tele-custom-actions { display: inline-flex; gap: 8px; flex-wrap: wrap; }
+.tele-custom-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.tele-custom-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--sunken); flex-wrap: wrap; }
+.tele-custom-list b { display: block; font-weight: 600; }
+.tele-custom-list small { color: var(--muted); }
+.tele-custom-buttons { display: inline-flex; gap: 6px; }
+
+/* ---- TeleCRM style: the left menu opens with names, and folds to icons ---- */
+:root[data-skin="telecrm"]:not([data-rail="collapsed"]) .shell { grid-template-columns: 190px minmax(0, 1fr); }
+:root[data-skin="telecrm"]:not([data-rail="collapsed"]) .rail { align-items: stretch; padding: 14px 10px; }
+:root[data-skin="telecrm"]:not([data-rail="collapsed"]) .brand-text { display: block; }
+:root[data-skin="telecrm"]:not([data-rail="collapsed"]) .brand-co { display: none; }
+:root[data-skin="telecrm"]:not([data-rail="collapsed"]) .brand-name { color: #4f38a2; font-size: 22px; font-weight: 700; }
+:root[data-skin="telecrm"]:not([data-rail="collapsed"]) .rail-nav { align-items: stretch; gap: 2px; }
+:root[data-skin="telecrm"]:not([data-rail="collapsed"]) .rail-link { width: auto; height: 38px; padding: 0 12px; justify-content: flex-start; gap: 12px; border: 0; color: var(--ink-2); font-size: 14px; }
+:root[data-skin="telecrm"]:not([data-rail="collapsed"]) .rail-link .label, :root[data-skin="telecrm"]:not([data-rail="collapsed"]) .rail-foot .label, :root[data-skin="telecrm"]:not([data-rail="collapsed"]) .who .label { display: inline; }
+:root[data-skin="telecrm"]:not([data-rail="collapsed"]) .rail-link[aria-current="page"] { background: #f1eeff; border: 0; color: #4f38a2; font-weight: 600; }
+:root[data-skin="telecrm"]:not([data-rail="collapsed"]) .rail-foot { align-items: stretch; }
+:root[data-skin="telecrm"]:not([data-rail="collapsed"]) .rail-foot a, :root[data-skin="telecrm"]:not([data-rail="collapsed"]) .rail-foot button { justify-content: flex-start; padding: 8px 12px; gap: 12px; font-size: 14px; }
+:root[data-skin="telecrm"]:not([data-rail="collapsed"]) .brand { padding: 0 4px 6px; }
+:root[data-skin="telecrm"][data-rail="collapsed"] .brand-text { display: none; }
+@media (max-width: 760px) {
+  :root[data-skin="telecrm"] .shell { grid-template-columns: minmax(0, 1fr) !important; }
+  :root[data-skin="telecrm"] .rail .brand-text, :root[data-skin="telecrm"] .rail-link .label { display: none !important; }
+}

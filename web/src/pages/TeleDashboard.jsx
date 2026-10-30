@@ -301,43 +301,137 @@ function WhatsAppSync({ people, leadById, state }) {
   );
 }
 
+// Every widget a person can put on their dashboard. `wide` ones take the full width.
+const WIDGETS = [
+  { id: "phone", title: "Phone sync", note: "Last call and recording per person", render: (x) => <PhoneSync people={x.people} leadById={x.crm.leadById} calls={x.crm.calls} /> },
+  { id: "followups", title: "Follow ups", note: "Upcoming, late, done and cancelled", render: (x) => <FollowUps people={x.people} tasks={x.crm.tasks} /> },
+  { id: "status", title: "Status vs assignee report", note: "Every stage per person", wide: true, render: (x) => <StatusReport people={x.people} leads={x.crm.leads} stages={STATUS_STAGES} /> },
+  { id: "whatsapp", title: "WhatsApp sync", note: "Last chat per person", render: (x) => <WhatsAppSync people={x.people} leadById={x.crm.leadById} state={x.crm.state} /> },
+  { id: "stages", title: "Lead by stages", note: "Fresh, active, won and lost per person", render: (x) => <LeadByStages people={x.people} leads={x.crm.leads} /> },
+  { id: "filters", title: "Filter(s)", note: "Saved views with their counts", render: (x) => <Filters leads={x.scopeLeads} me={x.me} /> },
+  { id: "sources", title: "Source-wise lead distribution", note: "Where leads come from", render: (x) => <Sources leads={x.scopeLeads} /> },
+  { id: "spread", title: "Assignee-wise lead distribution", note: "Who holds how many leads", render: (x) => <AssigneeSpread people={x.people} leads={x.crm.leads} /> },
+  { id: "goals", title: "Goals and points", note: "Level, goal rings, challenges and the leaderboard", wide: true, render: (x) => <MyDay userId={x.me} meta={x.meta} /> },
+];
+const STATUS_STAGES = [["New", "New"], ["Prospecting", "Discussion"], ["Opportunity", "Interested"], ["Quotation given", "Quotation given"]];
+const DEFAULTS = {
+  default: ["phone", "followups", "status", "whatsapp", "stages", "filters", "sources", "spread"],
+  mine: ["followups", "filters", "stages", "goals"],
+};
+const KNOWN = new Set(WIDGETS.map((w) => w.id));
+
+// Which widgets, in which order, is kept per person and per tab in this browser.
+function useLayout(person, tab) {
+  const key = `salesdesk-dash:${person || "anyone"}:${tab}`;
+  const read = () => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(key) || "null");
+      if (Array.isArray(saved)) return saved.filter((id) => KNOWN.has(id));
+    } catch {
+      /* storage can be blocked or hold something else; fall back to the default */
+    }
+    return DEFAULTS[tab];
+  };
+  const [layout, setLayout] = useState(read);
+  useEffect(() => setLayout(read()), [key]);
+  const save = (next) => {
+    setLayout(next);
+    try {
+      localStorage.setItem(key, JSON.stringify(next));
+    } catch {
+      /* the change then lasts for this visit only */
+    }
+  };
+  const reset = () => {
+    setLayout(DEFAULTS[tab]);
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      /* nothing was saved */
+    }
+  };
+  return [layout, save, reset];
+}
+
+function Customize({ layout, onChange, onReset, onClose }) {
+  const hidden = WIDGETS.filter((w) => !layout.includes(w.id));
+  const move = (index, by) => {
+    const next = [...layout];
+    const to = index + by;
+    if (to < 0 || to >= next.length) return;
+    [next[index], next[to]] = [next[to], next[index]];
+    onChange(next);
+  };
+  const byId = new Map(WIDGETS.map((w) => [w.id, w]));
+  return (
+    <section className="tele-custom" aria-label="Customize dashboard">
+      <header>
+        <div><h2>Customize dashboard</h2><p className="muted">Choose the widgets you want and the order they appear in. This applies to the tab you are on, and stays in this browser.</p></div>
+        <span className="tele-custom-actions">
+          <button className="btn btn-quiet" onClick={onReset}>Reset to default</button>
+          <button className="btn btn-primary" onClick={onClose}>Done</button>
+        </span>
+      </header>
+      <h3>On your dashboard</h3>
+      {layout.length === 0 && <p className="tele-empty">Nothing is showing. Add a widget below.</p>}
+      <ol className="tele-custom-list">
+        {layout.map((id, i) => (
+          <li key={id}>
+            <span><b>{byId.get(id).title}</b><small>{byId.get(id).note}</small></span>
+            <span className="tele-custom-buttons">
+              <button className="btn btn-quiet" onClick={() => move(i, -1)} disabled={i === 0} aria-label={`Move ${byId.get(id).title} up`}>▲</button>
+              <button className="btn btn-quiet" onClick={() => move(i, 1)} disabled={i === layout.length - 1} aria-label={`Move ${byId.get(id).title} down`}>▼</button>
+              <button className="btn" onClick={() => onChange(layout.filter((x) => x !== id))}>Hide</button>
+            </span>
+          </li>
+        ))}
+      </ol>
+      {hidden.length > 0 && (
+        <>
+          <h3>Available to add</h3>
+          <ul className="tele-custom-list">
+            {hidden.map((w) => (
+              <li key={w.id}>
+                <span><b>{w.title}</b><small>{w.note}</small></span>
+                <button className="btn" onClick={() => onChange([...layout, w.id])}>Add</button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </section>
+  );
+}
+
 export default function TeleDashboard({ meta }) {
   const crm = useCrm();
   const [tab, setTab] = useState("default");
-  const people = useMemo(() => (crm.state ? [...crm.users.values()].filter((u) => u.active !== false) : []), [crm.state, crm.users]);
+  const [editing, setEditing] = useState(false);
   const me = meta.id || meta.users[0]?.id;
-  const mine = useMemo(() => people.filter((p) => p.id === me), [people, me]);
-  const stages = [["New", "New"], ["Prospecting", "Discussion"], ["Opportunity", "Interested"], ["Quotation given", "Quotation given"]];
+  const [layout, setLayout, resetLayout] = useLayout(me, tab);
+  const everyone = useMemo(() => (crm.state ? [...crm.users.values()].filter((u) => u.active !== false) : []), [crm.state, crm.users]);
+  const mine = useMemo(() => everyone.filter((p) => p.id === me), [everyone, me]);
+  const ctx = { crm, me, meta, people: tab === "mine" ? mine : everyone, scopeLeads: tab === "mine" ? crm.leads.filter((l) => l.owner === me) : crm.leads };
+  const byId = new Map(WIDGETS.map((w) => [w.id, w]));
   return (
     <>
-      <div className="work-head"><h1 className="work-title">Dashboard</h1></div>
+      <div className="work-head">
+        <h1 className="work-title">Dashboard</h1>
+        <button className="tele-gear" onClick={() => setEditing((v) => !v)} aria-expanded={editing} aria-label="Customize dashboard" title="Customize dashboard"><Icon name="gear" size={18} /></button>
+      </div>
       <div className="tabs tele-tabs" role="tablist" aria-label="Dashboard">
         {[["default", "Default"], ["mine", "My dashboard"]].map(([key, label]) => (
           <button key={key} role="tab" className="tab" aria-selected={tab === key} onClick={() => setTab(key)}>{label}</button>
         ))}
       </div>
+      {editing && <Customize layout={layout} onChange={setLayout} onReset={resetLayout} onClose={() => setEditing(false)} />}
       {!crm.state ? (
         <p className="muted">Loading the dashboard…</p>
-      ) : tab === "mine" ? (
-        <>
-          <div className="tele-grid">
-            <FollowUps people={mine} tasks={crm.tasks} />
-            <Filters leads={crm.leads.filter((l) => l.owner === me)} me={me} />
-            <LeadByStages people={mine} leads={crm.leads} />
-          </div>
-          <h2 className="section-title section-gap">Goals and points</h2>
-          <MyDay userId={me} meta={meta} />
-        </>
+      ) : layout.length === 0 ? (
+        <div className="tele-empty"><Icon name="dashboard" size={44} /><p>No widgets on this dashboard yet.</p><button className="btn btn-primary" onClick={() => setEditing(true)}>Add widgets</button></div>
       ) : (
         <div className="tele-grid">
-          <PhoneSync people={people} leadById={crm.leadById} calls={crm.calls} />
-          <FollowUps people={people} tasks={crm.tasks} />
-          <StatusReport people={people} leads={crm.leads} stages={stages} />
-          <WhatsAppSync people={people} leadById={crm.leadById} state={crm.state} />
-          <LeadByStages people={people} leads={crm.leads} />
-          <Filters leads={crm.leads} me={me} />
-          <Sources leads={crm.leads} />
-          <AssigneeSpread people={people} leads={crm.leads} />
+          {layout.map((id) => <div key={id} className={byId.get(id).wide ? "tele-wide" : ""}>{byId.get(id).render(ctx)}</div>)}
         </div>
       )}
     </>
