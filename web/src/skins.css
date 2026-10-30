@@ -93,7 +93,10 @@
 :root[data-skin="telecrm"] .shell { grid-template-columns: 56px minmax(0, 1fr); }
 :root[data-skin="telecrm"] {
   --iron: #ffffff; --iron-2: #f1eeff; --iron-text: #5a5470; --iron-muted: #8d88a6;
-  --bg: #ffffff; --surface: #ffffff; --sunken: #f7f7f9;
+  --bg: #f7f7f7; --surface: #ffffff; --sunken: #f7f7f9;
+  --ink: #333333;
+  --font: "Roboto Flex Variable", "Catamaran", "Noto Sans Tamil", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 14px;
 }
 :root[data-skin="telecrm"] .rail { padding: 12px 6px; align-items: center; gap: 14px; border-right: 1px solid var(--line); }
 :root[data-skin="telecrm"] .brand-text, :root[data-skin="telecrm"] .rail-link .label, :root[data-skin="telecrm"] .rail-foot .label, :root[data-skin="telecrm"] .who .label { display: none; }

@@ -4,6 +4,7 @@ import "@fontsource/catamaran/400";
 import "@fontsource/catamaran/600";
 import "@fontsource/catamaran/700";
 import "@fontsource/big-shoulders-display/latin-800";
+import "@fontsource-variable/roboto-flex/wght.css";
 import App from "./App.jsx";
 import { ToastProvider } from "./toast.jsx";
 import "./styles.css";
