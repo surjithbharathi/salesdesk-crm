@@ -4,23 +4,25 @@ import { useToast } from "../toast.jsx";
 import { day, dueText, initials, minutes, rupees, when } from "../format.js";
 import Icon from "../icons.jsx";
 import { Facts, Update } from "./LeadPanel.jsx";
-import { absTime, relTime, ms, tagClass } from "./tele.js";
+import Recording from "../Recording.jsx";
+import { absTime, relTime, ms, talk, tagClass } from "./tele.js";
 
 const ICON = { Call: "phone", Note: "note", Message: "chat", Visit: "pin", System: "dot" };
 const KINDS = [["", "All actions"], ["Call", "Calls"], ["Note", "Notes"], ["Message", "Messages"], ["System", "System"]];
 
 // The right-hand side of "My Calls" and "Search leads" in the TeleCRM style: who the lead is, what you can do next, and what has happened.
-export default function TeleLeadDetail({ id }) {
+export default function TeleLeadDetail({ id, startOn = "history" }) {
   const crm = useCrm();
   const notify = useToast();
   const lead = crm.leadById.get(id);
   const [tab, setTab] = useState("primary");
-  const [log, setLog] = useState("history");
+  const [log, setLog] = useState(startOn);
   const [kind, setKind] = useState("");
   const activities = useMemo(
     () => crm.activities.filter((a) => a.leadId === id && (!kind || a.type === kind)).sort((a, b) => ms(b.createdAt) - ms(a.createdAt)),
     [crm.activities, id, kind],
   );
+  const leadCalls = useMemo(() => crm.calls.filter((c) => c.leadId === id).sort((a, b) => ms(b.startedAt) - ms(a.startedAt)), [crm.calls, id]);
   const tasks = useMemo(() => crm.openTasks.filter((t) => t.leadId === id).sort((a, b) => String(a.due).localeCompare(String(b.due))), [crm.openTasks, id]);
   if (!lead) return <div className="tele-detail-empty"><Icon name="note" size={44} /><p>{crm.state ? "This lead is not available to you." : "Loading lead…"}</p></div>;
   const due = crm.nextDue.get(lead.id) ? dueText(crm.nextDue.get(lead.id)) : null;
@@ -85,7 +87,7 @@ export default function TeleLeadDetail({ id }) {
       </div>
 
       <div className="tabs tele-log-tabs" role="tablist" aria-label="History">
-        {[["history", "Activity history"], ["tasks", `Task${tasks.length ? ` (${tasks.length})` : ""}`]].map(([key, label]) => (
+        {[["history", "Activity history"], ["calls", `Calls${leadCalls.length ? ` (${leadCalls.length})` : ""}`], ["tasks", `Task${tasks.length ? ` (${tasks.length})` : ""}`]].map(([key, label]) => (
           <button key={key} role="tab" className="tab" aria-selected={log === key} onClick={() => setLog(key)}>{label}</button>
         ))}
         {log === "history" && (
@@ -95,7 +97,22 @@ export default function TeleLeadDetail({ id }) {
           </label>
         )}
       </div>
-      {log === "tasks" ? (
+      {log === "calls" ? (
+        leadCalls.length ? (
+          <ul className="tele-log">
+            {leadCalls.map((c) => (
+              <li key={c.id} className="tele-call-row">
+                <span className="tele-log-icon"><Icon name="phone" size={16} /></span>
+                <span className="tele-log-text">
+                  <b>{c.direction === "Outgoing" ? "Called" : c.direction === "Incoming" ? "Received" : c.direction}</b> {c.duration > 0 ? talk(c.duration) : "not answered"}
+                  {c.recordingId ? <Recording id={c.recordingId} /> : <small> No recording synced</small>}
+                </span>
+                <span className="tele-log-when" title={absTime(c.startedAt)}>{relTime(c.startedAt)}</span>
+              </li>
+            ))}
+          </ul>
+        ) : <p className="tele-empty">No calls with this lead yet.</p>
+      ) : log === "tasks" ? (
         tasks.length ? (
           <ul className="tele-log">
             {tasks.map((t) => {
@@ -109,7 +126,7 @@ export default function TeleLeadDetail({ id }) {
           {activities.map((a) => (
             <li key={a.id}>
               <span className="tele-log-icon"><Icon name={ICON[a.type] || "dot"} size={16} /></span>
-              <span className="tele-log-text">{a.text || a.type}{a.outcome ? <small> {a.outcome}</small> : null}</span>
+              <span className="tele-log-text">{a.text || a.type}{a.outcome ? <small> {a.outcome}</small> : null}{a.voiceNoteId && <Recording id={a.voiceNoteId} ai={false} />}</span>
               <span className="tele-log-when" title={absTime(a.createdAt)}>{relTime(a.createdAt)}{a.userId && crm.users.get(a.userId) ? <span className="avatar">{initials(crm.users.get(a.userId).name)}</span> : null}</span>
             </li>
           ))}

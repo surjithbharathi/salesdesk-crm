@@ -4,6 +4,7 @@ import { useCrm, userName, phoneLabel, telHref, waHref, STAGES, stageText } from
 import { useToast } from "../toast.jsx";
 import { when, day, rupees, dueText, timeOnly, dayLabel, minutes } from "../format.js";
 import Icon from "../icons.jsx";
+import Recording from "../Recording.jsx";
 
 const OUTCOMES = ["Interested", "Callback", "No answer", "Not interested", "Connected"];
 const ICON = { Call: "phone", Note: "note", Message: "chat", Visit: "pin", System: "dot" };
@@ -46,6 +47,7 @@ function Timeline({ items }) {
             <span>
               <span className="tl-what">{a.text || a.type}</span>
               <br /><span className="tl-when">{timeOnly(a.createdAt)}{a.outcome ? `, ${a.outcome}` : ""}</span>
+              {a.voiceNoteId && <Recording id={a.voiceNoteId} ai={false} />}
             </span>
           </li>
         ))}
@@ -242,7 +244,7 @@ export default function LeadPanel({ id, onClose }) {
                       <ul className="work-calls">
                         {calls.slice(0, 8).map((c) => (
                           <li key={c.id}><span><b>{c.direction === "Outgoing" ? "Called" : c.direction === "Incoming" ? "Received" : c.direction}</b> {when(new Date(c.startedAt).toISOString())}
-                            <small className="muted"> {c.duration > 0 ? `talked ${minutes(Math.max(1, Math.round(c.duration / 60)))}` : "not answered"}</small></span></li>
+                            <small className="muted"> {c.duration > 0 ? `talked ${minutes(Math.max(1, Math.round(c.duration / 60)))}` : "not answered"}</small></span>{c.recordingId && <Recording id={c.recordingId} />}</li>
                         ))}
                       </ul>
                     </>

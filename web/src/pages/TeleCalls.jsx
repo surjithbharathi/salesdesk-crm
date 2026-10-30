@@ -5,7 +5,7 @@ import TeleLeadDetail from "./TeleLeadDetail.jsx";
 import { ms, relTime, talk, tagClass } from "./tele.js";
 
 const PAGE = 60;
-const FILTERS = [["", "All"], ["Outgoing", "Called"], ["Incoming", "Received"], ["Missed", "Missed"]];
+const FILTERS = [["", "All"], ["Outgoing", "Called"], ["Incoming", "Received"], ["Missed", "Missed"], ["rec", "With recording"]];
 
 // "My Calls" in the TeleCRM style: the calls on the left, the lead of the chosen call on the right.
 export default function TeleCalls() {
@@ -14,7 +14,7 @@ export default function TeleCalls() {
   const [shown, setShown] = useState(PAGE);
   const [pick, setPick] = useState("");
   const rows = useMemo(
-    () => (crm.state ? crm.calls.filter((c) => !filter || c.direction === filter).sort((a, b) => ms(b.startedAt) - ms(a.startedAt)) : []),
+    () => (crm.state ? crm.calls.filter((c) => !filter || (filter === "rec" ? c.recordingId : c.direction === filter)).sort((a, b) => ms(b.startedAt) - ms(a.startedAt)) : []),
     [crm.state, crm.calls, filter],
   );
   if (!crm.state) return <p className="muted">{crm.error || "Loading calls…"}</p>;
@@ -45,6 +45,7 @@ export default function TeleCalls() {
                     <b>{answered ? talk(c.duration) : "0s"}</b>
                     <span className="muted">{relTime(c.startedAt)}</span>
                     <span className={answered ? "tele-connected" : "tele-missed"}>{answered ? "CONNECTED" : c.direction === "Incoming" ? "MISSED" : "NOT ANSWERED"}</span>
+                    {c.recordingId && <span className="tele-rec-flag">Recording</span>}
                   </span>
                 </button>
               </li>
@@ -53,7 +54,7 @@ export default function TeleCalls() {
         </ul>
         {rows.length > shown && <button className="btn tele-more" onClick={() => setShown((n) => n + PAGE)}>Show more calls ({rows.length - shown} left)</button>}
       </section>
-      {chosen?.leadId ? <TeleLeadDetail key={chosen.leadId} id={chosen.leadId} /> : (
+      {chosen?.leadId ? <TeleLeadDetail key={chosen.leadId} id={chosen.leadId} startOn="calls" /> : (
         <div className="tele-detail-empty"><Icon name="phone" size={44} /><p>{chosen ? "This number is not a lead in the CRM yet." : "Choose a call to see the lead."}</p></div>
       )}
     </div>
