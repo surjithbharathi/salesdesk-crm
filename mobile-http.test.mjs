@@ -123,6 +123,14 @@ test("mobile HTTP sync authenticates devices and attaches private recordings to 
     ).status,
     403,
   );
+  // a lead marked "do not sync calls": its number is not offered to the phone and its calls are refused, until the mark is removed
+  const quiet = await admin("leads", "POST", { name: "Private number", phone: "919123450003", owner, source: "Test", noCallSync: true });
+  assert.equal(quiet.status, 200);
+  assert.ok(!(await request(deviceBase, "/v1/targets", "GET", undefined, auth)).data.some((t) => t.id === quiet.data.id));
+  const quietCall = { localId: "quiet-1", phone: "919123450003", direction: "Incoming", duration: 20, startedAt: Date.now() - 90000 };
+  assert.equal((await request(deviceBase, "/v1/calls", "POST", quietCall, auth)).status, 403);
+  assert.equal((await admin(`leads/${quiet.data.id}`, "PATCH", { noCallSync: false })).status, 200);
+  assert.ok((await request(deviceBase, "/v1/targets", "GET", undefined, auth)).data.some((t) => t.id === quiet.data.id));
   const audio = Buffer.alloc(48);
   audio.write("RIFF", 0);
   audio.writeUInt32LE(40, 4);

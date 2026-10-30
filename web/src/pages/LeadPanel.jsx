@@ -151,6 +151,13 @@ export function Update({ lead, crm }) {
         <button className="btn" disabled={busy || (stage === lead.stage && (!closing || disposition === (lead.disposition || "")))}>Change stage</button>
       </form>
 
+      <h3>Phone call sync</h3>
+      <label className="check">
+        <input type="checkbox" checked={Boolean(lead.noCallSync)} disabled={busy} onChange={(e) => change(e.target.checked ? "Calls with this lead are no longer synced" : "Calls with this lead are synced again", () => crmSend("PATCH", `leads/${lead.id}`, { noCallSync: e.target.checked }))} />
+        Do not sync phone calls with this lead
+      </label>
+      <p className="muted work-note">For numbers whose calls should stay out of the CRM. New calls and recordings with this number are skipped by the phone app. Calls already synced stay.</p>
+
       {crm.me.lead && (
         <>
           <h3>Owner</h3>
@@ -202,6 +209,7 @@ export default function LeadPanel({ id, onClose }) {
               <div className="drawer-line">
                 <span className={`tag ${tagClass(lead)}`}>{stageText(lead)}</span>
                 {lead.repeat ? <span className="note note-good">Came back</span> : null}
+                {lead.noCallSync ? <span className="note note-warn">Calls not synced</span> : null}
                 <span className="muted">{lead.owner ? `With ${userName(crm, lead.owner)}` : "No owner yet"}</span>
               </div>
               <div className="drawer-actions">

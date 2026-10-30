@@ -80,7 +80,7 @@ export function createMobileSync({ db, all, get, put, stamp, tx, log, keyPath, o
   }
   const targets = (d) =>
     all("leads")
-      .filter((l) => !l.archived && l.owner === d.owner)
+      .filter((l) => !l.archived && !l.noCallSync && l.owner === d.owner)
       .map((l) => ({ id: l.id, phone: phoneKeyOf(l) }))
       .filter((l) => /^[1-9]\d{7,14}$/.test(l.phone));
   function preferences(d, value) {
@@ -114,6 +114,8 @@ export function createMobileSync({ db, all, get, put, stamp, tx, log, keyPath, o
       p.duration > 86400
     )
       fail("Invalid call metadata");
+    // a lead can be marked so that phone calls with it are never synced
+    if (all("leads").some((l) => l.noCallSync && phoneKeyOf(l) === p.phone)) fail("Call sync is turned off for this number", 403);
     const existing = all("mobileCalls").find((c) => c.deviceId === d.id && c.localId === p.localId);
     const policy = preferences(d);
     const configured = Object.keys(policy.sims).length > 0;

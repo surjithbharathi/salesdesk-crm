@@ -46,6 +46,7 @@ export default function TeleLeadDetail({ id, startOn = "history" }) {
           <div className="tele-detail-line">
             <span className={`tag ${tagClass(lead)}`}>{stageText(lead)}</span>
             {lead.repeat ? <span className="note note-good">Came back</span> : null}
+            {lead.noCallSync ? <span className="note note-warn">Calls not synced</span> : null}
           </div>
         </div>
         <span className="tele-owner">

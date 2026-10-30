@@ -47,6 +47,6 @@ Everything below is counted from the same records as points, so none of it can b
 - A short "Well done" message appears when a badge, milestone, challenge or level is newly earned since the last refresh.
 - The phone app's Home shows the same: level, rank, goals, team goal, challenges and the leaderboard, from `GET /v1/kpi/day/<tz minutes>/<day start ms>/<day end ms>` (path parameters, because the app refuses query strings). `GET /api/kpi/leaderboard?period=month` gives the monthly board.
 
-## Omitting call sync for chosen people (0.27.0)
+## Leaving a number out of call sync (0.28.0)
 
-Settings, People has a **Call sync** switch per person. Turning it off for someone stops their phone calls and recordings from being copied into the CRM: their phone is sent no numbers to match and its call uploads are refused (HTTP 403, which the phone app already treats as "skip this call"). It does not sign anyone out, and calls already synced stay. Only people who can manage users may change it. Click-to-call and the rest of the phone app are unaffected. The list is stored in the `call_sync_skip` table.
+A lead can be marked **Do not sync phone calls with this lead** (lead panel, Update tab). The phone is then not offered that number and its call uploads for it are refused (HTTP 403, which the phone app already treats as "skip this call"), so new calls and recordings with it never reach the CRM. Calls already synced stay. The mark is the lead field `noCallSync`, and a lead showing it carries a "Calls not synced" note.
