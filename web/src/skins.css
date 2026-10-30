@@ -85,3 +85,46 @@
 .swatch-telecrm i:nth-child(1) { background: #4f38a2; } .swatch-telecrm i:nth-child(2) { background: #e8e4ff; } .swatch-telecrm i:nth-child(3) { background: #f6f5fb; }
 .skin-option b { font-weight: 700; }
 .skin-option small { color: var(--muted); }
+
+/* ---- TeleCRM style: its layout as seen on the web dashboard. A narrow icon rail, a thin top bar with the workspace name,
+   a small page title, and flat white cards with grey lines and compact tables. ---- */
+.topbar { display: none; }
+.main-col { min-width: 0; display: flex; flex-direction: column; }
+:root[data-skin="telecrm"] .shell { grid-template-columns: 56px minmax(0, 1fr); }
+:root[data-skin="telecrm"] {
+  --iron: #ffffff; --iron-2: #f1eeff; --iron-text: #5a5470; --iron-muted: #8d88a6;
+  --bg: #ffffff; --surface: #ffffff; --sunken: #f7f7f9;
+}
+:root[data-skin="telecrm"] .rail { padding: 12px 6px; align-items: center; gap: 14px; border-right: 1px solid var(--line); }
+:root[data-skin="telecrm"] .brand-text, :root[data-skin="telecrm"] .rail-link .label, :root[data-skin="telecrm"] .rail-foot .label, :root[data-skin="telecrm"] .who .label { display: none; }
+:root[data-skin="telecrm"] .brand-mark { background: #4f38a2; color: #ffffff; border-radius: 8px; width: 32px; height: 32px; }
+:root[data-skin="telecrm"] .rail-nav { align-items: center; gap: 6px; }
+:root[data-skin="telecrm"] .rail-link { width: 38px; height: 38px; padding: 0; justify-content: center; border-radius: 8px; border: 1px solid transparent; color: var(--iron-muted); }
+:root[data-skin="telecrm"] .rail-link:hover { background: var(--iron-2); color: #4f38a2; }
+:root[data-skin="telecrm"] .rail-link[aria-current="page"] { background: #ffffff; border: 1px solid #4f38a2; color: #4f38a2; font-weight: 400; }
+:root[data-skin="telecrm"] .rail-foot { align-items: center; }
+:root[data-skin="telecrm"] .rail-foot a, :root[data-skin="telecrm"] .rail-foot button { padding: 8px; justify-content: center; color: var(--iron-muted); }
+:root[data-skin="telecrm"] .rail-foot a:hover, :root[data-skin="telecrm"] .rail-foot button:hover { background: var(--iron-2); color: #4f38a2; }
+:root[data-skin="telecrm"] .who { padding: 4px; }
+:root[data-skin="telecrm"] .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 52px; padding: 0 20px; border-bottom: 1px solid var(--line); background: var(--surface); position: sticky; top: 0; z-index: 5; }
+:root[data-skin="telecrm"] .topbar-co { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; }
+:root[data-skin="telecrm"] .topbar-co::before { content: ""; width: 24px; height: 24px; border-radius: 50%; background: #4f38a2; }
+:root[data-skin="telecrm"] .topbar-user .avatar { background: #e8e4ff; color: #4f38a2; width: 30px; height: 30px; }
+:root[data-skin="telecrm"] .work { padding: 18px 22px 90px; max-width: none; }
+:root[data-skin="telecrm"] .work-title { font-size: 20px; font-weight: 600; }
+:root[data-skin="telecrm"] .work-head { margin-bottom: 14px; }
+:root[data-skin="telecrm"] .grid th { font-size: 12px; font-weight: 600; color: var(--muted); border-bottom: 1px solid var(--line); background: var(--sunken); padding: 9px 12px; }
+:root[data-skin="telecrm"] .grid td { padding: 10px 12px; font-size: 13.5px; }
+:root[data-skin="telecrm"] .table-frame, :root[data-skin="telecrm"] .sheet, :root[data-skin="telecrm"] .levelstrip { border-radius: 8px; box-shadow: none; }
+:root[data-skin="telecrm"] .tabs { gap: 20px; }
+:root[data-skin="telecrm"] .tab[aria-selected="true"] { color: #4f38a2; border-bottom-color: #4f38a2; }
+@media (prefers-color-scheme: dark) {
+  :root[data-skin="telecrm"]:not([data-theme="light"]) { --iron: #1d1930; --iron-2: #2a2250; --iron-text: #cfc9ee; --iron-muted: #9d96c0; --bg: #14111f; --surface: #1d1930; --sunken: #100d1a; }
+}
+:root[data-skin="telecrm"][data-theme="dark"] { --iron: #1d1930; --iron-2: #2a2250; --iron-text: #cfc9ee; --iron-muted: #9d96c0; --bg: #14111f; --surface: #1d1930; --sunken: #100d1a; }
+@media (max-width: 760px) {
+  :root[data-skin="telecrm"] .shell { grid-template-columns: minmax(0, 1fr); }
+  :root[data-skin="telecrm"] .rail { flex-direction: row; height: auto; position: static; padding: 8px; }
+  :root[data-skin="telecrm"] .rail-nav { flex-direction: row; overflow-x: auto; }
+  :root[data-skin="telecrm"] .topbar { display: none; }
+}

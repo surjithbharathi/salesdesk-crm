@@ -148,15 +148,15 @@ export default function App() {
       <aside className="rail">
         <a className="brand" href={hashFor(owner ? "/business" : "/my-day")} aria-label="Salesdesk, go home">
           <span className="brand-mark"><Icon name="drop" size={20} /></span>
-          <span>
+          <span className="brand-text">
             <span className="brand-name">Salesdesk</span>
             <span className="brand-co" lang="en">{session.company || "Devi Industries"}</span>
           </span>
         </a>
         <nav className="rail-nav" aria-label="Main">
           {NAV.map(([to, label, icon]) => (
-            <a key={to} className="rail-link" href={hashFor(to)} aria-current={path.startsWith(to) ? "page" : undefined}>
-              <Icon name={icon} />{label}
+            <a key={to} className="rail-link" href={hashFor(to)} title={label} aria-current={path.startsWith(to) ? "page" : undefined}>
+              <Icon name={icon} /><span className="label">{label}</span>
             </a>
           ))}
         </nav>
@@ -177,7 +177,13 @@ export default function App() {
           )}
         </div>
       </aside>
-      <main className="work"><CrmProvider me={meta}>{page}</CrmProvider></main>
+      <div className="main-col">
+        <header className="topbar">
+          <span className="topbar-co" lang="en">{session.company || "Devi Industries"}</span>
+          <span className="topbar-user" title={session.user?.name || ""}><span className="avatar">{initials(session.user?.name || "Demo")}</span></span>
+        </header>
+        <main className="work"><CrmProvider me={meta}>{page}</CrmProvider></main>
+      </div>
     </div>
   );
 }
