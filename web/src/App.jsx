@@ -3,7 +3,8 @@ import { authStatus, login, logout, AuthError, v2 } from "./api.js";
 import { parseHash, hashFor, initials } from "./format.js";
 import { useHash } from "./hooks.js";
 import Icon from "./icons.jsx";
-import { applySkin, readSkin } from "./skin.js";
+import { applySkin, readSkin, useSkin } from "./skin.js";
+import TeleDashboard from "./pages/TeleDashboard.jsx";
 import Business from "./pages/Business.jsx";
 import Leads from "./pages/Leads.jsx";
 import Calls from "./pages/Calls.jsx";
@@ -94,6 +95,7 @@ export default function App() {
   const [session, setSession] = useState({ state: "loading" });
   const [meta, setMeta] = useState(null);
   const [dark, toggleTheme] = useTheme();
+  const skin = useSkin();
   useEffect(() => applySkin(readSkin()), []);
 
   async function boot() {
@@ -141,7 +143,7 @@ export default function App() {
         <MyDay key={viewing} userId={viewing} meta={meta} />
       </>
     ) :
-    <Business key="business" />;
+    skin === "telecrm" ? <TeleDashboard key="tele" meta={meta} /> : <Business key="business" />;
 
   return (
     <div className="shell" data-route={hash}>
