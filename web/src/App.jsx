@@ -8,6 +8,8 @@ import TeleDashboard from "./pages/TeleDashboard.jsx";
 import TeleLeads from "./pages/TeleLeads.jsx";
 import TeleCalls from "./pages/TeleCalls.jsx";
 import TeleSearch from "./pages/TeleSearch.jsx";
+import MaxDashboard from "./pages/MaxDashboard.jsx";
+import MaxLeads from "./pages/MaxLeads.jsx";
 import Business from "./pages/Business.jsx";
 import Leads from "./pages/Leads.jsx";
 import Calls from "./pages/Calls.jsx";
@@ -93,6 +95,15 @@ function LoginForm({ onDone }) {
   );
 }
 
+// The purple page bar of the Salesmax look: the pages of the part of the app you are in.
+function MaxBar({ path, params, lead }) {
+  const dash = [["/business", "Business"], ["/my-day", "My day"], ["/team", "Team"], ["/goals", "Daily goals"]].filter(([to]) => lead || to === "/my-day");
+  const leads = [["", "Active leads"], ["new", "New leads"], ["untouched", "Not worked"], ["unassigned", "No owner"], ["all", "All leads"]].filter(([key]) => lead || key !== "unassigned");
+  if (dash.some(([to]) => path.startsWith(to))) return <nav className="maxbar" aria-label="Dashboards">{dash.map(([to, label]) => <a key={to} href={hashFor(to)} aria-current={path.startsWith(to) ? "page" : undefined}>{label}</a>)}</nav>;
+  if (path.startsWith("/leads")) return <nav className="maxbar" aria-label="Leads">{leads.map(([key, label]) => <a key={key || "active"} href={hashFor("/leads", { queue: key })} aria-current={(params.queue || "") === key ? "page" : undefined}>{label}</a>)}</nav>;
+  return null;
+}
+
 export default function App() {
   const hash = useHash();
   const [session, setSession] = useState({ state: "loading" });
@@ -145,7 +156,7 @@ export default function App() {
   const callers = meta.users;
   const viewing = owner ? (params.user || meta.id || callers[0]?.id) : meta.id;
   const page =
-    path.startsWith("/leads") ? (skin === "telecrm" ? <TeleLeads key="tleads" params={params} /> : <Leads key="leads" params={params} />) :
+    path.startsWith("/leads") ? (skin === "telecrm" ? <TeleLeads key="tleads" params={params} /> : skin === "salesmax" ? <MaxLeads key="mleads" params={params} /> : <Leads key="leads" params={params} />) :
     path.startsWith("/search") && skin === "telecrm" ? <TeleSearch key="tsearch" params={params} /> :
     path.startsWith("/calls") ? (skin === "telecrm" ? <TeleCalls key="tcalls" /> : <Calls key="calls" />) :
     path.startsWith("/todo") ? <Tasks key="todo" /> :
@@ -165,7 +176,7 @@ export default function App() {
         <MyDay key={viewing} userId={viewing} meta={meta} />
       </>
     ) :
-    skin === "telecrm" ? <TeleDashboard key="tele" meta={meta} /> : <Business key="business" />;
+    skin === "telecrm" ? <TeleDashboard key="tele" meta={meta} /> : skin === "salesmax" ? <MaxDashboard key="maxdash" meta={meta} /> : <Business key="business" />;
 
   return (
     <div className="shell" data-route={hash}>
@@ -209,6 +220,7 @@ export default function App() {
           <span className="topbar-co" lang="en">{session.company || "Devi Industries"}</span>
           <span className="topbar-user" title={session.user?.name || ""}><span className="avatar">{initials(session.user?.name || "Demo")}</span></span>
         </header>
+        {skin === "salesmax" && <MaxBar path={path} params={params} lead={owner} />}
         <main className="work"><CrmProvider me={meta}>{page}</CrmProvider></main>
       </div>
     </div>

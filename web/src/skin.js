@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 // The look the person chose: our own, one with the Salesmax palette, one with the TeleCRM palette and layout. Kept per browser.
 export const SKINS = [
   { id: "salesdesk", name: "Salesdesk", note: "Our own look: iron grey, oil yellow and paper." },
-  { id: "salesmax", name: "Salesmax style", note: "Indigo and white, with the palette Salesmax uses." },
+  { id: "salesmax", name: "Salesmax style", note: "White top menu, purple page bar, tiles and a work pipeline, like the Salesmax web app." },
   { id: "telecrm", name: "TeleCRM style", note: "Deep purple and white, with the TeleCRM palette and dashboard layout." },
 ];
 let chosen = null;
