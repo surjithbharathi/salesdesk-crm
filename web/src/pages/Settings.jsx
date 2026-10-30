@@ -49,7 +49,6 @@ export default function Settings({ params, me }) {
             <p><b>{me.users.find((u) => u.id === me.id)?.name || "You"}</b><br /><span className="muted">{roleLabel}</span></p>
             <span className="newlead-actions">
               <button className="btn" onClick={async () => { await logout(); location.reload(); }}>Sign out</button>
-              <a className="btn btn-quiet" href="/classic/">Older screens (n8n and other integrations)</a>
             </span>
           </>
         ) : tab[3]}

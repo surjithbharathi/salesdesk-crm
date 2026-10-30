@@ -168,7 +168,6 @@ export default function App() {
           <button onClick={toggleTheme} aria-label={dark ? "Switch to light theme" : "Switch to dark theme"}>
             <Icon name={dark ? "sun" : "moon"} /><span className="label">{dark ? "Light theme" : "Dark theme"}</span>
           </button>
-          <a href="/classic/"><Icon name="external" /><span className="label">Older screens</span></a>
           {session.user && (
             <button onClick={async () => { await logout(); location.reload(); }}>
               <Icon name="close" /><span className="label">Sign out</span>
