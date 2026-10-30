@@ -38,6 +38,8 @@ jobs:
           done
           if [ "$ready" != true ]; then docker logs --tail 80 smoke; exit 1; fi
           curl -fsS http://127.0.0.1:3195/next/ | grep -q '<div id="root">'
+          curl -fsS http://127.0.0.1:3195/next/manifest.webmanifest | grep -q standalone
+          curl -fsS -o /dev/null http://127.0.0.1:3195/next/icon-192.png
           curl -fsS http://127.0.0.1:3195/api/kpi/team >/dev/null
           test "$(curl -s --path-as-is -o /dev/null -w '%{http_code}' 'http://127.0.0.1:3195/next/../server.mjs')" != "200"
       - name: Publish
