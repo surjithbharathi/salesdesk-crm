@@ -301,24 +301,148 @@ function WhatsAppSync({ people, leadById, state }) {
   );
 }
 
-// Every widget a person can put on their dashboard. `wide` ones take the full width.
+// ---- more widgets, in the same shape as the others ----
+
+function ActivityPerformance({ people, leadById, calls }) {
+  const from = Date.now() - 7 * 86400000;
+  const rows = people.map((p) => {
+    const mine = calls.filter((c) => leadById.get(c.leadId)?.owner === p.id && ms(c.startedAt) >= from);
+    const answered = mine.filter((c) => c.duration > 0);
+    return { id: p.id, name: p.name, calls: mine.length, answered: answered.length, minutes: Math.round(answered.reduce((s, c) => s + c.duration, 0) / 60) };
+  });
+  const cols = [
+    { key: "name", label: "Assignee", render: (r) => <Person row={r} /> },
+    { key: "calls", label: "Calls", num: true },
+    { key: "answered", label: "Answered", num: true },
+    { key: "minutes", label: "Talk time (min)", num: true },
+  ];
+  return (
+    <Widget icon="report" title="Activity & performance">
+      <p className="tele-sub">Last 7 days</p>
+      <SortTable cols={cols} rows={rows} initial={{ key: "calls", dir: "desc" }} search="Search by assignee" empty="No team members yet." />
+    </Widget>
+  );
+}
+
+function TeamAccess({ people }) {
+  const rows = people.map((p) => ({ id: p.id, name: p.name, sub: p.email, role: p.role || "Caller", active: p.active !== false }));
+  const cols = [
+    { key: "name", label: "User name", render: (r) => <Person row={r} /> },
+    { key: "role", label: "Role" },
+    { key: "active", label: "State", render: (r) => <span className={`tele-chip ${r.active ? "tele-yes" : "tele-no"}`}>{r.active ? "ACTIVE" : "OFF"}</span> },
+  ];
+  return (
+    <Widget icon="people" title="Team and access">
+      <SortTable cols={cols} rows={rows} initial={{ key: "name", dir: "asc" }} search="Search by name" empty="No team members yet." />
+    </Widget>
+  );
+}
+
+function MyTasks({ crm, me }) {
+  const start = dayStart();
+  const rows = crm.openTasks
+    .filter((t) => t.owner === me)
+    .sort((a, b) => String(a.due).localeCompare(String(b.due)))
+    .slice(0, 30)
+    .map((t) => ({ id: t.id, name: t.title, lead: crm.leadById.get(t.leadId), due: t.due, late: ms(t.due) < start }));
+  return (
+    <Widget icon="task" title="Tasks">
+      {!rows.length ? <div className="tele-empty"><Icon name="check" size={44} /><p>No open tasks. You are all caught up.</p></div> : (
+        <ul className="tele-log tele-tasklist">
+          {rows.map((r) => (
+            <li key={r.id}>
+              <span className="tele-log-icon"><Icon name="task" size={16} /></span>
+              <span className="tele-log-text">{r.name}{r.lead && <small> <a href={hashFor("/leads", { lead: r.lead.id })}>{r.lead.name}</a></small>}</span>
+              <span className={`tele-log-when ${r.late ? "late" : ""}`}>{r.late ? "Late" : "Due"} {relDue(r.due)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Widget>
+  );
+}
+const relDue = (iso) => new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+
+function MissedCalls({ crm }) {
+  const rows = crm.calls
+    .filter((c) => c.direction === "Missed" || (c.direction === "Incoming" && !c.duration))
+    .sort((a, b) => ms(b.startedAt) - ms(a.startedAt))
+    .slice(0, 20);
+  return (
+    <Widget icon="phone" title="Missed calls">
+      {!rows.length ? <div className="tele-empty"><Icon name="phone" size={44} /><p>No missed calls.</p></div> : (
+        <ul className="tele-log tele-tasklist">
+          {rows.map((c) => {
+            const lead = crm.leadById.get(c.leadId);
+            return (
+              <li key={c.id}>
+                <span className="tele-log-icon"><Icon name="phone" size={16} /></span>
+                <span className="tele-log-text">{lead ? <a href={hashFor("/leads", { lead: lead.id })}>{lead.name}</a> : c.phone}<small> {c.phone}</small></span>
+                <span className="tele-log-when">{ago(new Date(ms(c.startedAt)).toISOString())}<a className="btn btn-quiet" href={`tel:${String(c.phone || "").replace(/[^\d+]/g, "")}`}>Call back</a></span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Widget>
+  );
+}
+
+// A saved filter drawn as one bar split into fresh, active, won and lost.
+function FilterChart({ title, leads, test, to }) {
+  const live = leads.filter((l) => !l.archived && test(l));
+  const t = tally(live);
+  const parts = [["fresh", "Fresh"], ["active", "Active"], ["won", "Won"], ["lost", "Lost"]];
+  let x = 0;
+  return (
+    <Widget icon="dashboard" title={title}>
+      <div className="tele-chart">
+        <p className="tele-chart-total"><b className="num">{t.total.toLocaleString("en-IN")}</b> leads</p>
+        <svg viewBox="0 0 100 6" preserveAspectRatio="none" role="img" aria-label={`${title}: ${parts.map(([k, l]) => `${l} ${t[k]}`).join(", ")}`}>
+          {t.total === 0 ? <rect x="0" y="0" width="100" height="6" className="chart-empty" /> : parts.filter(([k]) => t[k]).map(([k]) => {
+            const w = (t[k] / t.total) * 100;
+            const rect = <rect key={k} x={x} y="0" width={w} height="6" className={`chart-${k}`} />;
+            x += w;
+            return rect;
+          })}
+        </svg>
+        <ul className="tele-chart-legend">
+          {parts.map(([k, l]) => <li key={k}><i className={`chart-key chart-${k}`} />{l} <b className="num">{t[k]}</b></li>)}
+        </ul>
+        <a className="btn btn-quiet" href={to}>Open these leads</a>
+      </div>
+    </Widget>
+  );
+}
+
+// ---- every widget a person can put on their dashboard; `wide` ones take the full width ----
 const WIDGETS = [
-  { id: "phone", title: "Phone sync", note: "Last call and recording per person", render: (x) => <PhoneSync people={x.people} leadById={x.crm.leadById} calls={x.crm.calls} /> },
-  { id: "followups", title: "Follow ups", note: "Upcoming, late, done and cancelled", render: (x) => <FollowUps people={x.people} tasks={x.crm.tasks} /> },
-  { id: "status", title: "Status vs assignee report", note: "Every stage per person", wide: true, render: (x) => <StatusReport people={x.people} leads={x.crm.leads} stages={STATUS_STAGES} /> },
-  { id: "whatsapp", title: "WhatsApp sync", note: "Last chat per person", render: (x) => <WhatsAppSync people={x.people} leadById={x.crm.leadById} state={x.crm.state} /> },
-  { id: "stages", title: "Lead by stages", note: "Fresh, active, won and lost per person", render: (x) => <LeadByStages people={x.people} leads={x.crm.leads} /> },
-  { id: "filters", title: "Filter(s)", note: "Saved views with their counts", render: (x) => <Filters leads={x.scopeLeads} me={x.me} /> },
-  { id: "sources", title: "Source-wise lead distribution", note: "Where leads come from", render: (x) => <Sources leads={x.scopeLeads} /> },
-  { id: "spread", title: "Assignee-wise lead distribution", note: "Who holds how many leads", render: (x) => <AssigneeSpread people={x.people} leads={x.crm.leads} /> },
-  { id: "goals", title: "Goals and points", note: "Level, goal rings, challenges and the leaderboard", wide: true, render: (x) => <MyDay userId={x.me} meta={x.meta} /> },
+  { id: "followups", icon: "task", title: "Follow-ups", note: "See upcoming, late, completed and cancelled follow-ups", render: (x) => <FollowUps people={x.people} tasks={x.crm.tasks} /> },
+  { id: "stages", icon: "leads", title: "Lead by stages", note: "See lead stages by assignee", render: (x) => <LeadByStages people={x.people} leads={x.crm.leads} /> },
+  { id: "filters", icon: "dashboard", title: "Filters", note: "See lead-stage counts for saved filters", render: (x) => <Filters leads={x.scopeLeads} me={x.me} /> },
+  { id: "phone", icon: "phone", title: "SIM permission", note: "See call sync and recording per person", render: (x) => <PhoneSync people={x.people} leadById={x.crm.leadById} calls={x.crm.calls} /> },
+  { id: "whatsapp", icon: "chat", title: "WhatsApp sync", note: "See WhatsApp sync and last chat time", render: (x) => <WhatsAppSync people={x.people} leadById={x.crm.leadById} state={x.crm.state} /> },
+  { id: "status", icon: "report", title: "Status vs assignee report", note: "See every stage per person", wide: true, render: (x) => <StatusReport people={x.people} leads={x.crm.leads} stages={STATUS_STAGES} /> },
+  { id: "sources", icon: "pin", title: "Source-wise lead distribution", note: "See new, recaptured, and distinct leads by source", render: (x) => <Sources leads={x.scopeLeads} /> },
+  { id: "spread", icon: "people", title: "Assignee-wise lead distribution", note: "See new, recaptured, and distinct leads by assignee", render: (x) => <AssigneeSpread people={x.people} leads={x.crm.leads} /> },
+  { id: "activity", icon: "report", title: "Activity & performance", note: "See team calls, answered calls and talk time", render: (x) => <ActivityPerformance people={x.people} leadById={x.crm.leadById} calls={x.crm.calls} /> },
+  { id: "team", icon: "people", title: "Team and access", note: "See team roles and who is active", render: (x) => <TeamAccess people={x.people} /> },
+  { id: "tasks", icon: "task", title: "Tasks", note: "See your late and upcoming tasks", render: (x) => <MyTasks crm={x.crm} me={x.me} /> },
+  { id: "missed", icon: "phone", title: "Missed calls", note: "See recent missed calls and call leads back", render: (x) => <MissedCalls crm={x.crm} /> },
+  { id: "c-new", icon: "report", title: "NEW LEADS", note: "See a saved filter as a chart", render: (x) => <FilterChart title="New leads" leads={x.scopeLeads} test={(l) => l.stage === "New"} to={hashFor("/leads", { queue: "new" })} /> },
+  { id: "c-active", icon: "report", title: "All active leads", note: "See a saved filter as a chart", render: (x) => <FilterChart title="All active leads" leads={x.scopeLeads} test={(l) => l.stage !== "Closed"} to={hashFor("/leads")} /> },
+  { id: "c-all", icon: "report", title: "All leads", note: "See a saved filter as a chart", render: (x) => <FilterChart title="All leads" leads={x.scopeLeads} test={() => true} to={hashFor("/leads", { queue: "all" })} /> },
+  { id: "c-mine", icon: "report", title: "Leads assigned to me", note: "See a saved filter as a chart", render: (x) => <FilterChart title="Leads assigned to me" leads={x.scopeLeads} test={(l) => l.owner === x.me} to={hashFor("/leads", { owner: x.me })} /> },
+  { id: "goals", icon: "trophy", title: "Goals and points", note: "See your level, goal rings, challenges and the leaderboard", wide: true, render: (x) => <MyDay userId={x.me} meta={x.meta} /> },
 ];
 const STATUS_STAGES = [["New", "New"], ["Prospecting", "Discussion"], ["Opportunity", "Interested"], ["Quotation given", "Quotation given"]];
+const MAX_CARDS = 6;
 const DEFAULTS = {
-  default: ["phone", "followups", "status", "whatsapp", "stages", "filters", "sources", "spread"],
+  default: ["phone", "followups", "status", "whatsapp", "stages", "filters"],
   mine: ["followups", "filters", "stages", "goals"],
 };
 const KNOWN = new Set(WIDGETS.map((w) => w.id));
+const byId = new Map(WIDGETS.map((w) => [w.id, w]));
 
 // Which widgets, in which order, is kept per person and per tab in this browser.
 function useLayout(person, tab) {
@@ -326,7 +450,7 @@ function useLayout(person, tab) {
   const read = () => {
     try {
       const saved = JSON.parse(localStorage.getItem(key) || "null");
-      if (Array.isArray(saved)) return saved.filter((id) => KNOWN.has(id));
+      if (Array.isArray(saved)) return saved.filter((id) => KNOWN.has(id)).slice(0, MAX_CARDS);
     } catch {
       /* storage can be blocked or hold something else; fall back to the default */
     }
@@ -342,63 +466,55 @@ function useLayout(person, tab) {
       /* the change then lasts for this visit only */
     }
   };
-  const reset = () => {
-    setLayout(DEFAULTS[tab]);
-    try {
-      localStorage.removeItem(key);
-    } catch {
-      /* nothing was saved */
-    }
-  };
-  return [layout, save, reset];
+  return [layout, save];
 }
 
-function Customize({ layout, onChange, onReset, onClose }) {
-  const hidden = WIDGETS.filter((w) => !layout.includes(w.id));
-  const move = (index, by) => {
-    const next = [...layout];
-    const to = index + by;
-    if (to < 0 || to >= next.length) return;
-    [next[index], next[to]] = [next[to], next[index]];
-    onChange(next);
+// The "Configure dashboard" page: the cards on the dashboard (drag to reorder, remove with the red button), then the ones that can be added.
+// Nothing changes on the dashboard until Save.
+function Configure({ tab, layout, onSave, onCancel }) {
+  const [draft, setDraft] = useState(layout);
+  const [drag, setDrag] = useState(-1);
+  const full = draft.length >= MAX_CARDS;
+  const move = (from, to) => {
+    if (from === to || to < 0 || to >= draft.length) return;
+    const next = [...draft];
+    next.splice(to, 0, next.splice(from, 1)[0]);
+    setDraft(next);
   };
-  const byId = new Map(WIDGETS.map((w) => [w.id, w]));
+  const same = draft.length === layout.length && draft.every((id, i) => id === layout[i]);
   return (
-    <section className="tele-custom" aria-label="Customize dashboard">
-      <header>
-        <div><h2>Customize dashboard</h2><p className="muted">Choose the widgets you want and the order they appear in. This applies to the tab you are on, and stays in this browser.</p></div>
-        <span className="tele-custom-actions">
-          <button className="btn btn-quiet" onClick={onReset}>Reset to default</button>
-          <button className="btn btn-primary" onClick={onClose}>Done</button>
-        </span>
-      </header>
-      <h3>On your dashboard</h3>
-      {layout.length === 0 && <p className="tele-empty">Nothing is showing. Add a widget below.</p>}
-      <ol className="tele-custom-list">
-        {layout.map((id, i) => (
-          <li key={id}>
-            <span><b>{byId.get(id).title}</b><small>{byId.get(id).note}</small></span>
-            <span className="tele-custom-buttons">
-              <button className="btn btn-quiet" onClick={() => move(i, -1)} disabled={i === 0} aria-label={`Move ${byId.get(id).title} up`}>▲</button>
-              <button className="btn btn-quiet" onClick={() => move(i, 1)} disabled={i === layout.length - 1} aria-label={`Move ${byId.get(id).title} down`}>▼</button>
-              <button className="btn" onClick={() => onChange(layout.filter((x) => x !== id))}>Hide</button>
-            </span>
+    <section className="tele-config" aria-label="Configure dashboard">
+      <h2>Configure dashboard <span className="muted">({tab === "mine" ? "My dashboard" : "Default"})</span></h2>
+      <ul className="tele-config-grid">
+        {draft.map((id, i) => {
+          const w = byId.get(id);
+          return (
+            <li key={id} className="tele-tile tele-tile-on" draggable onDragStart={() => setDrag(i)} onDragOver={(e) => e.preventDefault()} onDrop={() => { move(drag, i); setDrag(-1); }}>
+              <span className="tele-grip" aria-hidden="true">⠿</span>
+              <button className="tele-round tele-minus" onClick={() => setDraft(draft.filter((x) => x !== id))} aria-label={`Remove ${w.title}`}>−</button>
+              <span className="tele-tile-main"><b><Icon name={w.icon} size={18} /> {w.title}</b><small>{w.note}</small></span>
+              <span className="tele-tile-move">
+                <button className="btn btn-quiet" onClick={() => move(i, i - 1)} disabled={i === 0} aria-label={`Move ${w.title} earlier`}>▲</button>
+                <button className="btn btn-quiet" onClick={() => move(i, i + 1)} disabled={i === draft.length - 1} aria-label={`Move ${w.title} later`}>▼</button>
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+      {draft.length === 0 && <p className="tele-empty">No cards yet. Add one below.</p>}
+      <div className="tele-config-actions">
+        <button className="btn btn-quiet tele-cancel" onClick={onCancel}>Cancel</button>
+        <button className="btn btn-primary" onClick={() => onSave(draft)} disabled={same}>✓ Save</button>
+      </div>
+      <p className="tele-config-note">Max. {MAX_CARDS} cards can be active at a same time{full ? ". Remove one to add another." : "."}</p>
+      <ul className="tele-config-grid">
+        {WIDGETS.filter((w) => !draft.includes(w.id)).map((w) => (
+          <li key={w.id} className="tele-tile">
+            <button className="tele-round tele-plus" onClick={() => setDraft([...draft, w.id])} disabled={full} aria-label={`Add ${w.title}`}>+</button>
+            <span className="tele-tile-main"><b><Icon name={w.icon} size={18} /> {w.title}</b><small>{w.note}</small></span>
           </li>
         ))}
-      </ol>
-      {hidden.length > 0 && (
-        <>
-          <h3>Available to add</h3>
-          <ul className="tele-custom-list">
-            {hidden.map((w) => (
-              <li key={w.id}>
-                <span><b>{w.title}</b><small>{w.note}</small></span>
-                <button className="btn" onClick={() => onChange([...layout, w.id])}>Add</button>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
+      </ul>
     </section>
   );
 }
@@ -408,27 +524,26 @@ export default function TeleDashboard({ meta }) {
   const [tab, setTab] = useState("default");
   const [editing, setEditing] = useState(false);
   const me = meta.id || meta.users[0]?.id;
-  const [layout, setLayout, resetLayout] = useLayout(me, tab);
+  const [layout, setLayout] = useLayout(me, tab);
   const everyone = useMemo(() => (crm.state ? [...crm.users.values()].filter((u) => u.active !== false) : []), [crm.state, crm.users]);
   const mine = useMemo(() => everyone.filter((p) => p.id === me), [everyone, me]);
   const ctx = { crm, me, meta, people: tab === "mine" ? mine : everyone, scopeLeads: tab === "mine" ? crm.leads.filter((l) => l.owner === me) : crm.leads };
-  const byId = new Map(WIDGETS.map((w) => [w.id, w]));
+  if (editing) return <Configure key={tab} tab={tab} layout={layout} onSave={(next) => { setLayout(next); setEditing(false); }} onCancel={() => setEditing(false)} />;
   return (
     <>
       <div className="work-head">
         <h1 className="work-title">Dashboard</h1>
-        <button className="tele-gear" onClick={() => setEditing((v) => !v)} aria-expanded={editing} aria-label="Customize dashboard" title="Customize dashboard"><Icon name="gear" size={18} /></button>
+        <button className="tele-gear" onClick={() => setEditing(true)} aria-label="Configure dashboard" title="Configure dashboard"><Icon name="gear" size={18} /></button>
       </div>
       <div className="tabs tele-tabs" role="tablist" aria-label="Dashboard">
         {[["default", "Default"], ["mine", "My dashboard"]].map(([key, label]) => (
           <button key={key} role="tab" className="tab" aria-selected={tab === key} onClick={() => setTab(key)}>{label}</button>
         ))}
       </div>
-      {editing && <Customize layout={layout} onChange={setLayout} onReset={resetLayout} onClose={() => setEditing(false)} />}
       {!crm.state ? (
         <p className="muted">Loading the dashboard…</p>
       ) : layout.length === 0 ? (
-        <div className="tele-empty"><Icon name="dashboard" size={44} /><p>No widgets on this dashboard yet.</p><button className="btn btn-primary" onClick={() => setEditing(true)}>Add widgets</button></div>
+        <div className="tele-empty"><Icon name="dashboard" size={44} /><p>No cards on this dashboard yet.</p><button className="btn btn-primary" onClick={() => setEditing(true)}>Add cards</button></div>
       ) : (
         <div className="tele-grid">
           {layout.map((id) => <div key={id} className={byId.get(id).wide ? "tele-wide" : ""}>{byId.get(id).render(ctx)}</div>)}
