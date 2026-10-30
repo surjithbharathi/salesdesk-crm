@@ -130,6 +130,10 @@ test("KPI endpoints: team vs caller scope, goals need the owner, same-origin wri
   assert.equal(phoneDay.status, 200);
   const phoneKpi = await phoneDay.json();
   assert.ok(phoneKpi.goal.calls > 0 && phoneKpi.today && Array.isArray(phoneKpi.badges) && "streak" in phoneKpi, JSON.stringify(Object.keys(phoneKpi)));
+  const phoneBoard = await fetch(mobileBase + "/v1/kpi/leaderboard/month/330", { headers: { Authorization: `Bearer ${phoneToken}` } });
+  assert.equal(phoneBoard.status, 200);
+  assert.ok(Array.isArray((await phoneBoard.json()).rows));
+  assert.equal((await fetch(mobileBase + "/v1/kpi/leaderboard/month/330")).status, 401);
   // WhatsApp, call AI and AI connections are administrator-only
   for (const path of ["/api/whatsapp/status", "/api/call-ai/settings", "/api/call-ai/keys", "/api/mcp/keys", "/api/mcp/approvals"]) {
     const asCaller = await json(path, { headers: { Cookie: callerCookie } });

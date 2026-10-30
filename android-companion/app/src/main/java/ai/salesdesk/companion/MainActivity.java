@@ -23,7 +23,7 @@ public class MainActivity extends Activity {
     @Override protected void onPause(){if(visibleSync!=null){visibleSync.close();visibleSync=null;}clickToCall.pause();super.onPause();}
     static final int PURPLE=0xff6457d9,INK=0xff202333,MUTED=0xff707789,BG=0xfff7f8fc;
     boolean showSyncOptions,showCallingOptions,leadsToday,tasksToday=true,syncAfterCallLogPermission,pendingSimSetup,pendingRecordingSetup,pendingCallerSetup,pendingBridgeSetup;
-    LinearLayout root,content;TextView syncStatus;String screen="Dashboard",filter="All",search="",pendingCall;JSONObject workspace=new JSONObject();boolean busy;MediaPlayer player;
+    LinearLayout root,content;TextView syncStatus;String screen="My day",filter="All",search="",pendingCall;JSONObject workspace=new JSONObject();boolean busy;MediaPlayer player;
     final android.os.Handler handler=new android.os.Handler(android.os.Looper.getMainLooper());
     final Runnable update=new Runnable(){public void run(){if(syncStatus!=null)syncStatus.setText(SecureConfig.prefs(MainActivity.this).getString("status","Not yet synced."));handler.postDelayed(this,3000);}};
     int dp(int n){return (int)(n*getResources().getDisplayMetrics().density);}
@@ -52,12 +52,12 @@ public class MainActivity extends Activity {
     void work(Runnable task){work(task,()->{});}
     void work(Runnable task,Runnable complete){if(busy){notice("Please wait for the current request.");return;}busy=true;new Thread(()->{try{task.run();}finally{runOnUiThread(()->{busy=false;complete.run();});}}).start();}
     void failure(Exception e){runOnUiThread(()->{if(e instanceof SyncEngine.HttpError&&(((SyncEngine.HttpError)e).code==401||((SyncEngine.HttpError)e).code==403)){SyncJob.schedule(this,false);SecureConfig.prefs(this).edit().putBoolean("enabled",false).commit();notice("Session expired or access denied. Sign out and sign in again. Sync is paused.");}else notice("Request failed. Check connection and server. "+e.getMessage());});}
-    @Override public void onCreate(Bundle state){super.onCreate(state);if(!BuildConfig.CRM_API_ORIGIN.equals(SecureConfig.prefs(this).getString("endpoint",""))){if(SecureConfig.loggedIn(this))SecureConfig.logout(this);SecureConfig.prefs(this).edit().putString("endpoint",BuildConfig.CRM_API_ORIGIN).commit();}if(!BuildConfig.DEBUG)getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE,WindowManager.LayoutParams.FLAG_SECURE);getWindow().setStatusBarColor(BG);getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);getWindow().setNavigationBarColor(Color.WHITE);if(state!=null){pendingCall=state.getString("pending");screen=state.getString("screen","Dashboard");filter=state.getString("filter","All");search=state.getString("search","");showSyncOptions=state.getBoolean("syncOptions");showCallingOptions=state.getBoolean("callingOptions");leadsToday=state.getBoolean("leadsToday");tasksToday=state.getBoolean("tasksToday",true);}try{workspace=new JSONObject(SecureConfig.prefs(this).getString("workspace","{}"));}catch(Exception ignored){}render();handler.post(update);if(SecureConfig.loggedIn(this))refresh();}
+    @Override public void onCreate(Bundle state){super.onCreate(state);if(!BuildConfig.CRM_API_ORIGIN.equals(SecureConfig.prefs(this).getString("endpoint",""))){if(SecureConfig.loggedIn(this))SecureConfig.logout(this);SecureConfig.prefs(this).edit().putString("endpoint",BuildConfig.CRM_API_ORIGIN).commit();}if(!BuildConfig.DEBUG)getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE,WindowManager.LayoutParams.FLAG_SECURE);getWindow().setStatusBarColor(BG);getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);getWindow().setNavigationBarColor(Color.WHITE);if(state!=null){pendingCall=state.getString("pending");screen=state.getString("screen","My day");filter=state.getString("filter","All");search=state.getString("search","");showSyncOptions=state.getBoolean("syncOptions");showCallingOptions=state.getBoolean("callingOptions");leadsToday=state.getBoolean("leadsToday");tasksToday=state.getBoolean("tasksToday",true);}try{workspace=new JSONObject(SecureConfig.prefs(this).getString("workspace","{}"));}catch(Exception ignored){}render();handler.post(update);if(SecureConfig.loggedIn(this))refresh();}
     void render(){syncStatus=null;root=column();root.setBackgroundColor(BG);root.setOnApplyWindowInsetsListener((v,insets)->{if(android.os.Build.VERSION.SDK_INT>=30){android.graphics.Insets bars=insets.getInsets(WindowInsets.Type.systemBars());v.setPadding(bars.left,bars.top,bars.right,bars.bottom);}else v.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());return insets;});setContentView(root);root.requestApplyInsets();if(!SecureConfig.loggedIn(this)){login();return;}
-        LinearLayout bar=horizontal();bar.setPadding(dp(22),dp(10),dp(18),dp(12));LinearLayout heading=column();TextView brand=text(heading,"salesdesk",12,true);brand.setTextColor(PURPLE);text(heading,screen.equals("Dashboard")?"Your workspace":screen,25,true);bar.addView(heading,new LinearLayout.LayoutParams(0,-2,1));ImageButton refresh=new ImageButton(this);refresh.setImageResource(R.drawable.ic_refresh_cw);refresh.setColorFilter(PURPLE);refresh.setPadding(dp(13),dp(13),dp(13),dp(13));refresh.setContentDescription("Refresh workspace");refresh.setBackground(surface(Color.WHITE,16));bar.addView(refresh,new LinearLayout.LayoutParams(dp(48),dp(48)));refresh.setOnClickListener(v->refresh());ImageButton preferences=new ImageButton(this);preferences.setImageResource(R.drawable.ic_settings_2);preferences.setContentDescription("Workspace menu");preferences.setColorFilter(PURPLE);preferences.setBackground(surface(Color.WHITE,16));bar.addView(preferences,new LinearLayout.LayoutParams(dp(48),dp(48)));preferences.setOnClickListener(this::workspaceMenu);root.addView(bar);
+        LinearLayout bar=horizontal();bar.setPadding(dp(22),dp(10),dp(18),dp(12));LinearLayout heading=column();TextView brand=text(heading,"salesdesk",12,true);brand.setTextColor(PURPLE);text(heading,screen.equals("Dashboard")?"Overview":screen,25,true);bar.addView(heading,new LinearLayout.LayoutParams(0,-2,1));ImageButton refresh=new ImageButton(this);refresh.setImageResource(R.drawable.ic_refresh_cw);refresh.setColorFilter(PURPLE);refresh.setPadding(dp(13),dp(13),dp(13),dp(13));refresh.setContentDescription("Refresh workspace");refresh.setBackground(surface(Color.WHITE,16));bar.addView(refresh,new LinearLayout.LayoutParams(dp(48),dp(48)));refresh.setOnClickListener(v->refresh());ImageButton preferences=new ImageButton(this);preferences.setImageResource(R.drawable.ic_settings_2);preferences.setContentDescription("Workspace menu");preferences.setColorFilter(PURPLE);preferences.setBackground(surface(Color.WHITE,16));bar.addView(preferences,new LinearLayout.LayoutParams(dp(48),dp(48)));preferences.setOnClickListener(this::workspaceMenu);root.addView(bar);
         ScrollView scroll=new ScrollView(this);scroll.setClipToPadding(false);scroll.setVerticalScrollBarEnabled(false);content=column();content.setPadding(dp(18),dp(6),dp(18),dp(18));scroll.addView(content);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-        if(screen.equals("Dashboard"))home();else if(screen.equals("Leads"))leads();else if(screen.equals("Tickets"))tickets();else if(screen.equals("Users"))workspaceUsers();else if(screen.equals("To-do"))tasks();else if(screen.equals("Activity"))activity();else if(screen.equals("Calls"))calls();else if(screen.equals("Advanced"))advancedPreferences();else settings();
-        LinearLayout nav=horizontal();nav.setPadding(dp(8),dp(8),dp(8),dp(6));nav.setBackgroundColor(Color.WHITE);String[] names={"Dashboard","Leads","Calls","To-do","Activity"};int[] icons={R.drawable.ic_house,R.drawable.ic_users_round,R.drawable.ic_phone,R.drawable.ic_calendar_check,R.drawable.ic_refresh_cw};for(int i=0;i<names.length;i++){final String target=names[i];boolean selected=screen.equals(target);LinearLayout item=column();item.setGravity(Gravity.CENTER);item.setPadding(0,dp(7),0,dp(3));item.setContentDescription(target);item.setSelected(selected);item.setFocusable(true);item.setMinimumHeight(dp(56));ImageView icon=glyph(icons[i],selected?PURPLE:MUTED);icon.setPadding(dp(10),dp(5),dp(10),dp(5));if(selected)icon.setBackground(surface(0xfff0edfc,12));item.addView(icon,new LinearLayout.LayoutParams(dp(46),dp(32)));text(item,target,10,selected).setTextColor(selected?PURPLE:MUTED);nav.addView(item,new LinearLayout.LayoutParams(0,-2,1));item.setOnClickListener(v->{screen=target;render();});}root.addView(nav);
+        if(screen.equals("My day"))myDay();else if(screen.equals("Dashboard"))home();else if(screen.equals("Leads"))leads();else if(screen.equals("Tickets"))tickets();else if(screen.equals("Users"))workspaceUsers();else if(screen.equals("To-do"))tasks();else if(screen.equals("Activity"))activity();else if(screen.equals("Calls"))calls();else if(screen.equals("Advanced"))advancedPreferences();else settings();
+        LinearLayout nav=horizontal();nav.setPadding(dp(8),dp(8),dp(8),dp(6));nav.setBackgroundColor(Color.WHITE);String[] names={"My day","Leads","Calls","To-do","Activity"};int[] icons={R.drawable.ic_house,R.drawable.ic_users_round,R.drawable.ic_phone,R.drawable.ic_calendar_check,R.drawable.ic_refresh_cw};for(int i=0;i<names.length;i++){final String target=names[i];boolean selected=screen.equals(target);LinearLayout item=column();item.setGravity(Gravity.CENTER);item.setPadding(0,dp(7),0,dp(3));item.setContentDescription(target);item.setSelected(selected);item.setFocusable(true);item.setMinimumHeight(dp(56));ImageView icon=glyph(icons[i],selected?PURPLE:MUTED);icon.setPadding(dp(10),dp(5),dp(10),dp(5));if(selected)icon.setBackground(surface(0xfff0edfc,12));item.addView(icon,new LinearLayout.LayoutParams(dp(46),dp(32)));text(item,target,10,selected).setTextColor(selected?PURPLE:MUTED);nav.addView(item,new LinearLayout.LayoutParams(0,-2,1));item.setOnClickListener(v->{screen=target;render();});}root.addView(nav);
     }
     void login(){
         ScrollView scroll=new ScrollView(this);LinearLayout b=column();b.setPadding(dp(26),dp(48),dp(26),dp(24));scroll.addView(b);root.addView(scroll);
@@ -67,7 +67,7 @@ public class MainActivity extends Activity {
         primary(b,"Sign in",()->{
             String username=user.getText().toString().trim(),secret=password.getText().toString();if(username.isEmpty()||secret.isEmpty()){notice("Enter your CRM username and password.");return;}password.setText("");
             SecureConfig.prefs(this).edit().putString("endpoint",BuildConfig.CRM_API_ORIGIN).commit();
-            work(()->{try{JSONObject r=SyncEngine.requestApi(this,"/v1/login","POST",new JSONObject().put("username",username).put("password",secret).put("deviceId",SecureConfig.deviceId(this)));JSONObject a=r.getJSONObject("user");SecureConfig.token(this,r.getString("token"));SecureConfig.prefs(this).edit().putString("userId",a.getString("id")).putString("user",a.toString()).remove("workspace").remove("kpiDay").remove("targets").putLong("since",System.currentTimeMillis()).putBoolean("enabled",false).putBoolean("clickToCall",false).putBoolean("callWhileLocked",false).commit();workspace=new JSONObject();runOnUiThread(this::render);loadWorkspace();}catch(Exception e){runOnUiThread(()->notice(e instanceof SyncEngine.HttpError?(((SyncEngine.HttpError)e).code==401?"Username or password is incorrect. Use the account created in web CRM.":"Company CRM is not ready or access was refused. Contact your administrator."):"Cannot reach your company CRM. Check your internet connection and try again."));}});
+            work(()->{try{JSONObject r=SyncEngine.requestApi(this,"/v1/login","POST",new JSONObject().put("username",username).put("password",secret).put("deviceId",SecureConfig.deviceId(this)));JSONObject a=r.getJSONObject("user");SecureConfig.token(this,r.getString("token"));SecureConfig.prefs(this).edit().putString("userId",a.getString("id")).putString("user",a.toString()).remove("workspace").remove("kpiDay").remove("kpiEarned").remove("targets").putLong("since",System.currentTimeMillis()).putBoolean("enabled",false).putBoolean("clickToCall",false).putBoolean("callWhileLocked",false).commit();workspace=new JSONObject();runOnUiThread(this::render);loadWorkspace();}catch(Exception e){runOnUiThread(()->notice(e instanceof SyncEngine.HttpError?(((SyncEngine.HttpError)e).code==401?"Username or password is incorrect. Use the account created in web CRM.":"Company CRM is not ready or access was refused. Contact your administrator."):"Cannot reach your company CRM. Check your internet connection and try again."));}});
         });caption(b,"Password is never saved. Business call sync and background calling stay off until you enable them in Settings.");
     }
     void refresh(){work(()->{try{loadWorkspace();}catch(Exception e){failure(e);}});}
@@ -80,9 +80,26 @@ public class MainActivity extends Activity {
             int offset=java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis())/60000;
             JSONObject day=SyncEngine.requestApi(this,"/v1/kpi/day/"+offset+"/"+start+"/"+(start+86399999L),"GET",null);
             SecureConfig.prefs(this).edit().putString("kpiDay",day.toString()).commit();
+            cheerForNew(day);
         }catch(Exception e){
             SecureConfig.prefs(this).edit().remove("kpiDay").commit();
         }
+    }
+    /** A short "Well done" when a badge, milestone, finished challenge or level is new since the last refresh. */
+    void cheerForNew(JSONObject day){
+        Map<String,String> earned=new LinkedHashMap<>();
+        JSONObject level=day.optJSONObject("level");
+        if(level!=null)earned.put("level:"+level.optInt("level"),"Level "+level.optInt("level")+": "+level.optString("name"));
+        for(String key:new String[]{"badges","milestones"}){JSONArray items=day.optJSONArray(key);if(items!=null)for(int i=0;i<items.length();i++){JSONObject o=items.optJSONObject(i);if(o!=null&&o.optBoolean("earned"))earned.put(key+":"+o.optString("id"),o.optString("label"));}}
+        JSONArray challenges=day.optJSONArray("challenges");
+        if(challenges!=null)for(int i=0;i<challenges.length();i++){JSONObject o=challenges.optJSONObject(i);if(o!=null&&o.optBoolean("done"))earned.put("challenge:"+o.optString("id"),"Challenge done: "+o.optString("label"));}
+        String before=SecureConfig.prefs(this).getString("kpiEarned",null);
+        SecureConfig.prefs(this).edit().putString("kpiEarned",String.join("|",earned.keySet())).commit();
+        if(before==null)return;
+        Set<String> known=new HashSet<>(Arrays.asList(before.split("\\|")));
+        List<String> fresh=new ArrayList<>();
+        for(Map.Entry<String,String> e:earned.entrySet())if(!known.contains(e.getKey()))fresh.add(e.getValue());
+        if(!fresh.isEmpty())runOnUiThread(()->Toast.makeText(this,"Well done. "+String.join(", ",fresh)+".",Toast.LENGTH_LONG).show());
     }
     void goalRow(LinearLayout card,String label,int value,int goal){
         boolean met=goal>0&&value>=goal;int color=met?0xff17806c:PURPLE;
@@ -97,77 +114,136 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,dp(8));p.setMargins(0,0,0,dp(8));
         card.addView(bar,p);
     }
-    void homeKpi(){
-        JSONObject d;
-        try{d=new JSONObject(SecureConfig.prefs(this).getString("kpiDay","{}"));}catch(Exception e){return;}
-        JSONObject goal=d.optJSONObject("goal"),today=d.optJSONObject("today");
-        if(goal==null||today==null)return;
-        section("Your day","Goals and points");
-        LinearLayout c=card();
-        JSONObject level=d.optJSONObject("level");
-        if(level!=null){
-            text(c,"Level "+level.optInt("level")+" · "+level.optString("name"),20,true).setTextColor(PURPLE);
-            int floor=level.optInt("floor"),next=level.optInt("next",-1),points=level.optInt("points");
-            ProgressBar lv=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);
-            lv.setMax(next>floor?next-floor:1);lv.setProgress(next>floor?points-floor:1);
-            lv.setProgressTintList(android.content.res.ColorStateList.valueOf(PURPLE));
-            lv.setContentDescription("Level progress");
-            LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(8));lp.setMargins(0,dp(2),0,dp(4));c.addView(lv,lp);
-            caption(c,(next>floor?level.optInt("toNext")+" points to "+level.optString("nextName"):"Top level")+" · "+points+" points in all");
-        }
-        int streak=d.optInt("streak");
-        JSONObject week=d.optJSONObject("week"),month=d.optJSONObject("month");
-        StringBuilder standing=new StringBuilder(streak>0?streak+(streak==1?" working day":" working days")+" in a row":"No streak yet");
-        if(week!=null&&week.optInt("rank")>0)standing.append(" · #").append(week.optInt("rank")).append(" of ").append(week.optInt("of")).append(" this week");
-        if(month!=null&&month.optInt("rank")>0)standing.append(" · #").append(month.optInt("rank")).append(" this month");
-        caption(c,standing.toString());
-        text(c,today.optInt("points")+" points today",18,true);
-        goalRow(c,"Calls",today.optInt("calls"),goal.optInt("calls"));
-        goalRow(c,"Answered",today.optInt("answered"),goal.optInt("answered"));
-        goalRow(c,"Quotations",today.optInt("quotations"),goal.optInt("quotations"));
-        JSONObject team=d.optJSONObject("teamToday");
-        if(team!=null&&team.optInt("goal")>0)goalRow(c,"Team calls today",team.optInt("calls"),team.optInt("goal"));
-        int late=d.optInt("lateLeft");
-        if(late>0){TextView t=text(c,late+(late==1?" follow-up is late":" follow-ups are late"),14,true);t.setTextColor(0xffb54725);}
-        JSONObject next=d.optJSONObject("next");
-        if(next!=null){
-            text(c,"Call next: "+next.optString("name"),16,true);
-            caption(c,joined(next.optString("reason"),joined(next.optString("company"),next.optString("city"))));
-            final String phone=next.optString("phone");
-            if(!phone.isEmpty())primary(c,"Open dialer",()->startActivity(new Intent(Intent.ACTION_DIAL,Uri.fromParts("tel",phone,null))));
-        }
-        JSONArray challenges=d.optJSONArray("challenges");
-        if(challenges!=null&&challenges.length()>0){
-            int done=0;for(int i=0;i<challenges.length();i++)if(challenges.optJSONObject(i)!=null&&challenges.optJSONObject(i).optBoolean("done"))done++;
-            LinearLayout box=card();
-            text(box,"Challenges this week · "+done+" of "+challenges.length(),16,true);
-            for(int i=0;i<challenges.length();i++){JSONObject ch=challenges.optJSONObject(i);if(ch!=null)goalRow(box,ch.optString("label"),ch.optInt("value"),ch.optInt("target"));}
-        }
-        StringBuilder earned=new StringBuilder();JSONArray badges=d.optJSONArray("badges");
-        if(badges!=null)for(int i=0;i<badges.length();i++){JSONObject b=badges.optJSONObject(i);if(b!=null&&b.optBoolean("earned"))earned.append(earned.length()==0?"":" · ").append(b.optString("label"));}
-        JSONArray marks=d.optJSONArray("milestones");int won=0;if(marks!=null)for(int i=0;i<marks.length();i++)if(marks.optJSONObject(i)!=null&&marks.optJSONObject(i).optBoolean("earned"))won++;
-        if(earned.length()>0)caption(c,"Earned today: "+earned);
-        if(marks!=null&&marks.length()>0)caption(c,"Milestones: "+won+" of "+marks.length());
-        JSONArray board=d.optJSONArray("weekBoard");
-        if(board!=null&&board.length()>0){
-            section("Leaderboard","This week");
-            LinearLayout lb=card();String me=SecureConfig.prefs(this).getString("userId","");
-            for(int i=0;i<Math.min(5,board.length());i++){
-                JSONObject r=board.optJSONObject(i);if(r==null)continue;
-                LinearLayout row=horizontal();boolean mine=me.equals(r.optString("userId"));
-                text(row,String.valueOf(r.optInt("rank")),16,true).setTextColor(PURPLE);
-                TextView name=text(row,"  "+r.optString("name")+(mine?" (you)":""),14,mine);name.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1));
-                text(row,String.valueOf(r.optInt("points")),16,true);
-                lb.addView(row);
+    static final int GREEN=0xff17806c,RED=0xffb54725;
+    String boardPeriod="week";JSONArray monthRows=null;
+    void chip(LinearLayout row,String label,boolean on){
+        TextView t=text(row,label,12,on);t.setTextColor(on?0xff7a4e00:MUTED);t.setPadding(dp(10),dp(7),dp(10),dp(7));
+        t.setBackground(surface(on?0xfffbeab8:0xfff1f2f6,10));
+        LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-2,1);p.setMargins(0,0,dp(6),dp(6));t.setLayoutParams(p);
+        t.setContentDescription(label+(on?", earned":", not yet"));
+    }
+    void chipRows(LinearLayout box,JSONArray items,boolean withProgress){
+        for(int i=0;i<items.length();i+=2){
+            LinearLayout row=horizontal();
+            for(int j=i;j<Math.min(i+2,items.length());j++){
+                JSONObject m=items.optJSONObject(j);if(m==null)continue;
+                boolean on=m.optBoolean("earned");
+                chip(row,on||!withProgress?m.optString("label"):m.optString("label")+" · "+m.optInt("value")+"/"+m.optInt("target"),on);
             }
-            JSONArray stars=d.optJSONArray("hallOfFame");
-            if(stars!=null&&stars.length()>0){
-                JSONObject w=stars.optJSONObject(0);
-                if(w!=null)caption(lb,"Star of last week: "+w.optString("name")+" · "+w.optInt("points")+" points");
-            }
+            if(i+1>=items.length())row.addView(new View(this),new LinearLayout.LayoutParams(0,1,1));
+            box.addView(row);
         }
     }
-    void home(){JSONObject user=workspace.optJSONObject("user");if(user==null)try{user=new JSONObject(SecureConfig.prefs(this).getString("user","{}"));}catch(Exception ignored){}LinearLayout welcome=card();String name=user==null?"there":user.optString("name","there");text(welcome,"Hello, "+name.split(" ")[0],22,true);caption(welcome,"Leads, follow-ups and calls at a glance.");int open=0;for(int i=0;i<rows("tasks").length();i++){JSONObject t=rows("tasks").optJSONObject(i);if(t!=null&&!t.optString("status").equals("Done"))open++;}LinearLayout metrics=horizontal();welcome.addView(metrics);metric(metrics,"New today",todayLeads(),"Leads");metric(metrics,"Open tasks",open,"To-do");pair(welcome,"+ Add lead",this::leadForm,"+ New task",this::taskForm);long at=SecureConfig.prefs(this).getLong("workspaceAt",0);caption(welcome,at==0?"Pull your workspace with refresh.":"Updated "+android.text.format.DateFormat.getTimeFormat(this).format(new Date(at)));homeKpi();homeOverview();section("Recent activity","Latest updates");JSONArray a=rows("activities");if(a.length()==0){LinearLayout empty=card();identity(empty,"You’re all set","Updates will appear as your team works.",R.drawable.ic_calendar_check);}for(int i=a.length()-1;i>=Math.max(0,a.length()-12);i--){JSONObject r=a.optJSONObject(i);if(r==null)continue;LinearLayout entry=card();identity(entry,leadName(r.optString("leadId")),dateLabel(r.optString("createdAt",r.optString("date"))),R.drawable.ic_users_round);text(entry,r.optString("text",r.optString("title",r.optString("type","Activity"))),13,false);}}
+    int earnedCount(JSONArray items){int n=0;for(int i=0;i<items.length();i++)if(items.optJSONObject(i)!=null&&items.optJSONObject(i).optBoolean("earned"))n++;return n;}
+    /** Level, next call, goal rings, team goal, challenges, badges, milestones, leaderboard and the stars of the week. */
+    void myDay(){
+        JSONObject d;
+        try{d=new JSONObject(SecureConfig.prefs(this).getString("kpiDay","{}"));}catch(Exception e){d=new JSONObject();}
+        JSONObject goal=d.optJSONObject("goal"),today=d.optJSONObject("today");
+        JSONObject user=workspace.optJSONObject("user");
+        String name=user==null?"":user.optString("name","").split(" ")[0];
+        int hour=java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY);
+        LinearLayout hero=card();
+        text(hero,(hour<12?"Good morning":hour<17?"Good afternoon":"Good evening")+(name.isEmpty()?"":", "+name),22,true);
+        if(goal==null||today==null){
+            caption(hero,"Your goals and points appear here once the CRM answers. Use the refresh button at the top.");
+            return;
+        }
+        JSONObject level=d.optJSONObject("level");
+        if(level!=null){
+            LinearLayout row=horizontal();
+            TextView badge=new TextView(this);badge.setText(String.valueOf(level.optInt("level")));badge.setTextSize(26);badge.setTextColor(Color.WHITE);badge.setGravity(Gravity.CENTER);badge.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));badge.setBackground(surface(INK,14));
+            row.addView(badge,new LinearLayout.LayoutParams(dp(52),dp(52)));
+            LinearLayout labels=column();LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-2,1);lp.setMargins(dp(12),0,0,0);row.addView(labels,lp);
+            text(labels,level.optString("name"),18,true);
+            int floor=level.optInt("floor"),next=level.optInt("next",-1),points=level.optInt("points");
+            ProgressBar lv=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);lv.setMax(next>floor?next-floor:1);lv.setProgress(next>floor?points-floor:1);
+            lv.setProgressTintList(android.content.res.ColorStateList.valueOf(PURPLE));lv.setContentDescription("Level progress");
+            labels.addView(lv,new LinearLayout.LayoutParams(-1,dp(8)));
+            caption(labels,(next>floor?level.optInt("toNext")+" points to "+level.optString("nextName"):"Top level")+" · "+points+" points in all");
+            hero.addView(row);
+        }
+        int streak=d.optInt("streak");JSONObject week=d.optJSONObject("week"),month=d.optJSONObject("month");
+        StringBuilder standing=new StringBuilder(streak>0?streak+(streak==1?" working day":" working days")+" in a row":"No streak yet");
+        if(d.optInt("bestStreak")>streak)standing.append(" (best ").append(d.optInt("bestStreak")).append(")");
+        if(week!=null&&week.optInt("rank")>0)standing.append(" · #").append(week.optInt("rank")).append(" of ").append(week.optInt("of")).append(" this week");
+        if(month!=null&&month.optInt("rank")>0)standing.append(" · #").append(month.optInt("rank")).append(" this month");
+        caption(hero,standing.toString());
+        int late=d.optInt("lateLeft");
+        if(late>0){TextView t=text(hero,late+(late==1?" follow-up is late":" follow-ups are late"),14,true);t.setTextColor(RED);}
+
+        JSONObject next=d.optJSONObject("next");
+        LinearLayout nextCard=card();
+        if(next!=null){
+            TextView reason=text(nextCard,next.optString("reason"),12,true);reason.setTextColor(RED);
+            text(nextCard,next.optString("name"),20,true);
+            caption(nextCard,joined(next.optString("company"),joined(next.optString("city"),next.optString("product"))));
+            final String phone=next.optString("phone");
+            if(!phone.isEmpty())primary(nextCard,"Call "+phone,()->startActivity(new Intent(Intent.ACTION_DIAL,Uri.fromParts("tel",phone,null))));
+            int left=goal.optInt("calls")-today.optInt("calls");
+            caption(nextCard,today.optInt("calls")==0?"Your first call starts the day.":left>0?left+(left==1?" call":" calls")+" to reach today's goal.":"Goal reached. Every extra call still scores.");
+        }else{
+            text(nextCard,"You are all caught up",18,true);
+            caption(nextCard,"No late follow-ups and no uncalled leads. New enquiries will appear here.");
+        }
+
+        section("Today's goals",today.optInt("points")+" points");
+        LinearLayout rings=card();LinearLayout ringRow=horizontal();
+        String[] labels={"Calls","Answered","Quotations"};String[] keys={"calls","answered","quotations"};
+        for(int i=0;i<3;i++){
+            LinearLayout cell=column();cell.setGravity(Gravity.CENTER_HORIZONTAL);
+            cell.addView(new RingView(this,labels[i],today.optInt(keys[i]),goal.optInt(keys[i]),PURPLE,INK,MUTED),new LinearLayout.LayoutParams(-1,-2));
+            TextView l=text(cell,labels[i],13,true);l.setGravity(Gravity.CENTER);
+            LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-2,1);p.setMargins(dp(3),0,dp(3),0);ringRow.addView(cell,p);
+        }
+        rings.addView(ringRow);
+        JSONObject team=d.optJSONObject("teamToday");
+        if(team!=null&&team.optInt("goal")>0){View gap=new View(this);rings.addView(gap,new LinearLayout.LayoutParams(-1,dp(10)));goalRow(rings,"Team calls today",team.optInt("calls"),team.optInt("goal"));}
+
+        JSONArray challenges=d.optJSONArray("challenges");
+        if(challenges!=null&&challenges.length()>0){
+            section("Challenges this week",earnedDone(challenges)+" of "+challenges.length());
+            LinearLayout box=card();
+            for(int i=0;i<challenges.length();i++){JSONObject ch=challenges.optJSONObject(i);if(ch!=null)goalRow(box,ch.optString("label"),ch.optInt("value"),ch.optInt("target"));}
+        }
+        JSONArray badges=d.optJSONArray("badges");
+        if(badges!=null&&badges.length()>0){section("Badges today",earnedCount(badges)+" of "+badges.length());chipRows(card(),badges,false);}
+        JSONArray marks=d.optJSONArray("milestones");
+        if(marks!=null&&marks.length()>0){section("Milestones",earnedCount(marks)+" of "+marks.length());chipRows(card(),marks,true);}
+
+        JSONArray board=boardPeriod.equals("month")?monthRows:d.optJSONArray("weekBoard");
+        section("Leaderboard",boardPeriod.equals("month")?"This month":"This week");
+        LinearLayout lb=card();
+        pair(lb,"This week",()->{boardPeriod="week";render();},"This month",()->{boardPeriod="month";loadMonthBoard();});
+        String me=SecureConfig.prefs(this).getString("userId","");
+        if(board==null||board.length()==0)caption(lb,boardPeriod.equals("month")?"Loading the month…":"No activity yet this week.");
+        else for(int i=0;i<Math.min(8,board.length());i++){
+            JSONObject r=board.optJSONObject(i);if(r==null)continue;
+            LinearLayout row=horizontal();boolean mine=me.equals(r.optString("userId"));
+            TextView rank=text(row,String.valueOf(r.optInt("rank")),16,true);rank.setTextColor(PURPLE);rank.setMinWidth(dp(26));
+            TextView who=text(row,r.optString("name")+(mine?" (you)":""),14,mine);who.setLayoutParams(new LinearLayout.LayoutParams(0,-2,1));
+            text(row,String.valueOf(r.optInt("points")),16,true);
+            lb.addView(row);
+        }
+        JSONArray stars=d.optJSONArray("hallOfFame");
+        if(stars!=null&&stars.length()>0){
+            section("Stars of the week","Last finished weeks");
+            LinearLayout box=card();
+            for(int i=0;i<stars.length();i++){JSONObject w=stars.optJSONObject(i);if(w==null)continue;text(box,w.optString("name")+" · "+w.optInt("points")+" points",14,w.optString("userId").equals(me));caption(box,"Week of "+w.optString("weekStart"));}
+        }
+        caption(card(),"Points come only from calls and changes saved in the CRM: 1 per call, 1 more when answered (10 seconds or longer), 3 per follow-up done on time, 10 per quotation, 50 per order won. Tapping cannot earn points.");
+    }
+    int earnedDone(JSONArray items){int n=0;for(int i=0;i<items.length();i++)if(items.optJSONObject(i)!=null&&items.optJSONObject(i).optBoolean("done"))n++;return n;}
+    void loadMonthBoard(){
+        work(()->{
+            try{
+                int offset=java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis())/60000;
+                monthRows=SyncEngine.requestApi(this,"/v1/kpi/leaderboard/month/"+offset,"GET",null).getJSONArray("rows");
+                runOnUiThread(this::render);
+            }catch(Exception e){failure(e);}
+        });
+    }
+    void home(){JSONObject user=workspace.optJSONObject("user");if(user==null)try{user=new JSONObject(SecureConfig.prefs(this).getString("user","{}"));}catch(Exception ignored){}LinearLayout welcome=card();String name=user==null?"there":user.optString("name","there");text(welcome,"Hello, "+name.split(" ")[0],22,true);caption(welcome,"Leads, follow-ups and calls at a glance.");int open=0;for(int i=0;i<rows("tasks").length();i++){JSONObject t=rows("tasks").optJSONObject(i);if(t!=null&&!t.optString("status").equals("Done"))open++;}LinearLayout metrics=horizontal();welcome.addView(metrics);metric(metrics,"New today",todayLeads(),"Leads");metric(metrics,"Open tasks",open,"To-do");pair(welcome,"+ Add lead",this::leadForm,"+ New task",this::taskForm);long at=SecureConfig.prefs(this).getLong("workspaceAt",0);caption(welcome,at==0?"Pull your workspace with refresh.":"Updated "+android.text.format.DateFormat.getTimeFormat(this).format(new Date(at)));homeOverview();section("Recent activity","Latest updates");JSONArray a=rows("activities");if(a.length()==0){LinearLayout empty=card();identity(empty,"You’re all set","Updates will appear as your team works.",R.drawable.ic_calendar_check);}for(int i=a.length()-1;i>=Math.max(0,a.length()-12);i--){JSONObject r=a.optJSONObject(i);if(r==null)continue;LinearLayout entry=card();identity(entry,leadName(r.optString("leadId")),dateLabel(r.optString("createdAt",r.optString("date"))),R.drawable.ic_users_round);text(entry,r.optString("text",r.optString("title",r.optString("type","Activity"))),13,false);}}
     void metric(LinearLayout row,String label,int value,String target){LinearLayout tile=column();tile.setPadding(dp(14),dp(12),dp(10),dp(12));tile.setBackground(surface(target.equals("Leads")?0xfff0edfc:0xffeaf6f1,14));text(tile,String.valueOf(value),27,true).setTextColor(target.equals("Leads")?PURPLE:0xff17806c);text(tile,label,12,false);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-2,1);p.setMargins(0,dp(10),dp(6),dp(8));row.addView(tile,p);tile.setContentDescription(label+", "+value+". Open "+target);tile.setFocusable(true);tile.setOnClickListener(v->{screen=target;render();});}
     void homeOverview(){
         section("Your pipeline","Assigned leads");
@@ -292,7 +368,7 @@ public class MainActivity extends Activity {
     }
     void settings(){new SimplePreferences(this).render();}
     boolean workspaceAdmin(){JSONObject user=workspace.optJSONObject("user");return user!=null&&"admin".equals(user.optString("role"));}
-    void workspaceMenu(View anchor){PopupMenu menu=new PopupMenu(this,anchor);menu.getMenu().add("Preferences");if(rows("tickets").length()>0)menu.getMenu().add("Tickets");if(workspaceAdmin())menu.getMenu().add("Users");menu.setOnMenuItemClickListener(item->{screen=item.getTitle().toString();render();return true;});menu.show();}
+    void workspaceMenu(View anchor){PopupMenu menu=new PopupMenu(this,anchor);menu.getMenu().add("Overview");menu.getMenu().add("Preferences");if(rows("tickets").length()>0)menu.getMenu().add("Tickets");if(workspaceAdmin())menu.getMenu().add("Users");menu.setOnMenuItemClickListener(item->{String picked=item.getTitle().toString();screen=picked.equals("Overview")?"Dashboard":picked;render();return true;});menu.show();}
     void tickets(){section("My tickets","Assigned to you");if(rows("tickets").length()==0){caption(card(),"No tickets assigned to you.");return;}for(int i=0;i<rows("tickets").length();i++){JSONObject ticket=rows("tickets").optJSONObject(i);if(ticket==null)continue;LinearLayout box=card();text(box,ticket.optString("subject",ticket.optString("title","Support ticket")),17,true);badge(box,ticket.optString("status","Open"));caption(box,ticket.optString("description"));}}
     void workspaceUsers(){if(!workspaceAdmin()){caption(card(),"Workspace administrator access required.");return;}caption(content,"Workspace users · view only");button(content,"Load users",()->work(()->{try{JSONObject response=SyncEngine.requestApi(this,"/v1/admin/users","GET",null);runOnUiThread(()->{if(!"Users".equals(screen)||!workspaceAdmin())return;JSONArray users=response.optJSONArray("users");if(users==null)return;while(content.getChildCount()>2)content.removeViewAt(2);for(int i=0;i<users.length();i++){JSONObject user=users.optJSONObject(i);if(user==null)continue;LinearLayout box=card();identity(box,user.optString("name"),user.optString("username"),R.drawable.ic_users_round);badge(box,user.optString("role")+" · "+(user.optBoolean("active")?"Active":"Inactive"));}});}catch(Exception e){failure(e);}}));}
     void advancedPreferences(){

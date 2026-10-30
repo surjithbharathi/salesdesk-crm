@@ -498,6 +498,12 @@ const mobileServer = http.createServer(async (req, res) => {
       workspaceAccess.requirePermission(identity,'users.manage');
       reply(200,{users:userAuth.listAccounts()});return;
     }
+    const phoneBoard = /^\/v1\/kpi\/leaderboard\/(week|month)\/(-?\d{1,4})$/.exec(url.pathname);
+    if (phoneBoard && req.method === "GET") {
+      if (!identity) bad("Shared user login required", 401);
+      reply(200, { rows: kpi.leaderboard({ period: phoneBoard[1], tz: Number(phoneBoard[2]) }) });
+      return;
+    }
     const phoneDay = /^\/v1\/kpi\/day(?:\/(-?\d{1,4})\/(\d{10,14})\/(\d{10,14}))?$/.exec(url.pathname);
     if (phoneDay && req.method === "GET") {
       // The phone shows the signed-in person's own day: goals, streak, badges and who to call next.
