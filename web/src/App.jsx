@@ -8,6 +8,7 @@ import Leads from "./pages/Leads.jsx";
 import Calls from "./pages/Calls.jsx";
 import Tasks from "./pages/Tasks.jsx";
 import Settings from "./pages/Settings.jsx";
+import Messages from "./pages/Messages.jsx";
 import { CrmProvider } from "./crm.jsx";
 import MyDay from "./pages/MyDay.jsx";
 import Team from "./pages/Team.jsx";
@@ -19,6 +20,7 @@ const NAV_LEAD = [
   ["/leads", "Leads", "leads"],
   ["/calls", "Calls", "phone"],
   ["/todo", "To-do", "task"],
+  ["/messages", "Messages", "chat"],
   ["/team", "Team", "people"],
   ["/goals", "Daily goals", "check"],
   ["/settings", "Settings", "gear"],
@@ -28,6 +30,7 @@ const NAV_CALLER = [
   ["/leads", "Leads", "leads"],
   ["/calls", "Calls", "phone"],
   ["/todo", "To-do", "task"],
+  ["/messages", "Messages", "chat"],
   ["/settings", "Settings", "gear"],
 ];
 
@@ -120,6 +123,7 @@ export default function App() {
     path.startsWith("/leads") ? <Leads key="leads" params={params} /> :
     path.startsWith("/calls") ? <Calls key="calls" /> :
     path.startsWith("/todo") ? <Tasks key="todo" /> :
+    path.startsWith("/messages") ? <Messages key="messages" /> :
     path.startsWith("/settings") ? <Settings key="settings" params={params} me={meta} /> :
     path.startsWith("/team") && owner ? <Team key="team" /> :
     path.startsWith("/goals") && owner ? <Goals key="goals" meta={meta} /> :
@@ -164,7 +168,7 @@ export default function App() {
           <button onClick={toggleTheme} aria-label={dark ? "Switch to light theme" : "Switch to dark theme"}>
             <Icon name={dark ? "sun" : "moon"} /><span className="label">{dark ? "Light theme" : "Dark theme"}</span>
           </button>
-          <a href="/classic/"><Icon name="external" /><span className="label">Messages and more</span></a>
+          <a href="/classic/"><Icon name="external" /><span className="label">Older screens</span></a>
           {session.user && (
             <button onClick={async () => { await logout(); location.reload(); }}>
               <Icon name="close" /><span className="label">Sign out</span>

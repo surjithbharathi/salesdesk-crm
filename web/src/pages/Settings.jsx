@@ -7,6 +7,8 @@ import Email from "./settings/Email.jsx";
 import WhatsApp from "./settings/WhatsApp.jsx";
 import CallAI from "./settings/CallAI.jsx";
 import Mcp from "./settings/Mcp.jsx";
+import Assign from "./settings/Assign.jsx";
+import Workspaces from "./settings/Workspaces.jsx";
 import { Import, Export, Archived, Merge } from "./settings/LeadData.jsx";
 
 export default function Settings({ params, me }) {
@@ -23,6 +25,8 @@ export default function Settings({ params, me }) {
     ["whatsapp", "WhatsApp", can("integrations.manage"), <WhatsApp />],
     ["callai", "Call AI", admin, <CallAI />],
     ["mcp", "AI connections", admin, <Mcp />],
+    ["assign", "Assign leads", can("leads.write") && me.lead, <Assign access={full} />],
+    ["workspaces", "Workspaces", Boolean(access.crmOwner), <Workspaces currentName={access.name} />],
     ["import", "Add leads from a file", can("leads.write") && can("data.export"), <Import access={full} />],
     ["merge", "Merge duplicates", can("leads.write") && me.lead, <Merge />],
     ["archived", "Archived leads", can("leads.write"), <Archived />],
@@ -45,7 +49,7 @@ export default function Settings({ params, me }) {
             <p><b>{me.users.find((u) => u.id === me.id)?.name || "You"}</b><br /><span className="muted">{roleLabel}</span></p>
             <span className="newlead-actions">
               <button className="btn" onClick={async () => { await logout(); location.reload(); }}>Sign out</button>
-              <a className="btn btn-quiet" href="/classic/">More settings (WhatsApp, integrations, AI, MCP)</a>
+              <a className="btn btn-quiet" href="/classic/">Older screens (n8n and other integrations)</a>
             </span>
           </>
         ) : tab[3]}
