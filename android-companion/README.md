@@ -26,6 +26,10 @@ gradle :app:assembleDebug -PcrmPreview=true -PcrmApiOrigin=https://salesdesk-crm
 
 Production CRM is `salesdesk-crm.srv2101310.hstgr.cloud`. The old `srv1696974` host is not the live CRM.
 
+## 0.16.0: lead names from the phone
+
+When a lead has only its number as a name, the app sends the name this phone shows for that number: the saved contact first (Contacts permission), then the name the phone's call log holds. A name already in the CRM is never replaced. Names of numbers that are not leads stay on the phone (in "all calls" mode a new lead is made from the call and takes its name). Turn it off in Preferences with "Fill lead names from the phone". Truecaller has no way for other apps to read its names, so a Truecaller name arrives only when Truecaller has put it in the call log or the number is saved as a contact.
+
 ## 0.15.0: choose the look
 
 Settings starts with **Appearance**: Salesdesk (our own), Salesmax style and TeleCRM style. The colours of the last two were read from the colour resources (Salesmax) and the style sheet (TeleCRM) of the apps installed on the owner's phone; no artwork, icon, layout file or code was copied. Only palette, corner radius and typeface weight change; the screens and navigation are the same in every skin. The same three skins exist in the web app (Settings, Your account).

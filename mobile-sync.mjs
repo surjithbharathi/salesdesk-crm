@@ -7,6 +7,13 @@ const fail = (message, status = 400) => {
   throw Object.assign(Error(message), { status });
 };
 const digits = (value) => String(value || "").replace(/\D/g, "");
+// A lead created from a call only has its number as a name; that counts as having no name yet.
+const hasName = (lead) => /\p{L}/u.test(String(lead?.name || ""));
+function cleanName(value) {
+  if (typeof value !== "string") return "";
+  const name = Array.from(value.replace(/\p{Cc}/gu, " ").replace(/\s+/g, " ").trim()).slice(0, 100).join("").trim();
+  return /\p{L}/u.test(name) ? name : "";
+}
 export const MAX_AUDIO = 20 * 1024 * 1024;
 export function audioType(bytes) {
   if (bytes.subarray(0, 4).toString() === "OggS") return "audio/ogg";
@@ -81,8 +88,23 @@ export function createMobileSync({ db, all, get, put, stamp, tx, log, keyPath, o
   const targets = (d) =>
     all("leads")
       .filter((l) => !l.archived && !l.noCallSync && l.owner === d.owner)
-      .map((l) => ({ id: l.id, phone: phoneKeyOf(l) }))
+      .map((l) => ({ id: l.id, phone: phoneKeyOf(l), ...(hasName(l) ? {} : { needsName: true }) }))
       .filter((l) => /^[1-9]\d{7,14}$/.test(l.phone));
+  // Fills in the name the phone shows for this number. A name somebody already gave the lead is never replaced.
+  function fillName(lead, value) {
+    const name = cleanName(value);
+    if (!lead || !name || hasName(lead)) return lead;
+    const named = { ...lead, name, nameSource: "phone", updatedAt: new Date().toISOString() };
+    put("leads", named);
+    log(lead.id, "System", `Name filled from the phone: ${name}`);
+    return named;
+  }
+  function nameLead(d, id, value) {
+    if (!targets(d).some((l) => l.id === id)) fail("Lead not accessible", 403);
+    const before = get("leads", id);
+    const after = tx(() => fillName(before, value));
+    return { id, name: after.name, named: after !== before };
+  }
   function preferences(d, value) {
     const row = db.prepare("SELECT body FROM mobile_devices WHERE id=?").get(d.id);
     if (!row) fail("Device unavailable", 403);
@@ -139,8 +161,9 @@ export function createMobileSync({ db, all, get, put, stamp, tx, log, keyPath, o
       return existing;
     }
     return tx(() => {
-      const lead = matches[0] || stamp({ name: p.phone, phone: p.phone, company: "", email: "", source: "Phone call", stage: "New", owner: policy.assignment === "unassigned" ? "" : d.owner, createdBy: d.owner });
+      const lead = matches[0] || stamp({ name: cleanName(p.name) || p.phone, ...(cleanName(p.name) ? { nameSource: "phone" } : {}), phone: p.phone, company: "", email: "", source: "Phone call", stage: "New", owner: policy.assignment === "unassigned" ? "" : d.owner, createdBy: d.owner });
       if (!matches[0]) put("leads", lead);
+      else fillName(get("leads", lead.id), p.name);
       const activity = log(lead.id, "Call", `Phone sync · ${p.direction} · ${p.duration}s`, {
         direction: p.direction,
         duration: p.duration,
@@ -270,5 +293,5 @@ export function createMobileSync({ db, all, get, put, stamp, tx, log, keyPath, o
       return log(call.leadId,"Note",text.trim() || "Post-call voice feedback",{userId:d.owner,callId,feedbackId:clientId,feedbackSha:sha,...(voiceNoteId?{voiceNoteId}:{})});
     });
   }
-  return { devices, issue, revoke, authenticate, targets, preferences, call, recording, playback, feedback };
+  return { devices, issue, revoke, authenticate, targets, nameLead, preferences, call, recording, playback, feedback };
 }

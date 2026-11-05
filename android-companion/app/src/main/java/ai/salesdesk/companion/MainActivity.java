@@ -363,7 +363,8 @@ public class MainActivity extends Activity {
     void stopPlayer(){if(player!=null){player.release();player=null;}clearAudioCache();}
     void clearAudioCache(){java.io.File[] files=getCacheDir().listFiles((dir,name)->name.startsWith("crm-recording-"));if(files!=null)for(java.io.File f:files)f.delete();}
     void remotePlay(String id){work(()->{try{java.io.File audio=SyncEngine.recording(this,id);runOnUiThread(()->play(Uri.fromFile(audio),true));}catch(Exception e){failure(e);}});}
-    void sync(){if(!SecureConfig.prefs(this).getBoolean("enabled",false)){notice("Open Preferences and choose SIM & call tracking first.");return;}if(checkSelfPermission(Manifest.permission.READ_CALL_LOG)!=PackageManager.PERMISSION_GRANTED){setSyncEnabled(true);return;}work(()->{try{SyncEngine.run(this);loadWorkspace();}catch(Exception e){failure(e);}runOnUiThread(this::render);});}
+    void askContactsOnce(){if(SyncEngine.contactsAllowed(this)||!SyncEngine.namesOn(this)||SecureConfig.prefs(this).getBoolean("contactsAsked",false))return;SecureConfig.prefs(this).edit().putBoolean("contactsAsked",true).commit();requestPermissions(new String[]{Manifest.permission.READ_CONTACTS},309);}
+    void sync(){if(!SecureConfig.prefs(this).getBoolean("enabled",false)){notice("Open Preferences and choose SIM & call tracking first.");return;}if(checkSelfPermission(Manifest.permission.READ_CALL_LOG)!=PackageManager.PERMISSION_GRANTED){setSyncEnabled(true);return;}askContactsOnce();work(()->{try{SyncEngine.run(this);loadWorkspace();}catch(Exception e){failure(e);}runOnUiThread(this::render);});}
     void setSyncEnabled(boolean enabled){
         if(enabled&&checkSelfPermission(Manifest.permission.READ_CALL_LOG)!=PackageManager.PERMISSION_GRANTED){
             SecureConfig.prefs(this).edit().putBoolean("enabled",false).putString("status","Call-log permission required. Sync paused.").commit();SyncJob.schedule(this,false);syncAfterCallLogPermission=true;requestPermissions(new String[]{Manifest.permission.READ_CALL_LOG},301);return;
@@ -378,6 +379,7 @@ public class MainActivity extends Activity {
                 if(resume)setSyncEnabled(true);else render();
             }else{SecureConfig.prefs(this).edit().putBoolean("enabled",false).commit();SyncJob.schedule(this,false);render();new AlertDialog.Builder(this).setMessage("Call-log access was not allowed. Sync remains paused. Allow Call logs in Android app permissions, then enable sync again.").setNegativeButton("Close",null).setPositiveButton("App permissions",(dialog,which)->startActivity(new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName())))).show();}
         }else if(request==305&&pendingSimSetup){pendingSimSetup=false;render();if(checkSelfPermission(Manifest.permission.READ_PHONE_STATE)==PackageManager.PERMISSION_GRANTED)new SimplePreferences(this).chooseSims();}
+        else if(request==309){SecureConfig.prefs(this).edit().remove("namesChecked").commit();render();if(SyncEngine.contactsAllowed(this)&&SecureConfig.prefs(this).getBoolean("enabled",false))sync();}
         else if(request==304&&pendingBridgeSetup){pendingBridgeSetup=false;if(CallBridgeService.permissions(this))new SimplePreferences(this).enableBridge();else render();}
         else{if(request==308&&android.os.Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)SecureConfig.prefs(this).edit().putBoolean("postCallFeedback",false).commit();render();}
     }
@@ -426,6 +428,7 @@ public class MainActivity extends Activity {
         android.os.PowerManager power=(android.os.PowerManager)getSystemService(POWER_SERVICE);
         String summary="Business call sync: "+(prefs.getBoolean("enabled",false)?"Enabled":"Paused")
             +"\nCall-log permission: "+(checkSelfPermission(Manifest.permission.READ_CALL_LOG)==PackageManager.PERMISSION_GRANTED?"Allowed":"Missing")
+            +"\nContact names: "+(!SyncEngine.namesOn(this)?"Off":SyncEngine.contactsAllowed(this)?"Allowed":"Contacts permission missing")
             +"\nRecording sync: "+(prefs.getBoolean("recordingSync",true)?"Enabled":"Paused")
             +"\nRecording folder access: "+(folderReadable?"Granted":"Select folder again")
             +"\nBackground calling: "+(prefs.getBoolean("clickToCall",false)?"Enabled":"Off")

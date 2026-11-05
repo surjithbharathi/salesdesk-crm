@@ -23,6 +23,11 @@ final class SimplePreferences {
             else{prefs().edit().putBoolean("recordingSync",enabled).commit();a.render();}
         });
         if(hasFolder())a.button(sync,"Change recording folder",this::chooseFolder);
+        toggle(sync,"Fill lead names from the phone",SyncEngine.namesOn(a)&&SyncEngine.contactsAllowed(a),enabled->{
+            prefs().edit().putBoolean("contactNames",enabled).commit();
+            if(enabled&&!SyncEngine.contactsAllowed(a)){prefs().edit().putBoolean("contactsAsked",true).commit();a.requestPermissions(new String[]{Manifest.permission.READ_CONTACTS},309);}
+        });
+        a.caption(sync,"A lead that has only a number takes the name saved on this phone. Only names of your leads leave the phone, and a name already in the CRM stays.");
         a.syncStatus=a.text(sync,prefs().getString("status",""),12,false);
         LinearLayout prompts=a.card();a.text(prompts,"During & after calls",19,true);
         toggle(prompts,"Show caller’s lead details",prefs().getBoolean("screenPop",false),enabled->{if(enabled)setupCaller();else{prefs().edit().putBoolean("screenPop",false).commit();a.render();}});

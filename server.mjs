@@ -597,6 +597,13 @@ const mobileServer = http.createServer(async (req, res) => {
       reply(200, mobile.targets(device));
       return;
     }
+    const targetName = /^\/v1\/targets\/([A-Za-z0-9-]{1,64})\/name$/.exec(url.pathname);
+    if (req.method === "POST" && targetName) {
+      if (req.headers["content-type"]?.split(";")[0] !== "application/json")
+        bad("JSON required", 415);
+      reply(200, mobile.nameLead(device, targetName[1], (await body(req)).name));
+      return;
+    }
     if (req.method === "POST" && url.pathname === "/v1/calls") {
       if (req.headers["content-type"]?.split(";")[0] !== "application/json")
         bad("JSON required", 415);

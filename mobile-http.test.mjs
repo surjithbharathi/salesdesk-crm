@@ -131,6 +131,15 @@ test("mobile HTTP sync authenticates devices and attaches private recordings to 
   assert.equal((await request(deviceBase, "/v1/calls", "POST", quietCall, auth)).status, 403);
   assert.equal((await admin(`leads/${quiet.data.id}`, "PATCH", { noCallSync: false })).status, 200);
   assert.ok((await request(deviceBase, "/v1/targets", "GET", undefined, auth)).data.some((t) => t.id === quiet.data.id));
+  // the phone fills in the name of a lead that only has its number
+  const bare = await admin("leads", "POST", { name: "919123450004", phone: "919123450004", owner, source: "Test" });
+  assert.equal(bare.status, 200);
+  assert.equal((await request(deviceBase, "/v1/targets", "GET", undefined, auth)).data.find((t) => t.id === bare.data.id).needsName, true);
+  const filled = await request(deviceBase, `/v1/targets/${bare.data.id}/name`, "POST", { name: "Phone Contact" }, auth);
+  assert.equal(filled.status, 200);
+  assert.equal(filled.data.named, true);
+  assert.equal((await request(deviceBase, `/v1/targets/${excluded.data.id}/name`, "POST", { name: "Nope" }, auth)).status, 403);
+  assert.equal((await request(deviceBase, `/v1/targets/${bare.data.id}/name`, "POST", { name: "Nope" })).status, 401);
   const audio = Buffer.alloc(48);
   audio.write("RIFF", 0);
   audio.writeUInt32LE(40, 4);

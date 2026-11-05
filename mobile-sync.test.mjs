@@ -49,7 +49,7 @@ function fixture(t) {
   const api = createMobileSync({ db, all, get, put, stamp, tx, log, keyPath });
   put("users", { id: "owner", active: true });
   put("users", { id: "other", active: true });
-  put("leads", { id: "lead", owner: "owner", phone: "+91 98765 43210" });
+  put("leads", { id: "lead", name: "Saved lead", owner: "owner", phone: "+91 98765 43210" });
   put("leads", { id: "other-lead", owner: "other", phone: "919999999999" });
   put("leads", { id: "archived", owner: "owner", phone: "918888888888", archived: true });
   const device = api.issue({ name: "Test phone", owner: "owner" });
@@ -104,6 +104,40 @@ test("call sync permits exactly one assigned active business lead and is idempot
     assert.throws(() => f.api.call(f.device, { ...p, phone }), status(403));
   f.put("leads", { id: "duplicate", owner: "owner", phone: p.phone });
   assert.throws(() => f.api.call(f.device, f.payload({ localId: "duplicate-match" })), status(403));
+});
+
+test("the phone's contact name fills a lead that has only its number, and never replaces a real name", (t) => {
+  const f = fixture(t);
+  f.put("leads", { id: "bare", name: "919812345678", owner: "owner", phone: "919812345678" });
+  f.put("leads", { id: "bare-2", name: "+91 98123 45679", owner: "owner", phone: "919812345679" });
+  const flagged = f.api.targets(f.device);
+  assert.equal(flagged.find((l) => l.id === "bare").needsName, true);
+  assert.equal(flagged.find((l) => l.id === "lead").needsName, undefined);
+  // through a synced call
+  f.api.call(f.device, f.payload({ localId: "named", phone: "919812345678", name: "  ரவி\n Kumar  " }));
+  assert.equal(f.get("leads", "bare").name, "ரவி Kumar");
+  assert.equal(f.get("leads", "bare").nameSource, "phone");
+  assert.equal(f.api.targets(f.device).find((l) => l.id === "bare").needsName, undefined);
+  // a typed name stays
+  f.api.call(f.device, f.payload({ localId: "typed", name: "Other name" }));
+  assert.equal(f.get("leads", "lead").name, "Saved lead");
+  // leads whose calls synced earlier are named directly; a number or empty text is not a name
+  assert.equal(f.api.nameLead(f.device, "bare-2", "98123 45679").named, false);
+  assert.equal(f.api.nameLead(f.device, "bare-2", "").named, false);
+  assert.equal(f.api.nameLead(f.device, "bare-2", "Anbu Traders").named, true);
+  assert.equal(f.get("leads", "bare-2").name, "Anbu Traders");
+  assert.equal(f.api.nameLead(f.device, "bare-2", "Later name").named, false);
+  assert.equal(f.get("leads", "bare-2").name, "Anbu Traders");
+  // only this phone's own leads
+  assert.throws(() => f.api.nameLead(f.device, "other-lead", "Someone"), status(403));
+  assert.throws(() => f.api.nameLead(f.device, "archived", "Someone"), status(403));
+  // a new lead made from a call in all-calls mode takes the name straight away
+  const account = "a".repeat(64);
+  f.api.preferences(f.device, { sims: { [account]: "all" }, assignment: "self", consent: true });
+  const fresh = f.api.call(f.device, f.payload({ localId: "fresh", phone: "917012345678", accountId: account, name: "Fresh Contact" }));
+  assert.equal(f.get("leads", fresh.leadId).name, "Fresh Contact");
+  const unnamed = f.api.call(f.device, f.payload({ localId: "unnamed", phone: "917012345679", accountId: account }));
+  assert.equal(f.get("leads", unnamed.leadId).name, "917012345679");
 });
 
 test("invalid call metadata is rejected without creating activities", (t) => {
