@@ -100,3 +100,7 @@
 .roles dd { margin: 0; color: var(--muted); font-size: 14px; }
 .sec .user-edit { padding: 4px 0 8px; }
 .sec .skin-list { margin: 0; }
+.btn-danger { color: var(--kumkum); border-color: var(--kumkum); background: transparent; }
+.btn-danger:hover:not(:disabled) { background: var(--kumkum-soft); border-color: var(--kumkum); }
+td.right { white-space: nowrap; }
+td.right .btn + .btn, td.right .quick-actions + .btn { margin-left: 6px; }

@@ -58,6 +58,27 @@ export function createWorkspaceAccess({db,get,put,userAuth,crmOwnerId='',origin=
     }catch(error){db.exec('ROLLBACK');throw error;}
     return {updated:true};
   }
+  // Removes a person for good: their login, sessions and role go, and what they owned becomes unassigned (leads, follow-ups, deals, chats keep their history).
+  function remove(identity,id){
+    requirePermission(identity,'users.manage');
+    const target=get('users',id);if(!target)fail('User not found',404);
+    if(id===identity.user.id)fail('You cannot remove your own account',409);
+    if(id===crmOwnerId)fail('The CRM Owner cannot be removed',403);
+    const actor=profile(identity.user.id),t=profile(id);
+    if(t.role==='owner'&&actor.role!=='owner')fail('Only a Workspace Owner can remove an owner',403);
+    hierarchy(actor,t.role);
+    if(t.role==='owner'){const others=db.prepare("SELECT user_id FROM workspace_roles WHERE role='owner' AND user_id<>?").all(id).filter(row=>get('users',row.user_id)?.active);if(!others.length)fail('Keep at least one active Workspace Owner');}
+    const has=name=>Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name));
+    const counts={};
+    db.exec('BEGIN IMMEDIATE');try{
+      for(const kind of ['leads','tasks','deals','conversations'])counts[kind]=Number(db.prepare("UPDATE records SET body=json_set(body,'$.owner','') WHERE kind=? AND json_extract(body,'$.owner')=?").run(kind,id).changes);
+      db.prepare("DELETE FROM records WHERE kind='users' AND id=?").run(id);
+      for(const table of ['auth_sessions','auth_resets','auth_accounts','workspace_roles'])db.prepare('DELETE FROM '+table+' WHERE user_id=?').run(id);
+      for(const table of ['call_receiver','call_commands'])if(has(table))db.prepare('DELETE FROM '+table+' WHERE user_id=?').run(id);
+      audit(identity.user.id,id,'user.removed');db.exec('COMMIT');
+    }catch(error){db.exec('ROLLBACK');throw error;}
+    return {removed:true,name:target.name,unassigned:{leads:counts.leads,tasks:counts.tasks,deals:counts.deals}};
+  }
   function reset(identity,id){requirePermission(identity,'users.manage');const actor=profile(identity.user.id),target=profile(id);if(target.role==='owner'&&actor.role!=='owner')fail('Only a Workspace Owner can reset owner access',403);withinAuthority(actor,target.permissions);hierarchy(actor,target.role);const account=db.prepare('SELECT username FROM auth_accounts WHERE user_id=?').get(id);if(!account)fail('User not found',404);const value=userAuth.issuePasswordReset(account.username);audit(identity.user.id,id,'setup_link.created');return {setupUrl:origin+'/reset-password.html#token='+encodeURIComponent(value.token),expiresAt:value.expiresAt};}
-  return {profile,can,requirePermission,list,invite,update,reset};
+  return {profile,can,requirePermission,list,invite,update,reset,remove};
 }

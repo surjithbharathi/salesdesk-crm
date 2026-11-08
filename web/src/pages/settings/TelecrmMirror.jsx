@@ -71,7 +71,7 @@ export default function TelecrmMirror() {
       </form>
       <Section title="Copy now" desc="Updates run by themselves. Use these to copy straight away." status={run ? (run.ok ? "Last run fine" : "Last run failed") : "Nothing copied yet"} tone={run ? (run.ok ? "ok" : "bad") : "off"}>
         <p role="status" className="sec-line">
-          {data.running ? "Copying from TeleCRM now…" : run ? `${when(run.at)}, ${run.mode === "full" ? "full copy" : "update"}. ${run.message}${run.ok ? `. ${run.activities} timeline entries, ${run.tasks} follow-ups, ${run.users} team members.` : ""}${run.errors ? ` ${run.errors} items could not be read.` : ""}${run.phoneConflicts ? ` ${run.phoneConflicts} leads share a number with another lead and were kept without it.` : ""}` : "Save the workspace ID and token first, then copy."}
+          {data.running ? "Copying from TeleCRM now…" : run ? `${when(run.at)}, ${run.mode === "full" ? "full copy" : "update"}. ${run.message}${run.ok ? `. ${run.calls || 0} calls, ${run.recordings || 0} recordings saved${run.recordingsWaiting ? ` (${run.recordingsWaiting} still to fetch)` : ""}, ${run.messages || 0} WhatsApp messages, ${run.activities} timeline entries, ${run.tasks} follow-ups, ${run.users} team members.` : ""}${run.errors ? ` ${run.errors} items could not be read.` : ""}${run.phoneConflicts ? ` ${run.phoneConflicts} leads share a number with another lead and were kept without it.` : ""}` : "Save the workspace ID and token first, then copy."}
         </p>
         <div className="newlead-actions">
           <button type="button" className="btn btn-primary" disabled={busy || data.running || !data.hasToken} onClick={() => sync(false)}>Update now</button>

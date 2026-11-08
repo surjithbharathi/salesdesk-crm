@@ -262,6 +262,25 @@ export function createMobileSync({ db, all, get, put, stamp, tx, log, keyPath, o
     });
     return { id, duplicate: false, ...(assistantJob ? { assistantJobId: assistantJob.id } : {}) };
   }
+  // A recording that already exists elsewhere (the TeleCRM copy): kept encrypted like a phone recording, attached to its call,
+  // and never sent to call AI by itself.
+  function importRecording(callId, bytes) {
+    const c = get("mobileCalls", callId);
+    if (!c) fail("Call not found", 404);
+    if (!bytes.length || bytes.length > MAX_AUDIO) fail("Recording must be 1 byte–20 MiB", 413);
+    const existing = db.prepare("SELECT id FROM mobile_audio WHERE call_id=?").get(c.id);
+    if (existing) return { id: existing.id, duplicate: true };
+    const mime = audioType(bytes), id = randomUUID(), iv = randomBytes(12), cipher = createCipheriv("aes-256-gcm", audioKey(), iv);
+    cipher.setAAD(Buffer.from(id));
+    const encrypted = Buffer.concat([cipher.update(bytes), cipher.final()]);
+    tx(() => {
+      db.prepare("INSERT INTO mobile_audio VALUES(?,?,?,?,?,?)").run(id, c.deviceId, c.id, hash(bytes), mime, Buffer.concat([iv, cipher.getAuthTag(), encrypted]));
+      put("mobileCalls", { ...c, recordingId: id, matchMode: "import" });
+      const activity = get("activities", c.activityId);
+      if (activity) put("activities", { ...activity, recordingId: id });
+    });
+    return { id, duplicate: false };
+  }
   function playback(id) {
     const r = db.prepare("SELECT bytes,mime FROM mobile_audio WHERE id=?").get(id);
     if (!r) fail("Recording not found", 404);
@@ -293,5 +312,5 @@ export function createMobileSync({ db, all, get, put, stamp, tx, log, keyPath, o
       return log(call.leadId,"Note",text.trim() || "Post-call voice feedback",{userId:d.owner,callId,feedbackId:clientId,feedbackSha:sha,...(voiceNoteId?{voiceNoteId}:{})});
     });
   }
-  return { devices, issue, revoke, authenticate, targets, nameLead, preferences, call, recording, playback, feedback };
+  return { devices, issue, revoke, authenticate, targets, nameLead, preferences, call, recording, importRecording, playback, feedback };
 }

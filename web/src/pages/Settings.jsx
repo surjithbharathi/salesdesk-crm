@@ -42,7 +42,7 @@ export default function Settings({ params, me }) {
   const full ={ ...access, users: me.users };
   // [key, label, allowed, content, group, what it is for]
   const sections = [
-    ["users", "People and access", can("users.manage"), <Users access={full} />, "People", "Who can sign in, what each person can see and change."],
+    ["users", "People and access", can("users.manage"), <Users access={full} meId={me.id} />, "People", "Who can sign in, what each person can see and change."],
     ["email", "Email", can("integrations.manage"), <Email />, "Connections", "Mail settings used to send sign-in invitations and password resets."],
     ["whatsapp", "WhatsApp", can("integrations.manage"), <WhatsApp />, "Connections", "Link a WhatsApp number by QR code so chats appear against the lead."],
     ["gateway", "WhatsApp gateway", can("integrations.manage"), <Gateway users={me.users} />, "Connections", "Connect the Devi WhatsApp gateway: customer messages become leads, and people reply from a lead."],

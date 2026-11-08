@@ -438,7 +438,7 @@ export function CwConversations({ params }) {
             <header><b>{current.lead?.name || "Unknown lead"}</b>{current.lead && <button type="button" className="lnk" onClick={() => setOpenLead(current.lead.id)}>Open lead</button>}<button type="button" className="lnk" onClick={() => setOpen("")}>Close chat</button></header>
             <div className="chat-pane__body">
               {!current.messages.length && <p className="muted">No message text synced yet.</p>}
-              {current.messages.map((x) => <article key={x.id} className={`bubble ${x.direction === "Outgoing" ? "out" : ""}`}><p>{x.text}</p><small>{x.direction === "Outgoing" ? "Our team" : "Customer"}, {dateTime(stamp(x))}</small></article>)}
+              {current.messages.map((x) => <article key={x.id} className={`bubble ${x.direction === "Outgoing" ? "out" : ""}`}><p>{x.text}</p><small>{x.sender || (x.direction === "Outgoing" ? "Our team" : "Customer")}{x.numberLabel ? ` · ${x.numberLabel}` : ""}, {dateTime(stamp(x))}</small></article>)}
             </div>
           </div>
         )}

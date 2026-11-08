@@ -21,11 +21,22 @@ function world(t) {
   const get = (k, id) => { const r = db.prepare("SELECT body FROM records WHERE kind=? AND id=?").get(k, id); return r && JSON.parse(r.body); };
   const rawPut = (k, v) => db.prepare("INSERT OR REPLACE INTO records VALUES(?,?,?)").run(k, v.id, JSON.stringify(v));
   const tx = (fn) => { db.exec("BEGIN"); try { const r = fn(); db.exec("COMMIT"); return r; } catch (e) { db.exec("ROLLBACK"); throw e; } };
-  const tele = { leads: [], actions: {}, calls: [], fail: 0 };
+  const tele = { leads: [], actions: {}, calls: [], fail: 0, failFiles: 0 };
+  const audio = [];
+  const attachRecording = (callId, bytes) => {
+    const c = get("mobileCalls", callId), id = "rec-" + audio.length;
+    audio.push({ callId, bytes });
+    rawPut("mobileCalls", { ...c, recordingId: id });
+    const a = get("activities", c.activityId);
+    rawPut("activities", { ...a, recordingId: id });
+    return { id };
+  };
   let clock = 1_800_000_000_000;
   const fetchImpl = async (url, init) => {
-    tele.calls.push({ url, method: init.method, auth: init.headers.Authorization });
+    tele.calls.push({ url, method: init.method, auth: init.headers?.Authorization });
     if (tele.fail) return { ok: false, status: tele.fail, json: async () => ({}) };
+    if (url.startsWith("https://files.example/") && tele.failFiles > 0) { tele.failFiles--; return { ok: false, status: 500 }; }
+    if (url.startsWith("https://files.example/")) return { ok: true, status: 200, arrayBuffer: async () => Uint8Array.from([0x49, 0x44, 0x33, 3, 0, 0, 0, 0, 0, 0]).buffer };
     const u = new URL(url), path = u.pathname.replace(/^.*\/enterprise\/[^/]+/, "");
     const skip = Number(u.searchParams.get("skip") || 0), limit = Number(u.searchParams.get("limit") || 10);
     const ok = (body) => ({ ok: true, status: 200, json: async () => body });
@@ -35,12 +46,13 @@ function world(t) {
       const rows = body.actions ? tele.leads.filter((l) => tele.touched?.has(l.id)) : tele.leads;
       return ok({ data: rows.slice(skip, skip + limit), total_count: rows.length });
     }
+    if (/\/file\/download-url$/.test(path)) return ok({ download_url: "https://files.example/" + encodeURIComponent(u.searchParams.get("path")), expires_in: 3600, size: 10, content_type: "audio/mpeg" });
     const m = /^\/lead\/([^/]+)$/.exec(path);
     if (m) { const acts = tele.actions[m[1]] || []; return ok({ id: m[1], actions: acts.slice(skip, skip + limit) }); }
     return { ok: false, status: 404, json: async () => ({}) };
   };
-  const mirror = createTelecrmMirror({ db, all, get, put: rawPut, rawPut, tx, now: () => clock, keyPath: join(dir, "key"), fetchImpl });
-  return { mirror, all, get, rawPut, tele, tick: (ms) => { clock += ms; } };
+  const mirror = createTelecrmMirror({ db, all, get, put: rawPut, rawPut, tx, attachRecording, now: () => clock, keyPath: join(dir, "key"), fetchImpl });
+  return { mirror, all, get, rawPut, tele, audio, tick: (ms) => { clock += ms; } };
 }
 const lead = (id, over = {}, f = {}) => ({ id, employeeid: "bala@deviindustries.com", status: "New Lead", rating: 2, score: 10, fields: { name: "Customer " + id, phone: "9198765" + String(id.length * 11111).padStart(5, "0").slice(0, 5), lead_source: "IndiaMart", created_on: 1799000000000, modified_on: 1, last_activity_on: 1, ...f }, ...over });
 const connect = (w) => w.mirror.save({ enterpriseId: "6aa78f9ca033a69fb29aaa60", token: "sync-token-1", enabled: true });
@@ -70,10 +82,13 @@ test("a full run mirrors people, leads, their timeline and the follow-up as a ta
     lead("aaa", { status: "Quotation Shared" }, { next_followup: 1801000000000, expected_revenue: "250000", city: "Erode" }),
     lead("bbbb", { status: "Lost" }, { next_followup: 1801000000000, lost_reason: "Budget Issues" }),
   ];
+  const bala = "bala@deviindustries.com";
   w.tele.actions.aaa = [
-    { id: "x1", type: "OUTGOING_CALL", created_on: 1799500000000, performed_by: "bala@deviindustries.com", fields: { duration: 95 } },
-    { id: "x2", type: "USER_NOTE", created_on: 1799600000000, fields: { note: "Wants 2 hp motor" } },
-    { id: "x3", type: "INCOMING_WHATSAPP_MSG", created_on: 1799700000000, fields: { text: "Price?" } },
+    { id: "x1", type: "OUTGOING_CALL", creationTimestamp: 1799500000000, employeeid: bala, duration: 95, feedback: "CONNECTED", callRecording: { name: "call.m4a", filePath: "ent/uid/call.mp3" } },
+    { id: "x1b", type: "MISSED_CALL", creationTimestamp: 1799550000000, employeeid: "", duration: 0, feedback: "NA", callRecording: null },
+    { id: "x2", type: "USER_NOTE", creationTimestamp: 1799600000000, employeeid: bala, text: "Wants 2 hp motor" },
+    { id: "x3", type: "ACTION_1013", creationTimestamp: 1799700000000, employeeid: bala, fields: { notes: "Customer | Sales 82828 27732\nPrice please?" } },
+    { id: "x4", type: "ACTION_1013", creationTimestamp: 1799800000000, employeeid: bala, fields: { notes: "Sent from gateway | Sales 82828 27732\nRs 2.5 lakh with GST" } },
   ];
   const r = await w.mirror.sync();
   assert.equal(r.ok, true, r.message);
@@ -88,21 +103,38 @@ test("a full run mirrors people, leads, their timeline and the follow-up as a ta
   assert.equal(a.owner, users.find((u) => u.email === "bala@deviindustries.com").id);
   assert.match(a.phone, /^\+91/);
   const acts = w.all("activities").filter((x) => x.leadId === a.id);
-  assert.deepEqual(acts.map((x) => x.type).sort(), ["Call", "Message", "Note"]);
-  assert.equal(acts.find((x) => x.type === "Call").duration, 95);
+  assert.deepEqual(acts.map((x) => x.type).sort(), ["Call", "Call", "Message", "Message", "Note"]);
+  assert.equal(acts.find((x) => x.type === "Call" && x.duration === 95).outcome, "Connected");
+  assert.equal(acts.find((x) => x.type === "Call" && x.duration === 0).outcome, "No answer");
+  // calls are native phone-call records, recordings are real audio attached to them
+  const calls = w.all("mobileCalls").filter((c) => c.leadId === a.id).sort((p, q) => p.startedAt - q.startedAt);
+  assert.deepEqual(calls.map((c) => [c.direction, c.duration, c.deviceId]), [["Outgoing", 95, "telecrm"], ["Missed", 0, "telecrm"]]);
+  assert.equal(calls[0].owner, a.owner);
+  assert.equal(calls[0].phone, a.phoneKey);
+  assert.equal(w.audio.length, 1);
+  assert.deepEqual(w.audio[0].bytes.subarray(0, 3).toString(), "ID3");
+  assert.equal(calls[0].recordingId, "rec-0");
+  assert.equal(w.get("activities", "tca-aaa-x1").recordingId, "rec-0");
+  assert.equal(r.recordings, 1);
+  // WhatsApp: a conversation with both directions, who wrote, and which number
+  const msgs = w.all("messages").filter((m) => m.leadId === a.id).sort((p, q) => p.occurredAt.localeCompare(q.occurredAt));
+  assert.deepEqual(msgs.map((m) => [m.direction, m.text, m.numberLabel, m.sender]), [["Incoming", "Price please?", "Sales 82828 27732", a.name], ["Outgoing", "Rs 2.5 lakh with GST", "Sales 82828 27732", "Gateway"]]);
+  assert.equal(msgs[1].senderId, a.owner);
+  assert.equal(w.all("conversations").filter((c) => c.leadId === a.id && c.channel === "WhatsApp").length, 1);
   const task = w.get("tasks", "tct-aaa");
   assert.deepEqual([task.status, task.origin, task.owner], ["Open", "TeleCRM", a.owner]);
   assert.equal(task.due, new Date(1801000000000).toISOString());
   assert.ok(!w.get("tasks", "tct-bbbb"), "a lost lead gets no follow-up task");
   assert.equal(w.all("leads").find((l) => l.telecrm.id === "bbbb").disposition, "Lost");
-  assert.ok(w.tele.calls.every((c) => c.auth === "Bearer sync-token-1" && c.url.startsWith("https://next.telecrm.in/autoupdate/v2/enterprise/")));
+  assert.ok(w.tele.calls.filter((c) => c.url.startsWith("https://next.telecrm.in")).every((c) => c.auth === "Bearer sync-token-1" && c.url.startsWith("https://next.telecrm.in/autoupdate/v2/enterprise/")));
 
   w.tick(60000);
   const before = w.tele.calls.length;
   const again = await w.mirror.sync();
   assert.equal(again.mode, "delta");
   assert.equal(again.changed, 0);
-  assert.equal(w.all("activities").length, 3);
+  assert.equal(w.all("activities").length, 5);
+  assert.equal(w.audio.length, 1, "a recording already kept is not fetched again");
   assert.ok(w.tele.calls.slice(before).every((c) => !/includeActions/.test(c.url)), "unchanged leads are not fetched again");
 });
 
@@ -158,4 +190,45 @@ test("leads without a usable phone are kept, and two runs at once share one", as
   assert.equal(one, two);
   const l = w.all("leads")[0];
   assert.deepEqual([l.name, l.phoneKey], ["WhatsApp user", ""]);
+});
+
+test("the phone app's id is learned from Call IQ, so its calls belong to the right person", async (t) => {
+  const w = world(t);
+  connect(w);
+  w.tele.leads = [lead("aaa", { employeeid: "sathiya@deviindustries.com" })];
+  w.tele.actions.aaa = [
+    { id: "c1", type: "OUTGOING_CALL", creationTimestamp: 1799500000000, employeeid: "Lf7vwxnDDANa976FtCg30NiQmVL2", duration: 60, feedback: "CONNECTED", callRecording: null },
+    { id: "iq1", type: "ACTION_1002", creationTimestamp: 1799500100000, employeeid: "", automationInfo: { triggerActionid: "c1" }, fields: { telecrm_lead_caller: "bala@deviindustries.com", summary: "Customer wants a 2 hp press", "next_action_and_follow-up": "Send quotation" } },
+  ];
+  const first = await w.mirror.sync();
+  assert.equal(first.ok, true, first.message);
+  const bala = w.all("users").find((u) => u.email === "bala@deviindustries.com");
+  assert.equal(w.all("mobileCalls")[0].owner, bala.id, "the app id maps to Balaji through the Call IQ note");
+  assert.match(w.all("activities").find((x) => x.telecrmType === "ACTION_1002").text, /^Call IQ: Customer wants a 2 hp press\nNext: Send quotation/);
+});
+
+test("a recording that cannot be fetched is tried again on the next run, and gives up after a few tries", async (t) => {
+  const w = world(t);
+  connect(w);
+  w.tele.leads = [lead("aaa")];
+  w.tele.actions.aaa = [{ id: "c1", type: "INCOMING_CALL", creationTimestamp: 1799500000000, employeeid: "bala@deviindustries.com", duration: 40, feedback: "CONNECTED", callRecording: { name: "r.m4a", filePath: "x/y.mp3" } }];
+  w.tele.failFiles = 1;
+  const one = await w.mirror.sync();
+  assert.equal(one.ok, true);
+  assert.equal(w.audio.length, 0);
+  assert.equal(w.get("mobileCalls", "tcc-c1").recordingTries, 1);
+  assert.equal(one.errors, 1);
+  w.tick(60000);
+  const two = await w.mirror.sync();
+  assert.equal(two.recordings, 1);
+  assert.equal(w.audio.length, 1);
+  assert.equal(w.get("mobileCalls", "tcc-c1").recordingId, "rec-0");
+  // too many failures: it stops asking
+  w.tele.actions.aaa = [{ id: "c2", type: "INCOMING_CALL", creationTimestamp: 1799600000000, employeeid: "bala@deviindustries.com", duration: 40, feedback: "CONNECTED", callRecording: { name: "r2.m4a", filePath: "x/z.mp3" } }];
+  w.tele.leads = [lead("aaa", {}, { modified_on: 5, last_activity_on: 5 })];
+  w.tele.touched = new Set(["aaa"]);
+  w.tele.failFiles = 99;
+  for (let i = 0; i < 6; i++) { w.tick(60000); await w.mirror.sync(); }
+  assert.equal(w.get("mobileCalls", "tcc-c2").recordingTries, 4);
+  assert.equal(w.audio.length, 1);
 });

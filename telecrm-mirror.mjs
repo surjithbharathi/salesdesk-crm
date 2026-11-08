@@ -12,7 +12,9 @@ import { PIPELINE } from "./pipeline.mjs";
 
 const BASE = "https://next.telecrm.in/autoupdate/v2";
 const fail = (message, status = 400) => { throw Object.assign(Error(message), { status }); };
-const DEFAULTS = { enabled: false, enterpriseId: "", token: "", intervalMinutes: 5, lastFullAt: 0, lastRun: null };
+const DEFAULTS = { enabled: false, enterpriseId: "", token: "", intervalMinutes: 5, lastFullAt: 0, lastRun: null, uidMap: {} };
+const MAX_AUDIO = 20 * 1024 * 1024;
+const RECORDINGS_PER_RUN = 150;
 const norm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
 // TeleCRM status label -> pipeline step of this CRM (spelling variations included); other labels fall back to a basic stage.
@@ -44,7 +46,7 @@ const msOf = (v) => {
 };
 const text = (v, max = 4000) => (typeof v === "string" ? v : v == null ? "" : typeof v === "object" ? JSON.stringify(v) : String(v)).slice(0, max);
 
-export function createTelecrmMirror({ db, all, get, put, rawPut, tx, now = () => Date.now(), keyPath, fetchImpl = (...a) => globalThis.fetch(...a), log = () => {} }) {
+export function createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecording = () => null, now = () => Date.now(), keyPath, fetchImpl = (...a) => globalThis.fetch(...a), log = () => {} }) {
   db.exec("CREATE TABLE IF NOT EXISTS telecrm_settings(id INTEGER PRIMARY KEY CHECK(id=1), body BLOB)");
   let key, running = null;
   function secretKey() {
@@ -121,23 +123,98 @@ export function createTelecrmMirror({ db, all, get, put, rawPut, tx, now = () =>
   }
 
   // ---------------------------------------------------------------- one lead
-  function activityOf(lead, a) {
-    const f = a.fields && typeof a.fields === "object" ? a.fields : {};
-    const type = String(a.type || "").toUpperCase(), at = msOf(a.performed_at || a.created_on || a.createdOn || a.timestamp || a.created_at || f.performed_at || f.created_on) || now();
-    const base = { leadId: lead.id, source: "TeleCRM", telecrmType: type, occurredAt: new Date(at).toISOString() };
-    const who = String(a.performed_by || a.performedBy || a.employeeid || f.performed_by || "").toLowerCase();
-    const note = text(f.note ?? a.note ?? f.text ?? a.text ?? f.message ?? f.summary ?? f.description ?? "");
-    const idKey = a.id || a._id || createHash("sha1").update(type + "|" + at + "|" + note + "|" + who + JSON.stringify(f)).digest("hex").slice(0, 20);
-    let rec;
-    if (/CALL/.test(type) && !/ACTION_/.test(type)) {
-      const seconds = Number(f.duration ?? f.call_duration ?? a.duration ?? 0) || 0;
-      rec = { ...base, type: "Call", direction: type.startsWith("INCOMING") ? "Incoming" : type.startsWith("MISSED") ? "Missed" : "Outgoing", duration: Math.max(0, seconds), text: note || `${type.replace("_", " ").toLowerCase()}${seconds ? ` (${seconds}s)` : ""}`, ...(f.recording || f.call_recording ? { recordingUrl: text(f.recording || f.call_recording, 1000) } : {}) };
-    } else if (/WHATSAPP|SMS/.test(type)) rec = { ...base, type: "Message", direction: type.startsWith("INCOMING") ? "Incoming" : "Outgoing", text: note || type };
-    else if (type === "USER_NOTE") rec = { ...base, type: "Note", text: note || "Note" };
-    else if (type === "STATUS_CHANGE") rec = { ...base, type: "System", text: note || `Status changed${f.status ? " to " + text(f.status, 100) : ""}` };
-    else if (type === "LEAD_ASSIGNMENT") rec = { ...base, type: "System", text: note || "Lead assigned" };
-    else rec = { ...base, type: type.startsWith("ACTION_") ? "Note" : "System", text: note || (type.startsWith("ACTION_") ? `${type}: ${text(f, 600)}` : type.replace(/_/g, " ").toLowerCase()) };
-    return { ...rec, id: "tca-" + lead.telecrm.id + "-" + idKey, createdAt: rec.occurredAt, updatedAt: rec.occurredAt, ...(who ? { telecrmBy: who } : {}) };
+  // TeleCRM names people by e-mail, or by an app id for the phone app. The app id is learned from Call IQ notes, which name the caller's e-mail
+  // and point at the call they belong to.
+  const personOf = (ctx, raw) => {
+    const id = String(raw || "");
+    if (!id || id.startsWith("__")) return "";
+    const email = id.includes("@") ? id.toLowerCase() : ctx.uidMap[id] || "";
+    return ctx.users.get(email)?.id || "";
+  };
+  function learnPeople(actions, ctx) {
+    for (const a of actions) {
+      if (a.type !== "ACTION_1002") continue;
+      const caller = String(a.fields?.telecrm_lead_caller || "").toLowerCase(), call = actions.find((x) => x.id === a.automationInfo?.triggerActionid);
+      const uid = call && String(call.employeeid || "");
+      if (caller.includes("@") && uid && !uid.includes("@") && ctx.uidMap[uid] !== caller) { ctx.uidMap[uid] = caller; ctx.uidDirty = true; }
+    }
+  }
+  const outcomeOf = (feedback, duration) => {
+    const f = String(feedback || "").toUpperCase();
+    if (f === "CONNECTED") return "Connected";
+    if (f === "NA" || f === "" || !duration) return "No answer";
+    return f.charAt(0) + f.slice(1).toLowerCase().replace(/_/g, " ");
+  };
+  const WA = /^(Customer|Sent from gateway)\s*\|\s*([^\n]*)\n?([\s\S]*)$/;
+  const nameOf = (ctx, id) => ([...ctx.users.values()].find((u) => u.id === id)?.name) || "";
+
+  function importActions(lead, actions, ctx) {
+    const tid = lead.telecrm.id, iso = (ms) => new Date(ms).toISOString();
+    learnPeople(actions, ctx);
+    for (const a of actions) {
+      try {
+        const type = String(a.type || "").toUpperCase(), f = a.fields && typeof a.fields === "object" ? a.fields : {}, at = msOf(a.creationTimestamp || a.created_on || a.performed_at) || now();
+        const person = personOf(ctx, a.employeeid), base = { leadId: lead.id, source: "TeleCRM", telecrmType: type, occurredAt: iso(at), createdAt: iso(at), updatedAt: iso(at) };
+        const notes = text(f.notes ?? a.text ?? a.note ?? f.note ?? f.text ?? f.message ?? "");
+        const wa = WA.exec(notes);
+        if (/^(INCOMING|MISSED|OUTGOING)_CALL$/.test(type)) {
+          const direction = type.startsWith("INCOMING") ? "Incoming" : type.startsWith("MISSED") ? "Missed" : "Outgoing", duration = Math.max(0, Number(a.duration ?? f.duration) || 0);
+          const owner = person || lead.owner || "", callId = "tcc-" + a.id, actId = "tca-" + tid + "-" + a.id, prior = get("mobileCalls", callId);
+          const rec = a.callRecording && typeof a.callRecording === "object" ? a.callRecording : null;
+          rawPut("activities", { ...base, id: actId, type: "Call", direction, duration, outcome: outcomeOf(a.feedback, duration), userId: owner, deviceId: "telecrm", text: text(a.note || f.note || "") || `${direction} call · ${duration}s`, ...(prior?.recordingId ? { recordingId: prior.recordingId } : {}) });
+          rawPut("mobileCalls", { ...(prior || {}), id: callId, localId: a.id, phone: lead.phoneKey || "", direction, startedAt: at, duration, deviceId: "telecrm", leadId: lead.id, owner, accountId: "", activityId: actId, source: "TeleCRM", telecrmLeadId: tid, feedback: text(a.feedback, 40), recordingPath: rec?.filePath || prior?.recordingPath || "", recordingName: rec?.name || prior?.recordingName || "", createdAt: prior?.createdAt || iso(at), updatedAt: iso(at) });
+          ctx.counts.calls++;
+          if (rec?.filePath && !prior?.recordingId) ctx.counts.recordingsWaiting++;
+        } else if (wa || /WHATSAPP/.test(type)) {
+          const incoming = wa ? wa[1] === "Customer" : type.startsWith("INCOMING"), label = wa ? wa[2].trim() : "", body = text(wa ? wa[3] : notes);
+          const convId = "tcv-" + tid;
+          if (!get("conversations", convId)) rawPut("conversations", { id: convId, leadId: lead.id, subject: "WhatsApp · TeleCRM", channel: "WhatsApp", provider: "telecrm", status: "Open", owner: lead.owner || "", createdAt: iso(at), updatedAt: iso(at) });
+          const sender = incoming ? "" : person, senderName = incoming ? lead.name : wa && wa[1] === "Sent from gateway" ? "Gateway" : nameOf(ctx, person) || "Team";
+          rawPut("messages", { ...base, id: "tcm-" + a.id, provider: "telecrm", providerId: a.id, jid: lead.phoneKey ? lead.phoneKey + "@s.whatsapp.net" : "", conversationId: convId, direction: incoming ? "Incoming" : "Outgoing", text: body, status: incoming ? "Received" : "Sent", sender: senderName, senderId: sender, numberLabel: label });
+          rawPut("activities", { ...base, id: "tca-" + tid + "-" + a.id, type: "Message", direction: incoming ? "Incoming" : "Outgoing", text: body, userId: sender, sender: senderName });
+          const conv = get("conversations", convId);
+          if (conv && (!conv.lastAt || conv.lastAt < at)) rawPut("conversations", { ...conv, lastAt: at, updatedAt: iso(at) });
+          ctx.counts.messages++;
+        } else if (type === "ACTION_1002") {
+          rawPut("activities", { ...base, id: "tca-" + tid + "-" + a.id, type: "Note", userId: "", text: `Call IQ: ${text(f.summary, 1500)}${f["next_action_and_follow-up"] ? "\nNext: " + text(f["next_action_and_follow-up"], 800) : ""}` });
+        } else if (type === "USER_NOTE" || type === "SYSTEM_NOTE") {
+          rawPut("activities", { ...base, id: "tca-" + tid + "-" + a.id, type: type === "USER_NOTE" ? "Note" : "System", userId: person, text: notes || "Note" });
+        } else if (type === "AUTO_UPDATE_LEAD_ACTION" || type === "FIELD_CHANGE" || type === "STATUS_CHANGE" || type === "LEAD_ASSIGNMENT") {
+          const changes = (Array.isArray(a.fieldsInfo) ? a.fieldsInfo : []).slice(0, 6).map((c) => `${c.apiName}: ${text(c.currentVal, 80)}`).join(", ");
+          rawPut("activities", { ...base, id: "tca-" + tid + "-" + a.id, type: "System", userId: person, text: notes || (type === "STATUS_CHANGE" ? "Status changed" : type === "LEAD_ASSIGNMENT" ? "Lead assigned" : "Details updated") + (changes ? ": " + changes : "") });
+        } else {
+          rawPut("activities", { ...base, id: "tca-" + tid + "-" + a.id, type: type === "OUTGOING_EMAIL" ? "Email" : "Note", userId: person, text: notes || (type.startsWith("ACTION_") ? `${type}: ${text(f, 600)}` : type.replace(/_/g, " ").toLowerCase()) });
+        }
+        ctx.counts.activities++;
+      } catch {
+        ctx.counts.errors++;
+      }
+    }
+  }
+
+  // Recordings are real audio files kept encrypted in this CRM, not links. They come after the leads, a limited number per run,
+  // and the ones still waiting are picked up again on the next run.
+  async function fetchRecordings(s, counts) {
+    const waiting = db.prepare("SELECT body FROM records WHERE kind='mobileCalls' AND json_extract(body,'$.recordingPath')<>'' AND json_extract(body,'$.recordingId') IS NULL AND COALESCE(json_extract(body,'$.recordingTries'),0)<4 LIMIT ?").all(RECORDINGS_PER_RUN).map((r) => JSON.parse(r.body));
+    counts.recordingsWaiting = waiting.length;
+    for (const call of waiting) {
+      try {
+        const meta = await api(s, "GET", `/lead/${encodeURIComponent(call.telecrmLeadId)}/file/download-url?path=${encodeURIComponent(call.recordingPath)}`);
+        if (!/^https:\/\//.test(meta.download_url || "")) fail("No download address", 502);
+        if (Number(meta.size) > MAX_AUDIO) { rawPut("mobileCalls", { ...call, recordingTries: 9, recordingNote: "Larger than 20 MB" }); continue; }
+        const res = await fetchImpl(meta.download_url, { signal: AbortSignal.timeout(60000) });
+        if (!res.ok) fail("Recording download failed", 502);
+        const bytes = Buffer.from(await res.arrayBuffer());
+        attachRecording(call.id, bytes);
+        counts.recordings++;
+      } catch (e) {
+        if (/refused the token/.test(e.message)) throw e;
+        const cur = get("mobileCalls", call.id) || call;
+        if (!cur.recordingId) rawPut("mobileCalls", { ...cur, recordingTries: (cur.recordingTries || 0) + 1, recordingNote: text(e.message, 120) });
+        counts.errors++;
+      }
+    }
+    counts.recordingsWaiting = Math.max(0, counts.recordingsWaiting - counts.recordings);
   }
 
   function writeLead(item, actions, ctx) {
@@ -168,7 +245,7 @@ export function createTelecrmMirror({ db, all, get, put, rawPut, tx, now = () =>
     }
     ctx.byTid.set(tid, lead);
     if (lead.phoneKey) ctx.byPhone.set(lead.phoneKey, lead);
-    for (const a of actions) { try { const rec = activityOf(lead, a); rawPut("activities", rec); ctx.counts.activities++; } catch { ctx.counts.errors++; } }
+    importActions(lead, actions, ctx);
     // the follow-up date is the task: it stays open while the lead is live and is closed when TeleCRM clears it or the deal ends
     const due = msOf(next_followup), taskId = "tct-" + tid, oldTask = get("tasks", taskId), live = !map.disposition;
     if (due && live) {
@@ -193,7 +270,7 @@ export function createTelecrmMirror({ db, all, get, put, rawPut, tx, now = () =>
     if (running) return running;
     running = (async () => {
       await Promise.resolve(); // let `running` be set before anything can finish
-      const s = raw(), started = now(), counts = { seen: 0, changed: 0, activities: 0, tasks: 0, errors: 0, phoneConflicts: 0, users: 0 };
+      const s = raw(), started = now(), counts = { seen: 0, changed: 0, activities: 0, tasks: 0, errors: 0, phoneConflicts: 0, users: 0, calls: 0, messages: 0, recordings: 0, recordingsWaiting: 0 };
       const result = { at: started, mode: "", ok: false, message: "", ...counts };
       try {
         if (!s.enterpriseId || !s.token) fail("Add the workspace ID and the Sync token first");
@@ -205,7 +282,7 @@ export function createTelecrmMirror({ db, all, get, put, rawPut, tx, now = () =>
         counts.users = members.length;
         const users = u.byEmail, byTid = new Map(), byPhone = new Map();
         for (const l of all("leads")) { if (l.telecrm?.id) byTid.set(l.telecrm.id, l); else if (l.phoneKey) byPhone.set(l.phoneKey, l); }
-        const ctx = { users, byTid, byPhone, claimed: new Set(), counts };
+        const ctx = { users, byTid, byPhone, claimed: new Set(), counts, uidMap: { ...(s.uidMap || {}) }, uidDirty: false };
         const since = Math.max(0, (s.lastRun?.at || 0) - 15 * 60000);
         const queries = doFull ? [{ body: {}, max: Infinity }] : [{ body: { actions: { performed_at: { from: since, to: started + 60000 } } }, max: Infinity }, { body: {}, max: 100 }];
         const done = new Set();
@@ -227,9 +304,11 @@ export function createTelecrmMirror({ db, all, get, put, rawPut, tx, now = () =>
             if ((page.data || []).length < 100) break;
           }
         }
+        await fetchRecordings(s, counts);
         Object.assign(result, counts, { ok: true, message: `${counts.changed} of ${counts.seen} leads updated` });
         const after = raw();
         after.lastRun = { ...result, took: now() - started };
+        if (ctx.uidDirty) after.uidMap = ctx.uidMap;
         if (doFull) after.lastFullAt = started;
         store(after);
       } catch (e) {

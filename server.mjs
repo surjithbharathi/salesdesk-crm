@@ -403,7 +403,7 @@ const callAI = createCallAI({db,all,get,playback:mobile.playback,keyPath:(proces
 const smtpEmail=createSmtpEmail({db,keyPath:(process.env.CRM_DB||new URL('./data/crm.sqlite',import.meta.url).pathname)+'.smtp-key',origin:publicOrigin});
 // the one-way mirror of TeleCRM: it writes records directly (no per-lead uniqueness scan), the unique phone index still protects against duplicates
 const rawPut = (kind, v) => db.prepare("INSERT INTO records VALUES(?,?,?) ON CONFLICT(kind,id) DO UPDATE SET body=excluded.body").run(kind, v.id, JSON.stringify(v));
-const telecrm = createTelecrmMirror({ db, all, get, put, rawPut, tx, keyPath: (process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname) + ".telecrm-key", log: (m) => console.error(m) });
+const telecrm = createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecording: (callId, bytes) => mobile.importRecording(callId, bytes), keyPath: (process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname) + ".telecrm-key", log: (m) => console.error(m) });
 const waGateway = createWaGateway({ db, all, get, put, stamp, tx, log, systemUser: process.env.CRM_OWNER_USER_ID || "", keyPath: (process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname) + ".wagw-key" });
 const mcpAccess=createMcpAccess({db,get,canAdmin:id=>workspaceAccess.can(id,'integrations.manage')});
 const mcpOAuth=createMcpOAuth({db,origin:publicOrigin||`http://localhost:${port}`,access:mcpAccess});
@@ -998,6 +998,8 @@ const server = http.createServer(async (req, res) => {
       if(url.pathname==='/api/workspace/users'&&req.method==='POST'){sameOrigin();const input=await body(req);if(input.sendEmail&&!smtpEmail.settings().enabled)bad('Configure and enable SMTP before sending invitations');const result=workspaceAccess.invite(identity,input);if(input.sendEmail){try{await smtpEmail.send({to:input.email,purpose:'invitation',setupUrl:result.setupUrl,actor:identity.user.id});result.emailStatus='accepted';}catch{result.emailStatus='failed';}}send(201,result);return;}
       const accessUser=/^\/api\/workspace\/users\/([a-f0-9-]{36})(?:\/(setup-link))?$/.exec(url.pathname);
       if(accessUser&&['PATCH','POST'].includes(req.method)){sameOrigin();send(200,accessUser[2]?workspaceAccess.reset(identity,accessUser[1]):workspaceAccess.update(identity,accessUser[1],await body(req)));return;}
+      const removeUser=/^\/api\/workspace\/users\/([\w-]{1,64})$/.exec(url.pathname);
+      if(removeUser&&req.method==='DELETE'){sameOrigin();send(200,workspaceAccess.remove(identity,removeUser[1]));return;}
       if(url.pathname==='/api/workspaces'&&req.method==='GET'){if(!workspaceRegistry)bad('CRM Owner access required',403);send(200,workspaceRegistry.list(identity));return;}
       if(url.pathname==='/api/workspaces'&&req.method==='POST'){sameOrigin();if(!workspaceRegistry)bad('CRM Owner access required',403);send(201,workspaceRegistry.create(identity,await body(req)));return;}
       const workspaceUsers=/^\/api\/workspaces\/([a-f0-9-]{36})\/users(?:\/([a-f0-9-]{36})(?:\/(setup-link))?)?$/.exec(url.pathname);

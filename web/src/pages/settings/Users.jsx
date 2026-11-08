@@ -85,7 +85,7 @@ function Edit({ user, access, onSaved, onCancel }) {
   );
 }
 
-export default function Users({ access }) {
+export default function Users({ access, meId }) {
   const notify = useToast();
   const [version, setVersion] = useState(0);
   const { data: users, error } = useLoad(() => crmGet("workspace/users"), [version]);
@@ -128,6 +128,18 @@ export default function Users({ access }) {
       notify(e.message);
     }
   }
+  async function remove(user) {
+    if (!confirm(`Remove ${user.name} for good?\n\nThey can no longer sign in. Their leads, follow-ups and deals stay but become unassigned, and their past calls and notes are kept. This cannot be undone. To stop someone signing in for now, use Edit access and switch off "Can sign in" instead.`)) return;
+    try {
+      const out = await crmSend("DELETE", `workspace/users/${user.id}`);
+      const n = out.unassigned || {};
+      notify(`${out.name || user.name} removed. ${n.leads || 0} leads and ${n.tasks || 0} follow-ups are now unassigned.`);
+      setEditing("");
+      reload();
+    } catch (e) {
+      notify(e.message);
+    }
+  }
   if (error) return <Failed>{error.message}</Failed>;
   return (
     <>
@@ -151,6 +163,7 @@ export default function Users({ access }) {
                           <button className="btn btn-quiet" onClick={() => setup(u)}>Setup link</button>
                         </span>
                       ) : <button className="btn" onClick={() => createLogin(u)}>Create login</button>}
+                      {!u.crmOwner && u.id !== meId && <button className="btn btn-danger" onClick={() => remove(u)}>Remove</button>}
                     </td>
                   </tr>
                   {editing === u.id && (

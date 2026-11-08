@@ -54,7 +54,7 @@ export default function Messages() {
                 {current.messages.map((m) => (
                   <article key={m.id} className={`msg ${m.direction === "Outgoing" ? "msg-out" : ""}`}>
                     <p>{m.text}</p>
-                    <small>{m.direction === "Outgoing" ? "You" : "Customer"}, {when(stamp(m))}</small>
+                    <small>{m.sender || (m.direction === "Outgoing" ? "You" : "Customer")}{m.numberLabel ? ` · ${m.numberLabel}` : ""}, {when(stamp(m))}</small>
                   </article>
                 ))}
               </div>

@@ -64,7 +64,7 @@ export default function GatewayChat({ leadId, className = "" }) {
         {thread.map((m) => (
           <article key={m.id} className={`gwchat-msg ${m.direction === "Outgoing" ? "out" : ""}`}>
             <p>{m.text}</p>
-            <small>{m.direction === "Outgoing" ? "Our team" : "Customer"}, {when(stamp(m))}{m.numberLabel ? ` · ${m.numberLabel}` : ""}</small>
+            <small>{m.sender || (m.direction === "Outgoing" ? "Our team" : "Customer")}{m.numberLabel ? ` · ${m.numberLabel}` : ""}, {when(stamp(m))}</small>
           </article>
         ))}
         {!thread.length && <p className="muted">No WhatsApp messages for this lead yet.</p>}
