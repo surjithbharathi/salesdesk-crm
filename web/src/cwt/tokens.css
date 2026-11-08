@@ -1,0 +1,41 @@
+/* Written for the reference web app; every rule sits under .cwt so it cannot leak into other screens. */
+.cwt {
+  
+  --brand: #4f38a2;
+  --brand-deep: #130059;
+  --brand-modal: #230a53;
+  --brand-tint: #531cb30d;
+  --text: #333333;
+  --text-input: #2e2e2e;
+  --text-muted: #6b6b6b;
+  --text-soft: #919191;
+  --text-or: #828282;
+  --btn-text: #efefef;
+  --border-input: #e0e0e0;
+  --line: #162f561a;
+  --google-bg: #f7f7f7;
+  --star: #f9b403;
+  --border-color: rgba(0, 0, 0, .1);
+  --hover-lightest: rgba(57, 20, 122, .05);
+  --hover-lighter: rgba(57, 20, 122, .1);
+  --hover-light: rgba(57, 20, 122, .2);
+  --dark-lavendar: rgba(79, 56, 162, .2);
+  --input-background: #f0e9fd;
+  --error: rgba(227, 37, 38, 1);
+  --error-lighter: rgba(227, 37, 38, .1);
+  --info: rgba(0, 119, 223, 1);
+  --info-lighter: rgba(0, 119, 223, .1);
+  --success: #1f9d55;
+  --success-lighter: rgba(31, 157, 85, .1);
+  --warning: #e08a00;
+  --warning-lighter: rgba(224, 138, 0, .12);
+  --font-size-50: 13px;
+  --font-size-100: 14px;
+  --font-size-200: 16px;
+  --font-size-300: 18px;
+  --font-size-400: 20px;
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 20px;
+  --shadow-card: rgba(0, 0, 0, 0.24) 0px 0px 4px 0px;
+}

@@ -5,11 +5,12 @@ import { useHash } from "./hooks.js";
 import Icon from "./icons.jsx";
 import { applySkin, readSkin, useSkin } from "./skin.js";
 import TeleDashboard from "./pages/TeleDashboard.jsx";
-import TeleLeads from "./pages/TeleLeads.jsx";
-import TeleCalls from "./pages/TeleCalls.jsx";
-import TeleSearch from "./pages/TeleSearch.jsx";
 import CwShell from "./cw/Shell.jsx";
 import CwDashboard from "./cw/Dashboard.jsx";
+import CwtShell from "./cwt/Shell.jsx";
+import CwtDashboard from "./cwt/Dashboard.jsx";
+import CwtViews from "./cwt/Views.jsx";
+import { CwtCalls, CwtSearch, CwtFollowups, CwtReports } from "./cwt/Pages.jsx";
 import CwLeads from "./cw/LeadsGrid.jsx";
 import { CwDeals, CwTodos, CwEngagements, CwConversations } from "./cw/Views.jsx";
 import Business from "./pages/Business.jsx";
@@ -151,12 +152,13 @@ export default function App() {
   const callers = meta.users;
   const viewing = owner ? (params.user || meta.id || callers[0]?.id) : meta.id;
   const page =
-    path.startsWith("/leads") ? (skin === "telecrm" ? <TeleLeads key="tleads" params={params} /> : skin === "salesmax" ? <CwLeads key="cwleads" params={params} /> : <Leads key="leads" params={params} />) :
-    path.startsWith("/search") && skin === "telecrm" ? <TeleSearch key="tsearch" params={params} /> :
-    path.startsWith("/calls") ? (skin === "telecrm" ? <TeleCalls key="tcalls" /> : <Calls key="calls" />) :
+    path.startsWith("/leads") ? (skin === "telecrm" ? <CwtViews key="cwtviews" params={params} /> : skin === "salesmax" ? <CwLeads key="cwleads" params={params} /> : <Leads key="leads" params={params} />) :
+    path.startsWith("/search") && skin === "telecrm" ? <CwtSearch key="cwtsearch" params={params} /> :
+    path.startsWith("/reports") && skin === "telecrm" ? <CwtReports key={`cwtrep${params.tab || ""}`} params={params} /> :
+    path.startsWith("/calls") ? (skin === "telecrm" ? <CwtCalls key="cwtcalls" /> : <Calls key="calls" />) :
     path.startsWith("/deals") && max ? <CwDeals key={`deals${params.tab || ""}`} params={params} /> :
     path.startsWith("/engagements") && max ? <CwEngagements key={`eng${params.tab || ""}`} params={params} /> :
-    path.startsWith("/todo") ? (max ? <CwTodos key={`mtodo${params.tab || ""}`} params={params} /> : <Tasks key="todo" />) :
+    path.startsWith("/todo") ? (skin === "telecrm" ? <CwtFollowups key="cwtfollow" /> : max ? <CwTodos key={`mtodo${params.tab || ""}`} params={params} /> : <Tasks key="todo" />) :
     path.startsWith("/messages") ? (max ? <CwConversations key={`mchat${params.tab || ""}`} params={params} /> : <Messages key="messages" />) :
     path.startsWith("/settings") ? <Settings key="settings" params={params} me={meta} /> :
     path.startsWith("/team") && owner ? <Team key="team" /> :
@@ -173,13 +175,20 @@ export default function App() {
         <MyDay key={viewing} userId={viewing} meta={meta} />
       </>
     ) :
-    skin === "telecrm" ? <TeleDashboard key="tele" meta={meta} /> : skin === "salesmax" ? <CwDashboard key={`cwdash${params.tab || ""}`} tab={params.tab || "default"} /> : <Business key="business" />;
+    skin === "telecrm" ? <CwtDashboard key="cwtdash" meta={meta} /> : skin === "salesmax" ? <CwDashboard key={`cwdash${params.tab || ""}`} tab={params.tab || "default"} /> : <Business key="business" />;
 
   if (max) {
     return (
       <CwShell path={path} params={params} owner={owner} session={session} onLogout={async () => { await logout(); location.reload(); }}>
         <CrmProvider me={meta}>{page}</CrmProvider>
       </CwShell>
+    );
+  }
+  if (skin === "telecrm") {
+    return (
+      <CrmProvider me={meta}>
+        <CwtShell path={path} owner={owner} session={session} onLogout={async () => { await logout(); location.reload(); }}>{page}</CwtShell>
+      </CrmProvider>
     );
   }
   return (

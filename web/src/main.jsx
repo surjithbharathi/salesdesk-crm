@@ -21,6 +21,14 @@ import "./cw/views.css";
 import "./cw/more.css";
 import "./cw/detail.css";
 import "./cw/extra.css";
+import "./cwt/tokens.css";
+import "./cwt/crm.css";
+import "./cwt/shell.css";
+import "./cwt/dashboard.css";
+import "./cwt/views.css";
+import "./cwt/lead-detail.css";
+import "./cwt/pages.css";
+import "./cwt/extra.css";
 
 createRoot(document.getElementById("root")).render(
   <ToastProvider>

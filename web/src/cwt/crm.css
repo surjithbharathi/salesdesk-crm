@@ -1,0 +1,119 @@
+/* Written for the reference web app; every rule sits under .cwt so it cannot leak into other screens. */
+.cwt {
+  --ink: #111827;
+  --ink-2: #374151;
+  --ink-3: #4b5563;
+  --ink-4: #6b7280;
+  --ink-5: #9ca3af;
+  --line-2: #e5e7eb;
+  --line-3: #f0f1f3;
+  --panel-head: #f8f9fb;
+  --nav-active: #f1edfb;
+  --avatar-bg: #e7e1f7;
+  --avatar-ink: #5b4a9e;
+  --ok-bg: #dcfce7;
+  --ok-ink: #15803d;
+  --bad-bg: #fee2e2;
+  --bad-ink: #dc2626;
+  --amber: #ca8a04;
+  --red: #ef4444;
+  --teal: #059669;
+}
+.cwt .crm-page { padding: 0 20px 30px; }
+.cwt .crm-page-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 22px 0 18px; }
+.cwt .crm-page-head h1 { margin: 0; font-size: 20px; font-weight: 500; color: var(--ink); display: flex; align-items: center; gap: 8px; }
+.cwt .crm-page-head p { margin: 4px 0 0; color: var(--ink-4); font-size: 14px; }
+.cwt .panel { background: #fff; border: 1px solid var(--line-2); border-radius: 12px; overflow: hidden; min-width: 0; display: flex; flex-direction: column; }
+.cwt .panel-head { display: flex; align-items: center; gap: 14px; min-height: 70px; padding: 12px 16px 12px 22px; background: var(--panel-head); border-bottom: 1px solid var(--line-2); }
+.cwt .panel-head .p-icon { width: 22px; height: 22px; flex-shrink: 0; color: var(--ink-2); fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.cwt .panel-title { min-width: 0; }
+.cwt .panel-title h2 { margin: 0; font-size: 16px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cwt .panel-title .ago { display: flex; align-items: center; gap: 6px; margin-top: 3px; font-size: 13px; color: var(--ink-4); }
+.cwt .panel-head .spacer { flex: 1; }
+.cwt .panel-body { padding: 12px 16px 0; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.cwt .refresh { display: inline-flex; width: 16px; height: 16px; padding: 0; border: none; background: none; color: #5b3fb0; }
+.cwt .refresh svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.cwt .refresh.spin svg { animation: crm-spin .7s linear; }
+@keyframes crm-spin { to { transform: rotate(360deg); } }
+.cwt .pill-btn { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 10px; border: 1px solid var(--line-2); border-radius: 15px; background: #fff; color: var(--ink-2); font-size: 14px; }
+.cwt .pill-btn svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.cwt .expand-btn { display: inline-flex; width: 26px; height: 26px; padding: 4px; border: none; border-radius: 6px; background: none; color: var(--ink-2); }
+.cwt .expand-btn:hover { background: var(--line-3); }
+.cwt .expand-btn svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.cwt .search-box { display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 12px; border: 1px solid #d1d5db; border-radius: 6px; background: #fff; }
+.cwt .search-box svg { width: 14px; height: 14px; flex-shrink: 0; fill: none; stroke: var(--ink-2); stroke-width: 2.2; stroke-linecap: round; }
+.cwt .search-box input { flex: 1; min-width: 0; border: none; outline: none; background: transparent; font-size: 13px; color: var(--ink-2); }
+.cwt .search-box input::placeholder { color: var(--ink-5); }
+.cwt .search-box:focus-within { border-color: #8b7bd0; box-shadow: 0 0 0 3px rgba(79, 56, 162, .1); }
+.cwt .crm-table-wrap { overflow: auto; }
+.cwt .crm-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.cwt .crm-table th { position: sticky; top: 0; z-index: 1; background: #fff; text-align: left; font-size: 13px; font-weight: 500; color: var(--ink-3); padding: 14px 6px; border-bottom: 1px solid var(--line-2); white-space: nowrap; user-select: none; }
+.cwt .crm-table th.sortable { cursor: pointer; }
+.cwt .crm-table th.sorted { color: var(--ink); font-weight: 600; }
+.cwt .crm-table th .caret { display: inline-block; margin-left: 4px; width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid currentColor; vertical-align: middle; opacity: .8; }
+.cwt .crm-table th .caret.up { border-top: none; border-bottom: 5px solid currentColor; }
+.cwt .crm-table td { padding: 12px 6px; border-bottom: 1px solid var(--line-2); color: var(--ink-2); vertical-align: middle; }
+.cwt .crm-table .c { text-align: center; }
+.cwt .crm-table .r { text-align: right; }
+.cwt .crm-table tbody tr.clickable { cursor: pointer; }
+.cwt .crm-table tbody tr.clickable:hover { background: #faf9fd; }
+.cwt .crm-table tfoot td { font-weight: 600; color: var(--ink); }
+.cwt .user-cell { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.cwt .user-cell .who { min-width: 0; }
+.cwt .user-cell b { display: block; font-weight: 500; color: var(--ink); font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cwt .user-cell span.sub { display: block; font-size: 13px; color: var(--ink-4); }
+.cwt .av { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; background: var(--avatar-bg); color: var(--avatar-ink); font-size: 14px; font-weight: 400; flex-shrink: 0; letter-spacing: -.3px; }
+.cwt .av.md { width: 32px; height: 32px; font-size: 14px; }
+.cwt .av.lg { width: 46px; height: 46px; font-size: 17px; }
+.cwt .tag { display: inline-flex; align-items: center; height: 18px; padding: 0 5px; border-radius: 3px; font-size: 11px; white-space: nowrap; }
+.cwt .tag.ok { background: var(--ok-bg); color: var(--ok-ink); }
+.cwt .tag.bad { background: var(--bad-bg); color: var(--bad-ink); }
+.cwt .tag.na { height: 24px; padding: 0 8px; background: #f3f4f6; color: var(--ink-4); font-size: 12px; }
+.cwt .yes { display: inline-flex; align-items: center; height: 26px; padding: 0 8px; border-radius: 4px; background: var(--ok-bg); color: var(--ok-ink); font-size: 14px; font-weight: 600; }
+.cwt .yes.no { background: var(--bad-bg); color: var(--bad-ink); }
+.cwt .chip { display: inline-flex; align-items: center; height: 24px; padding: 0 9px; border-radius: 12px; font-size: 12px; font-weight: 500; white-space: nowrap; }
+.cwt .chip-new-lead { background: #e0edff; color: #1d4ed8; }
+.cwt .chip-interested-customer { background: #ede9fe; color: #5b3fb0; }
+.cwt .chip-won { background: var(--ok-bg); color: var(--ok-ink); }
+.cwt .chip-lost { background: var(--bad-bg); color: var(--bad-ink); }
+.cwt .chip-requirement-discussed { background: #fef3c7; color: #b45309; }
+.cwt .chip-quotation-shared { background: #ccfbf1; color: #0f766e; }
+.cwt .chip-connected { background: var(--ok-bg); color: var(--ok-ink); }
+.cwt .chip-not-picked,
+.cwt .chip-switched-off { background: var(--bad-bg); color: var(--bad-ink); }
+.cwt .chip-busy { background: #fef3c7; color: #b45309; }
+.cwt .crm-card { background: #fff; border: 1px solid var(--line-2); border-radius: 12px; padding: 18px; min-width: 0; }
+.cwt .crm-card h2 { margin: 0 0 14px; font-size: 16px; font-weight: 600; color: var(--ink); }
+.cwt .crm-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 36px; padding: 0 16px; border: none; border-radius: 8px; background: var(--brand); color: #fff; font-size: 14px; font-weight: 500; white-space: nowrap; }
+.cwt .crm-btn:hover { background: #45309a; }
+.cwt .crm-btn:disabled { opacity: .5; cursor: default; }
+.cwt .crm-btn.ghost { background: #fff; color: var(--ink-2); box-shadow: inset 0 0 0 1px var(--line-2); }
+.cwt .crm-btn.ghost:hover { background: #f9fafb; }
+.cwt .crm-btn.danger { background: #fff; color: var(--bad-ink); box-shadow: inset 0 0 0 1px #fecaca; }
+.cwt .crm-btn.sm { height: 30px; padding: 0 11px; font-size: 13px; }
+.cwt .crm-btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.cwt .crm-input,
+.cwt .crm-select,
+.cwt .crm-textarea { height: 36px; padding: 0 10px; border: 1px solid #d1d5db; border-radius: 6px; background: #fff; color: var(--ink-2); font-size: 14px; outline: none; min-width: 0; }
+.cwt .crm-textarea { height: auto; padding: 8px 10px; resize: vertical; width: 100%; }
+.cwt .crm-input:focus,
+.cwt .crm-select:focus,
+.cwt .crm-textarea:focus { border-color: #8b7bd0; box-shadow: 0 0 0 3px rgba(79, 56, 162, .1); }
+.cwt .crm-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.cwt .crm-field label { font-size: 13px; font-weight: 500; color: var(--ink-3); }
+.cwt .crm-muted { color: var(--ink-4); font-size: 13px; }
+.cwt .crm-empty { padding: 36px 12px; text-align: center; color: var(--ink-5); }
+.cwt .icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: none; border-radius: 8px; background: #f3f4f6; color: var(--ink-2); }
+.cwt .icon-btn:hover { background: #e5e7eb; }
+.cwt .icon-btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.cwt .icon-btn.call { background: var(--ok-bg); color: var(--ok-ink); }
+.cwt .icon-btn.on { color: #ca8a04; }
+.cwt .icon-btn.on svg { fill: #facc15; stroke: #ca8a04; }
+.cwt .tabs { display: flex; align-items: center; gap: 4px; border-bottom: 1px solid var(--line-2); margin-bottom: 20px; }
+.cwt .tabs a,
+.cwt .tabs button { position: relative; display: inline-flex; align-items: center; height: 44px; padding: 0 14px; border: none; background: none; color: var(--ink-3); font-size: 15px; font-weight: 500; }
+.cwt .tabs .active { color: #4f38a2; }
+.cwt .tabs .active::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: #4f38a2; }
+.cwt .toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.cwt .toolbar .search-box { flex: 1; min-width: 200px; max-width: 420px; }
+.cwt .pager { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 12px 0 0; font-size: 13px; color: var(--ink-4); }

@@ -180,7 +180,6 @@
 }
 :root[data-skin="telecrm"] .brand-mark { background: #ffffff; color: #4f38a2; border-radius: 8px; }
 :root[data-skin="telecrm"] .rail-link[aria-current="page"] { border-left-color: #ffffff; }
-:root[data-skin="telecrm"] .who .avatar { background: #ffffff; color: #4f38a2; }
 :root[data-skin="telecrm"] .work-title { font-weight: 700; font-size: 30px; letter-spacing: 0; }
 
 /* ---- the picker in Settings ---- */
@@ -217,11 +216,6 @@
 :root[data-skin="telecrm"] .rail-foot { align-items: center; }
 :root[data-skin="telecrm"] .rail-foot a, :root[data-skin="telecrm"] .rail-foot button { padding: 8px; justify-content: center; color: var(--iron-muted); }
 :root[data-skin="telecrm"] .rail-foot a:hover, :root[data-skin="telecrm"] .rail-foot button:hover { background: var(--iron-2); color: #4f38a2; }
-:root[data-skin="telecrm"] .who { padding: 4px; }
-:root[data-skin="telecrm"] .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 52px; padding: 0 20px; border-bottom: 1px solid var(--line); background: var(--surface); position: sticky; top: 0; z-index: 5; }
-:root[data-skin="telecrm"] .topbar-co { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; }
-:root[data-skin="telecrm"] .topbar-co::before { content: ""; width: 24px; height: 24px; border-radius: 50%; background: #4f38a2; }
-:root[data-skin="telecrm"] .topbar-user .avatar { background: #e8e4ff; color: #4f38a2; width: 30px; height: 30px; }
 :root[data-skin="telecrm"] .work { padding: 18px 22px 90px; max-width: none; }
 :root[data-skin="telecrm"] .work-title { font-size: 20px; font-weight: 600; }
 :root[data-skin="telecrm"] .work-head { margin-bottom: 14px; }
@@ -238,7 +232,6 @@
   :root[data-skin="telecrm"] .shell { grid-template-columns: minmax(0, 1fr); }
   :root[data-skin="telecrm"] .rail { flex-direction: row; height: auto; position: static; padding: 8px; }
   :root[data-skin="telecrm"] .rail-nav { flex-direction: row; overflow-x: auto; }
-  :root[data-skin="telecrm"] .topbar { display: none; }
 }
 
 /* ---- TeleCRM style: the dashboard widgets ---- */
