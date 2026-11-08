@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { crmGet, crmSend } from "../../api.js";
 import { useToast } from "../../toast.jsx";
+import { Section, Note, Loading, Failed } from "./Parts.jsx";
 
 const STATE_TEXT = {
   disconnected: "Not connected",
@@ -52,43 +53,44 @@ export default function WhatsApp() {
     }
   }
 
-  if (error) return <p className="error">{error}</p>;
-  if (!status) return <p className="muted">Loading WhatsApp…</p>;
+  if (error) return <Failed>{error}</Failed>;
+  if (!status) return <Loading>Loading WhatsApp…</Loading>;
   const state = status.state;
   const connected = state === "connected";
+  const tone = connected ? "ok" : LIVE.includes(state) ? "warn" : "off";
   return (
     <>
-      <p className="muted report-meta">Link a WhatsApp account so customer chats sync into the CRM. This is read-only: the CRM never sends a message for you. Open WhatsApp yourself to reply.</p>
-      <p><b>{STATE_TEXT[state] || state}</b>{status.error && <><br /><span className="muted">{status.error}</span></>}</p>
-      {status.unmatched > 0 && <p className="muted">{status.unmatched} chats could not be matched to a lead because the number is not in the CRM.</p>}
-      {state === "qr" && status.qr && (
-        <div className="setup-link">
-          <img className="wa-qr" src={status.qr} alt="WhatsApp pairing code" width="240" height="240" />
-          <p>On the phone: WhatsApp, Linked devices, Link a device, then scan this code.</p>
-        </div>
-      )}
-      {!connected && !LIVE.includes(state) && state !== "admin_required" && (
-        <div className="newlead">
-          <label className="check wide">
-            <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} />
-            I understand this uses an unofficial WhatsApp client, so the number could be restricted by WhatsApp, and that synced messages are stored on this server.
-          </label>
-          <span className="newlead-actions">
-            <button className="btn btn-primary" disabled={busy || !ack} onClick={() => act("connect", { acknowledged: true })}>Connect WhatsApp</button>
-          </span>
-        </div>
-      )}
-      {(connected || LIVE.includes(state)) && (
-        <span className="newlead-actions">
-          <button className="btn" disabled={busy} onClick={() => act("disconnect", {}, "WhatsApp disconnected. The link is kept, so you can reconnect without scanning.")}>Disconnect</button>
-          <button
-            className="btn btn-quiet"
-            disabled={busy}
-            onClick={() => confirm("Clear the linked session? You will need to scan a new code to connect again.") && act("logout", { confirmed: true }, "Local session cleared")}
-          >Sign out and clear link</button>
-        </span>
-      )}
-      {state === "logged_out" && status.error && <p className="muted gauge-note">{status.error}</p>}
+      <Section title="Linked WhatsApp account" desc="Customer chats sync into the CRM. This is read-only: the CRM never sends a message for you. Open WhatsApp yourself to reply." status={STATE_TEXT[state] || state} tone={tone}>
+        {status.error && <Note>{status.error}</Note>}
+        {status.unmatched > 0 && <Note>{status.unmatched} chats could not be matched to a lead because the number is not in the CRM.</Note>}
+        {state === "qr" && status.qr && (
+          <div className="qr-box">
+            <img className="wa-qr" src={status.qr} alt="WhatsApp pairing code" width="240" height="240" />
+            <p>On the phone: WhatsApp, Linked devices, Link a device, then scan this code.</p>
+          </div>
+        )}
+        {!connected && !LIVE.includes(state) && state !== "admin_required" && (
+          <>
+            <label className="check">
+              <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} />
+              <span>I understand this uses an unofficial WhatsApp client, so the number could be restricted by WhatsApp, and that synced messages are stored on this server.</span>
+            </label>
+            <div className="newlead-actions">
+              <button className="btn btn-primary" disabled={busy || !ack} onClick={() => act("connect", { acknowledged: true })}>Connect WhatsApp</button>
+            </div>
+          </>
+        )}
+        {(connected || LIVE.includes(state)) && (
+          <div className="newlead-actions">
+            <button className="btn" disabled={busy} onClick={() => act("disconnect", {}, "WhatsApp disconnected. The link is kept, so you can reconnect without scanning.")}>Disconnect</button>
+            <button
+              className="btn btn-quiet"
+              disabled={busy}
+              onClick={() => confirm("Clear the linked session? You will need to scan a new code to connect again.") && act("logout", { confirmed: true }, "Local session cleared")}
+            >Sign out and clear link</button>
+          </div>
+        )}
+      </Section>
     </>
   );
 }

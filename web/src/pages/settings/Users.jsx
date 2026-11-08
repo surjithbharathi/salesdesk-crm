@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { crmGet, crmSend } from "../../api.js";
 import { useLoad } from "../../hooks.js";
 import { useToast } from "../../toast.jsx";
+import { Section, Loading, Failed } from "./Parts.jsx";
 
 export const ROLES = [["owner", "Super Admin"], ["admin", "Admin"], ["manager", "Manager"], ["member", "Caller"]];
 const RANK = { owner: 4, admin: 3, manager: 2, member: 1, viewer: 0 };
@@ -24,14 +25,13 @@ const absolute = (url) => (url.startsWith("/") ? location.origin + url : url);
 function SetupLink({ link, onClose }) {
   const notify = useToast();
   return (
-    <div className="setup-link" role="status">
-      <p><b>Send this link to the person.</b> It works once and expires in ten minutes. They choose their own password with it.</p>
+    <Section title="Send this link to the person" desc="It works once and expires in ten minutes. They choose their own password with it." status="New" tone="ok">
       <input className="field-input" readOnly value={absolute(link)} aria-label="Setup link" onFocus={(e) => e.target.select()} />
       <span className="newlead-actions">
         <button className="btn btn-primary" onClick={async () => { try { await navigator.clipboard.writeText(absolute(link)); notify("Link copied"); } catch { notify("Select the link and copy it by hand"); } }}>Copy link</button>
         <button className="btn btn-quiet" onClick={onClose}>Done</button>
       </span>
-    </div>
+    </Section>
   );
 }
 
@@ -128,50 +128,59 @@ export default function Users({ access }) {
       notify(e.message);
     }
   }
-  if (error) return <p className="error">{error.message}</p>;
+  if (error) return <Failed>{error.message}</Failed>;
   return (
     <>
-      <p className="muted report-meta">Super Admin runs the workspace. Admin manages users and integrations. Manager sees the team's leads and reports. Caller sees only their own leads and calls. Changing someone's access signs them out on their devices.</p>
       {link && <SetupLink link={link} onClose={() => setLink("")} />}
-      <h2 className="section-title">Add a person</h2>
-      <form className="newlead" onSubmit={invite}>
-        <label>Name<input className="field-input" name="name" required maxLength={120} /></label>
-        <label>Username<input className="field-input" name="username" required minLength={3} maxLength={120} autoComplete="off" /></label>
-        <label>Email (optional)<input className="field-input" name="email" type="email" /></label>
-        <label>Role
-          <select className="field-input" name="role" defaultValue="member">{mayGive.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select>
-        </label>
-        <span className="newlead-actions"><button className="btn btn-primary" disabled={busy}>Add and create setup link</button></span>
-      </form>
-      <h2 className="section-title section-gap">People</h2>
-      <div className="table-frame">
-        <table className="grid">
-          <thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Status</th><th><span className="sr">Actions</span></th></tr></thead>
-          <tbody>
-            {(users || []).map((u) => (
-              <React.Fragment key={u.id}>
-                <tr>
-                  <td><b>{u.name}</b>{u.crmOwner && <span className="note note-warn small-note">Ultra Admin</span>}</td>
-                  <td>{u.username || <span className="muted">No login</span>}</td>
-                  <td>{ROLES.find(([r]) => r === u.role)?.[1] || u.role}</td>
-                  <td>{u.active ? "Active" : <span className="muted">Disabled</span>}</td>
-                  <td className="right">
-                    {u.hasLogin ? (
-                      <span className="quick-actions">
-                        <button className="btn" onClick={() => setEditing(editing === u.id ? "" : u.id)}>Edit access</button>
-                        <button className="btn btn-quiet" onClick={() => setup(u)}>Setup link</button>
-                      </span>
-                    ) : <button className="btn" onClick={() => createLogin(u)}>Create login</button>}
-                  </td>
-                </tr>
-                {editing === u.id && (
-                  <tr className="reasons"><td colSpan={5}><Edit user={u} access={access} onCancel={() => setEditing("")} onSaved={() => { setEditing(""); reload(); }} /></td></tr>
-                )}
-              </React.Fragment>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <Section title="People" desc="Everyone who can open this CRM. Changing someone's access signs them out on their devices." status={users ? `${users.length} people` : undefined} tone="off">
+        <div className="table-frame">
+          <table className="grid">
+            <thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Status</th><th><span className="sr">Actions</span></th></tr></thead>
+            <tbody>
+              {(users || []).map((u) => (
+                <React.Fragment key={u.id}>
+                  <tr>
+                    <td><b>{u.name}</b>{u.crmOwner && <span className="note note-warn small-note">Ultra Admin</span>}</td>
+                    <td>{u.username || <span className="muted">No login</span>}</td>
+                    <td>{ROLES.find(([r]) => r === u.role)?.[1] || u.role}</td>
+                    <td>{u.active ? "Active" : <span className="muted">Disabled</span>}</td>
+                    <td className="right">
+                      {u.hasLogin ? (
+                        <span className="quick-actions">
+                          <button className="btn" onClick={() => setEditing(editing === u.id ? "" : u.id)}>Edit access</button>
+                          <button className="btn btn-quiet" onClick={() => setup(u)}>Setup link</button>
+                        </span>
+                      ) : <button className="btn" onClick={() => createLogin(u)}>Create login</button>}
+                    </td>
+                  </tr>
+                  {editing === u.id && (
+                    <tr className="reasons"><td colSpan={5}><Edit user={u} access={access} onCancel={() => setEditing("")} onSaved={() => { setEditing(""); reload(); }} /></td></tr>
+                  )}
+                </React.Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Section>
+      <Section title="Add a person" desc="They get a one-use link to choose their own password.">
+        <form className="sec-grid" onSubmit={invite}>
+          <label>Name<input className="field-input" name="name" required maxLength={120} /></label>
+          <label>Username<input className="field-input" name="username" required minLength={3} maxLength={120} autoComplete="off" /></label>
+          <label>Email (optional)<input className="field-input" name="email" type="email" /></label>
+          <label>Role
+            <select className="field-input" name="role" defaultValue="member">{mayGive.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select>
+          </label>
+          <div className="newlead-actions"><button className="btn btn-primary" disabled={busy}>Add and create setup link</button></div>
+        </form>
+      </Section>
+      <Section title="What each role can do">
+        <dl className="roles">
+          <div><dt>Super Admin</dt><dd>Runs the workspace.</dd></div>
+          <div><dt>Admin</dt><dd>Manages users and integrations.</dd></div>
+          <div><dt>Manager</dt><dd>Sees the team's leads and reports.</dd></div>
+          <div><dt>Caller</dt><dd>Sees only their own leads and calls.</dd></div>
+        </dl>
+      </Section>
     </>
   );
 }

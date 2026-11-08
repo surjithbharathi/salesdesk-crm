@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { crmSend } from "../../api.js";
 import { useCrm } from "../../crm.jsx";
 import { useToast } from "../../toast.jsx";
+import { Section, Loading } from "./Parts.jsx";
 
 // Hands out leads that have no owner, one by one in turn, across the active team.
 export default function Assign({ access }) {
@@ -9,7 +10,7 @@ export default function Assign({ access }) {
   const notify = useToast();
   const [busy, setBusy] = useState(false);
   const [picked, setPicked] = useState({});
-  if (!crm.state) return <p className="muted">Loading…</p>;
+  if (!crm.state) return <Loading>Loading…</Loading>;
   const team = access.users.filter((u) => u.active !== false);
   const active = crm.leads.filter((l) => !l.archived);
   const unowned = active.filter((l) => !l.owner);
@@ -36,19 +37,20 @@ export default function Assign({ access }) {
   const top = Math.max(1, ...team.map(load));
   return (
     <>
-      <p className="muted report-meta">Leads without an owner are shared out one by one, in turn. Nothing already owned changes.</p>
-      <p><b>{unowned.length}</b> leads have no owner.</p>
-      <fieldset className="assign-team">
-        <legend>Share them between</legend>
+      <Section title="Share out unowned leads" desc="Leads without an owner are shared one by one, in turn. Nothing already owned changes." status={`${unowned.length} without an owner`} tone={unowned.length ? "warn" : "ok"}>
+        <fieldset className="assign-team">
+          <legend>Share them between</legend>
+          {team.map((u) => (
+            <label key={u.id} className="check"><input type="checkbox" checked={picked[u.id] !== false} onChange={(e) => setPicked({ ...picked, [u.id]: e.target.checked })} /> {u.name}</label>
+          ))}
+        </fieldset>
+        <div className="newlead-actions"><button className="btn btn-primary" disabled={busy || !unowned.length || !chosen.length} onClick={distribute}>{busy ? "Assigning…" : `Assign ${unowned.length} leads`}</button></div>
+      </Section>
+      <Section title="Who has how many" desc="Active leads per person right now.">
         {team.map((u) => (
-          <label key={u.id} className="check"><input type="checkbox" checked={picked[u.id] !== false} onChange={(e) => setPicked({ ...picked, [u.id]: e.target.checked })} /> {u.name}</label>
+          <div key={u.id} className="bar-row"><span>{u.name}</span><progress value={load(u)} max={top} aria-label={`${u.name} leads`}>{load(u)}</progress><b>{load(u)}</b></div>
         ))}
-      </fieldset>
-      <span className="newlead-actions"><button className="btn btn-primary" disabled={busy || !unowned.length || !chosen.length} onClick={distribute}>{busy ? "Assigning…" : `Assign ${unowned.length} leads`}</button></span>
-      <h2 className="section-title section-gap">Who has how many</h2>
-      {team.map((u) => (
-        <div key={u.id} className="bar-row"><span>{u.name}</span><progress value={load(u)} max={top} aria-label={`${u.name} leads`}>{load(u)}</progress><b>{load(u)}</b></div>
-      ))}
+      </Section>
     </>
   );
 }

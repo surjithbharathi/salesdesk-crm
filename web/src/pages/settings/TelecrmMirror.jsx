@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { crmGet, crmSend } from "../../api.js";
 import { useLoad } from "../../hooks.js";
 import { useToast } from "../../toast.jsx";
+import { Section, Note, Steps, Loading, Failed } from "./Parts.jsx";
 
 // One-way copy of the TeleCRM workspace: TeleCRM stays the place where people work, this CRM shows the same people, leads,
 // timelines and follow-ups and keeps them up to date. Nothing is ever written back to TeleCRM.
@@ -17,8 +18,8 @@ export default function TelecrmMirror() {
     const timer = setInterval(() => setVersion((v) => v + 1), 3000);
     return () => clearInterval(timer);
   }, [data?.running]);
-  if (error) return <p className="error">{error.message}</p>;
-  if (!data) return <p className="muted">Loading the TeleCRM link…</p>;
+  if (error) return <Failed>{error.message}</Failed>;
+  if (!data) return <Loading>Loading the TeleCRM link…</Loading>;
   const run = data.lastRun;
   async function save(event) {
     event.preventDefault();
@@ -46,24 +47,37 @@ export default function TelecrmMirror() {
       setBusy(false);
     }
   }
+  const state = data.running ? ["Copying now", "warn"] : data.enabled ? ["Keeping up to date", "ok"] : ["Switched off", "off"];
   return (
     <>
-      <p className="muted report-meta">Copies TeleCRM into this workspace: the team and their permission template, every lead with all its fields, each lead's timeline (calls, notes, WhatsApp, status changes) and its follow-up as a task. TeleCRM stays the main system and is only read, never changed.</p>
-      <p className="gauge-note" role="note">Use this in a separate workspace made for the copy. A full copy holds tens of thousands of leads, which is too much for the workspace your team works in every day.</p>
-      <form className="newlead" onSubmit={save} key={version}>
-        <label className="check wide"><input type="checkbox" name="enabled" defaultChecked={data.enabled} /> Keep this workspace up to date from TeleCRM</label>
-        <label>TeleCRM workspace ID<input className="field-input" name="enterpriseId" defaultValue={data.enterpriseId} placeholder="Settings, Website and API in TeleCRM" /></label>
-        <label>Sync token<input className="field-input" name="token" type="password" autoComplete="new-password" placeholder={data.hasToken ? "Saved. Leave blank to keep it" : "Sync token from TeleCRM, Website and API"} /></label>
-        <label>Check for changes every (minutes)<input className="field-input" name="intervalMinutes" type="number" min="2" max="1440" defaultValue={data.intervalMinutes} /></label>
-        <span className="newlead-actions">
-          <button className="btn btn-primary" disabled={busy}>Save</button>
-          <button type="button" className="btn" disabled={busy || data.running || !data.hasToken} onClick={() => sync(false)}>Update now</button>
-          <button type="button" className="btn" disabled={busy || data.running || !data.hasToken} onClick={() => sync(true)}>Copy everything again</button>
-        </span>
+      <Section title="What this does" desc="TeleCRM stays the main system and is only read, never changed." status={state[0]} tone={state[1]}>
+        <Steps>
+          <>Copies the team and their permission template.</>
+          <>Copies every lead with all its fields and its timeline (calls, notes, WhatsApp, status changes).</>
+          <>Turns each lead's next follow-up into a task, and keeps all of it up to date.</>
+        </Steps>
+        <Note tone="warn">Use this in a separate workspace made for the copy. A full copy holds tens of thousands of leads, too much for the workspace your team works in every day.</Note>
+      </Section>
+      <form className="set-form" onSubmit={save} key={version}>
+        <Section title="Connection" desc="Find the workspace ID and make a Sync token under Settings, Website and API in TeleCRM. The token is never shown again.">
+          <label className="check"><input type="checkbox" name="enabled" defaultChecked={data.enabled} /> <span><b>Keep up to date.</b> Check TeleCRM on a schedule and copy what changed.</span></label>
+          <div className="sec-grid">
+            <label>TeleCRM workspace ID<input className="field-input" name="enterpriseId" defaultValue={data.enterpriseId} /></label>
+            <label>Sync token<input className="field-input" name="token" type="password" autoComplete="new-password" placeholder={data.hasToken ? "Saved. Leave blank to keep it" : "Sync token from TeleCRM"} /></label>
+            <label>Check for changes every (minutes)<input className="field-input" name="intervalMinutes" type="number" min="2" max="1440" defaultValue={data.intervalMinutes} /></label>
+          </div>
+        </Section>
+        <div className="set-bar"><button className="btn btn-primary" disabled={busy}>Save</button></div>
       </form>
-      <p className="gauge-note" role="status">
-        {data.running ? "Copying from TeleCRM now…" : run ? `${run.ok ? "Last run" : "Last run failed"}: ${when(run.at)}, ${run.mode === "full" ? "full copy" : "update"}. ${run.message}${run.ok ? `. ${run.activities} timeline entries, ${run.tasks} follow-ups, ${run.users} team members.` : ""}${run.errors ? ` ${run.errors} items could not be read.` : ""}${run.phoneConflicts ? ` ${run.phoneConflicts} leads share a number with another lead and were kept without it.` : ""}` : "Nothing copied yet."}
-      </p>
+      <Section title="Copy now" desc="Updates run by themselves. Use these to copy straight away." status={run ? (run.ok ? "Last run fine" : "Last run failed") : "Nothing copied yet"} tone={run ? (run.ok ? "ok" : "bad") : "off"}>
+        <p role="status" className="sec-line">
+          {data.running ? "Copying from TeleCRM now…" : run ? `${when(run.at)}, ${run.mode === "full" ? "full copy" : "update"}. ${run.message}${run.ok ? `. ${run.activities} timeline entries, ${run.tasks} follow-ups, ${run.users} team members.` : ""}${run.errors ? ` ${run.errors} items could not be read.` : ""}${run.phoneConflicts ? ` ${run.phoneConflicts} leads share a number with another lead and were kept without it.` : ""}` : "Save the workspace ID and token first, then copy."}
+        </p>
+        <div className="newlead-actions">
+          <button type="button" className="btn btn-primary" disabled={busy || data.running || !data.hasToken} onClick={() => sync(false)}>Update now</button>
+          <button type="button" className="btn" disabled={busy || data.running || !data.hasToken} onClick={() => sync(true)}>Copy everything again</button>
+        </div>
+      </Section>
     </>
   );
 }

@@ -1,7 +1,4 @@
 /* ---- Settings ---- */
-.settings-tabs { padding: 0; margin-bottom: 20px; overflow-x: auto; }
-.settings-tabs .tab { text-decoration: none; white-space: nowrap; }
-.settings-body { max-width: 980px; }
 .newlead .wide, .newlead p.wide { grid-column: 1 / -1; }
 .check { display: flex !important; align-items: center; gap: 8px; font-weight: 500; }
 .setup-link { display: grid; gap: 10px; padding: 16px 18px; margin-bottom: 18px; background: var(--oil-soft); border: 1px solid var(--oil); border-radius: 6px; }
@@ -36,3 +33,70 @@
 .quick-actions { display: inline-flex; gap: 6px; }
 .dup-group { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; padding: 12px 14px; margin-bottom: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; }
 .dup-group ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+
+/* ---- Settings layout: grouped menu on the left, one card on the right ---- */
+.set { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 28px; align-items: start; }
+.set-nav { position: sticky; top: 12px; display: grid; gap: 18px; }
+.set-group { display: grid; gap: 2px; }
+.set-group h2 { margin: 0 0 4px; padding: 0 10px; font-size: 12px; font-weight: 700; letter-spacing: 0.04em; color: var(--muted); }
+.set-group a { display: block; padding: 8px 10px; border-radius: 6px; border-left: 3px solid transparent; color: var(--ink-2); font-weight: 600; font-size: 14px; text-decoration: none; }
+.set-group a:hover { background: var(--sunken); }
+.set-group a[aria-current="page"] { background: var(--surface); border-left-color: var(--oil); color: var(--ink); box-shadow: 0 0 0 1px var(--line); }
+.set-main { min-width: 0; max-width: 860px; }
+.set-head { margin-bottom: 14px; }
+.set-head h2 { margin: 0 0 4px; font-family: var(--display); font-weight: 800; font-size: 26px; line-height: 1.15; }
+.set-head p { margin: 0; color: var(--muted); max-width: 68ch; line-height: 1.5; }
+.set-card { display: grid; gap: 16px; }
+.set-card > * { margin: 0; }
+.sec { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 20px 24px; display: grid; gap: 16px; }
+.sec-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.sec-head h3 { margin: 0 0 3px; font-size: 16px; font-weight: 800; }
+.sec-head p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.5; max-width: 64ch; }
+.sec-body { display: grid; gap: 16px; min-width: 0; }
+.sec-body > * { margin: 0; }
+.pill { flex: none; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--sunken); color: var(--ink-2); border: 1px solid var(--line); }
+.pill-ok { background: var(--leaf-soft); color: var(--leaf); border-color: transparent; }
+.pill-warn { background: var(--oil-soft); color: var(--oil-ink); border-color: transparent; }
+.pill-bad { background: var(--kumkum-soft); color: var(--kumkum); border-color: transparent; }
+.steps { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; counter-reset: step; }
+.steps li { counter-increment: step; display: grid; grid-template-columns: 26px 1fr; gap: 10px; align-items: start; line-height: 1.5; }
+.steps li::before { content: counter(step); display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--sunken); border: 1px solid var(--line-strong); font-size: 12px; font-weight: 800; }
+.steps code, .sec code { word-break: break-all; background: var(--sunken); padding: 1px 6px; border-radius: 4px; font-size: 13px; }
+.sec-note { margin: 0; padding: 10px 12px; border-radius: 6px; background: var(--sunken); line-height: 1.5; font-size: 14px; }
+.sec-note-warn { background: var(--oil-soft); color: var(--oil-ink); }
+.sec .newlead, .sec .sec-grid { margin: 0; padding: 0; background: none; border: 0; border-radius: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 20px; }
+.sec .newlead label, .sec .sec-grid label { gap: 6px; font-size: 13px; color: var(--ink-2); display: grid; }
+.sec input:not([type="checkbox"]):not([type="file"]), .sec select, .sec textarea { width: 100%; box-sizing: border-box; }
+.sec .check { padding: 10px 12px; background: var(--sunken); border-radius: 6px; font-size: 14px; color: var(--ink); align-items: flex-start; }
+.sec .check input { margin-top: 3px; }
+.sec .newlead-actions { padding-top: 14px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 8px; }
+.sec .newlead .newlead-actions, .sec .sec-grid .newlead-actions { grid-column: 1 / -1; }
+.sec .table-frame { margin: 0; }
+.sec .empty { margin: 0; }
+.sec .setup-link { margin: 0; }
+.sec .assign-team, .sec .ai-part, .sec .user-edit fieldset { background: var(--sunken); border-color: transparent; }
+.sec .dup-group { margin: 0; }
+.set-who { display: grid; gap: 2px; font-size: 16px; }
+.skin-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+@media (max-width: 860px) {
+  .set { grid-template-columns: 1fr; gap: 14px; }
+  .set-nav { position: static; display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
+  .set-group { display: flex; gap: 6px; }
+  .set-group h2 { display: none; }
+  .set-group a { white-space: nowrap; border: 1px solid var(--line); border-left-width: 1px; }
+  .set-group a[aria-current="page"] { border-color: var(--oil); box-shadow: none; }
+  .sec { padding: 16px; }
+  .sec-head { flex-direction: column; gap: 8px; }
+  .sec .newlead, .sec .sec-grid { grid-template-columns: 1fr; }
+}
+
+.set-form { display: grid; gap: 16px; }
+.set-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.sec-line { margin: 0; line-height: 1.5; }
+.qr-box { display: grid; gap: 8px; justify-items: start; }
+.roles { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px 20px; }
+.roles div { display: grid; gap: 2px; padding: 10px 12px; background: var(--sunken); border-radius: 6px; }
+.roles dt { font-weight: 800; font-size: 14px; }
+.roles dd { margin: 0; color: var(--muted); font-size: 14px; }
+.sec .user-edit { padding: 4px 0 8px; }
+.sec .skin-list { margin: 0; }

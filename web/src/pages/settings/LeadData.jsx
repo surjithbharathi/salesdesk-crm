@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import { crmSend, crmState } from "../../api.js";
 import { useCrm, userName } from "../../crm.jsx";
 import { useToast } from "../../toast.jsx";
+import { Section, Loading } from "./Parts.jsx";
 import { parseLeadCsv } from "../../csv.js";
 import { hashFor } from "../../format.js";
 
@@ -50,9 +51,8 @@ export function Import({ access }) {
     }
   }
   return (
-    <>
-      <p className="muted report-meta">Add many leads at once from a spreadsheet saved as CSV. The first row must name the columns: Name (required), Company, Phone, Email, City, Source, Value, Stage. Up to 500 leads at a time. A number that already exists is skipped, never duplicated.</p>
-      <form className="newlead" onSubmit={submit}>
+    <Section title="Add leads from a spreadsheet" desc="Save the sheet as CSV. The first row names the columns: Name (required), Company, Phone, Email, City, Source, Value, Stage. Up to 500 leads at a time. A number that already exists is skipped, never duplicated.">
+      <form className="sec-grid" onSubmit={submit}>
         <label>CSV file<input className="field-input" type="file" accept=".csv,text/csv" onChange={pick} required /></label>
         <label>Give these leads to
           <select className="field-input" name="owner" defaultValue="">
@@ -62,9 +62,9 @@ export function Import({ access }) {
         </label>
         {error && <p className="error wide" role="alert">{error}</p>}
         {rows && <p className="wide"><b>{rows.length}</b> leads found. First: {rows[0]?.name}.</p>}
-        <span className="newlead-actions"><button className="btn btn-primary" disabled={busy || !rows}>{busy ? "Importing…" : `Import ${rows ? rows.length : ""} leads`}</button></span>
+        <div className="newlead-actions"><button className="btn btn-primary" disabled={busy || !rows}>{busy ? "Importing…" : `Import ${rows ? rows.length : ""} leads`}</button></div>
       </form>
-    </>
+    </Section>
   );
 }
 
@@ -89,20 +89,19 @@ export function Export() {
     }
   }
   return (
-    <>
-      <p className="muted report-meta">Download your records. Keep exports private: they contain customer contact details and sales history.</p>
-      <span className="newlead-actions">
+    <Section title="Download your records" desc="Keep exports private: they contain customer contact details and sales history.">
+      <div className="newlead-actions">
         <button className="btn btn-primary" onClick={csv}>Download leads (CSV)</button>
         <button className="btn" onClick={json}>Download everything (JSON)</button>
-      </span>
-    </>
+      </div>
+    </Section>
   );
 }
 
 export function Archived() {
   const crm = useCrm();
   const notify = useToast();
-  if (!crm.state) return <p className="muted">Loading…</p>;
+  if (!crm.state) return <Loading>Loading…</Loading>;
   const archived = crm.leads.filter((l) => l.archived);
   async function restore(lead) {
     try {
@@ -113,8 +112,9 @@ export function Archived() {
       notify(e.message);
     }
   }
-  if (!archived.length) return <div className="empty"><b>No archived leads</b>Leads you archive are kept here and can be restored.</div>;
+  if (!archived.length) return <Section title="Archived leads" desc="Leads you archive are kept here and can be restored."><div className="empty"><b>No archived leads</b>Nothing has been archived.</div></Section>;
   return (
+    <Section title="Archived leads" desc="Leads you archive are kept here and can be restored." status={`${archived.length} archived`}>
     <div className="table-frame">
       <table className="grid">
         <thead><tr><th>Lead</th><th>Stage</th><th>Owner</th><th><span className="sr">Restore</span></th></tr></thead>
@@ -130,6 +130,7 @@ export function Archived() {
         </tbody>
       </table>
     </div>
+    </Section>
   );
 }
 
@@ -157,10 +158,9 @@ export function Merge() {
       notify(e.message);
     }
   }
-  if (!crm.state) return <p className="muted">Loading…</p>;
+  if (!crm.state) return <Loading>Loading…</Loading>;
   return (
-    <>
-      <p className="muted report-meta">Leads with the same name and company are listed together. The oldest one is kept; the others are merged into it with their calls, notes and follow-ups.</p>
+    <Section title="Likely duplicates" desc="Leads with the same name and company are listed together. The oldest one is kept; the others are merged into it with their calls, notes and follow-ups." status={groups.length ? `${groups.length} to review` : "None found"} tone={groups.length ? "warn" : "ok"}>
       {!groups.length && <div className="empty"><b>No likely duplicates</b>Nothing here shares a name and company.</div>}
       {groups.map((g) => (
         <div key={g[0].id} className="dup-group">
@@ -170,6 +170,6 @@ export function Merge() {
           <button className="btn" onClick={() => merge(g)}>Merge {g.length} leads</button>
         </div>
       ))}
-    </>
+    </Section>
   );
 }

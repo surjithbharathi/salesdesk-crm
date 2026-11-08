@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { crmGet, crmSend } from "../../api.js";
 import { useLoad } from "../../hooks.js";
 import { useToast } from "../../toast.jsx";
+import { Section, Note, Loading, Failed } from "./Parts.jsx";
 
 const PROVIDERS = {
   openai: "OpenAI", "openai-audio": "OpenAI (audio model)", google: "Google Gemini", sarvam: "Sarvam",
@@ -40,9 +41,7 @@ function Keys({ keys, reload }) {
     }
   }
   return (
-    <>
-      <h2 className="section-title">Saved API keys</h2>
-      <p className="muted report-meta">Keys are stored encrypted on the server and are never shown again after saving. To replace a key, add a new one and choose it below.</p>
+    <Section title="Saved API keys" desc="Keys are stored encrypted on the server and are never shown again after saving. To replace a key, add a new one and choose it in the settings above.">
       {keys.length > 0 && (
         <div className="table-frame">
           <table className="grid">
@@ -60,7 +59,7 @@ function Keys({ keys, reload }) {
           </table>
         </div>
       )}
-      <form className="newlead" onSubmit={add}>
+      <form className="sec-grid" onSubmit={add}>
         <label>Provider
           <select className="field-input" name="provider" defaultValue="openai">
             {KEY_PROVIDERS.map((p) => <option key={p} value={p}>{PROVIDERS[p]}</option>)}
@@ -68,9 +67,9 @@ function Keys({ keys, reload }) {
         </label>
         <label>Name for this key<input className="field-input" name="label" maxLength="100" required /></label>
         <label className="wide">API key<input className="field-input" name="key" type="password" autoComplete="off" required /></label>
-        <span className="newlead-actions"><button className="btn btn-primary" disabled={busy}>Save key</button></span>
+        <div className="newlead-actions"><button className="btn btn-primary" disabled={busy}>Save key</button></div>
       </form>
-    </>
+    </Section>
   );
 }
 
@@ -119,8 +118,8 @@ export default function CallAI() {
   const [draft, setDraft] = useState(null);
   const [busy, setBusy] = useState(false);
   const error = settings.error || keys.error;
-  if (error) return <p className="error">{error.message}</p>;
-  if (!settings.data || !keys.data) return <p className="muted">Loading call AI…</p>;
+  if (error) return <Failed>{error.message}</Failed>;
+  if (!settings.data || !keys.data) return <Loading>Loading call AI…</Loading>;
   const form = draft || {
     enabled: Boolean(settings.data.enabled), automatic: Boolean(settings.data.automatic), iqEnabled: Boolean(settings.data.iqEnabled),
     acknowledged: false,
@@ -145,21 +144,24 @@ export default function CallAI() {
   }
   return (
     <>
-      <p className="muted report-meta">Turn a call recording into a written transcript, and optionally a summary of what the customer wants. Recordings and transcripts are sent to the providers you choose below.</p>
-      <form className="newlead" onSubmit={save}>
-        <label className="check wide"><input type="checkbox" checked={form.enabled} onChange={(e) => set({ enabled: e.target.checked })} /> Use call AI</label>
-        <label className="check wide"><input type="checkbox" checked={form.automatic} onChange={(e) => set({ automatic: e.target.checked })} /> Transcribe new recordings automatically</label>
-        <Part part="stt" title="Transcription" providers={STT} value={form.stt} keys={keys.data} onChange={(p) => set({ stt: { ...form.stt, ...p } })} />
+      <form className="set-form" onSubmit={save}>
+        <Section title="Call AI" desc="Turn a call recording into a written transcript, and optionally a summary of what the customer wants. Recordings and transcripts are sent to the providers you choose." status={form.enabled ? "On" : "Off"} tone={form.enabled ? "ok" : "off"}>
+          <label className="check"><input type="checkbox" checked={form.enabled} onChange={(e) => set({ enabled: e.target.checked })} /> <span><b>Use call AI.</b></span></label>
+          <label className="check"><input type="checkbox" checked={form.automatic} onChange={(e) => set({ automatic: e.target.checked })} /> <span>Transcribe new recordings automatically</span></label>
+        </Section>
+        <Section title="Transcription" desc="Which service turns speech into text.">
+          <Part part="stt" title="Transcription service" providers={STT} value={form.stt} keys={keys.data} onChange={(p) => set({ stt: { ...form.stt, ...p } })} />
+        </Section>
         {form.stt.provider !== "openai-audio" && (
-          <>
-            <label className="check wide"><input type="checkbox" checked={form.iqEnabled} onChange={(e) => set({ iqEnabled: e.target.checked })} /> Also write a summary and next steps (Call IQ)</label>
-            {form.iqEnabled && <Part part="iq" title="Call IQ" providers={IQ} value={form.iq} keys={keys.data} onChange={(p) => set({ iq: { ...form.iq, ...p } })} />}
-          </>
+          <Section title="Summary and next steps" desc="Call IQ writes what the customer wants and what to do next." status={form.iqEnabled ? "On" : "Off"} tone={form.iqEnabled ? "ok" : "off"}>
+            <label className="check"><input type="checkbox" checked={form.iqEnabled} onChange={(e) => set({ iqEnabled: e.target.checked })} /> <span>Also write a summary and next steps (Call IQ)</span></label>
+            {form.iqEnabled && <Part part="iq" title="Call IQ service" providers={IQ} value={form.iq} keys={keys.data} onChange={(p) => set({ iq: { ...form.iq, ...p } })} />}
+          </Section>
         )}
         {form.enabled && (
-          <label className="check wide"><input type="checkbox" checked={form.acknowledged} onChange={(e) => set({ acknowledged: e.target.checked })} /> I understand call audio and transcripts will be sent to the providers selected above.</label>
+          <label className="check"><input type="checkbox" checked={form.acknowledged} onChange={(e) => set({ acknowledged: e.target.checked })} /> <span>I understand call audio and transcripts will be sent to the providers selected above.</span></label>
         )}
-        <span className="newlead-actions"><button className="btn btn-primary" disabled={busy || (form.enabled && !form.acknowledged)}>Save call AI settings</button></span>
+        <div className="set-bar"><button className="btn btn-primary" disabled={busy || (form.enabled && !form.acknowledged)}>Save call AI settings</button></div>
       </form>
       <Keys keys={keys.data} reload={reload} />
     </>
