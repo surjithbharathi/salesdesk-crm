@@ -9,15 +9,16 @@ import { lastWorkedMap, relTime } from "./tele.js";
 
 const SIZES = [20, 50, 100];
 // columns people can add to the table; the choice is kept in this browser
-const EXTRA = [["source", "Lead source"], ["value", "Value"], ["next", "Next follow-up"], ["worked", "Last worked"]];
+const EXTRA = [["calls", "Total calls"], ["source", "Lead source"], ["value", "Value"], ["next", "Next follow-up"], ["worked", "Last worked"]];
 const readCols = () => {
   try {
-    return JSON.parse(localStorage.getItem("salesdesk-max-cols") || "[]").filter((k) => EXTRA.some(([id]) => id === k));
+    const saved = localStorage.getItem("salesdesk-max-cols");
+    return saved ? JSON.parse(saved).filter((k) => EXTRA.some(([id]) => id === k)) : ["calls"];
   } catch {
-    return [];
+    return ["calls"];
   }
 };
-const stageClass = (l) => (l.stage === "Closed" ? (l.disposition === "Won" ? "won" : "lost") : "");
+const stageClass = (l) => (l.stage === "Closed" ? (l.disposition === "Won" ? "won" : "lost") : { New: "fresh", Prospecting: "talk", Opportunity: "keen", "Quotation given": "quote" }[l.stage] || "");
 
 // "Active leads" in the Salesmax style: a toolbar, then a table of lead, owner, stage and whether it has been worked yet,
 // and "1 to 13 of 4,532, Page 1 of 349" at the foot.
@@ -32,6 +33,11 @@ export default function MaxLeads({ params }) {
   const [picked, setPicked] = useState(() => new Set());
   const [assigning, setAssigning] = useState(false);
   const worked = useMemo(() => lastWorkedMap(crm.activities), [crm.activities]);
+  const callCount = useMemo(() => {
+    const map = new Map();
+    for (const c of crm.calls || []) map.set(c.leadId, (map.get(c.leadId) || 0) + 1);
+    return map;
+  }, [crm.calls]);
   const toggleCol = (id) => {
     const next = cols.includes(id) ? cols.filter((c) => c !== id) : [...cols, id];
     setCols(next);
@@ -147,10 +153,11 @@ export default function MaxLeads({ params }) {
               {rows.map((l) => (
                 <tr key={l.id} aria-selected={l.id === openId || picked.has(l.id)}>
                   <td className="max-check"><input type="checkbox" checked={picked.has(l.id)} onChange={() => toggleOne(l.id)} aria-label={`Select ${l.name}`} /></td>
-                  <td><span className="max-lead"><span className="avatar">{initials(l.name)}</span><a href={hashFor("/leads", { queue, stage, source, owner, q, lead: l.id })}>{l.name}</a></span></td>
+                  <td><span className="max-lead"><span className="avatar">{initials(l.name)}</span><a href={hashFor("/leads", { queue, stage, source, owner, q, lead: l.id })}>{l.name}</a>{!l.owner && <em className="max-tag">Unassigned</em>}{l.repeat && <em className="max-tag repeat">Repeat</em>}</span></td>
                   <td>{l.owner ? <span className="max-owner"><span className="avatar">{initials(userName(crm, l.owner))}</span>{userName(crm, l.owner)}</span> : <span className="muted">No owner yet</span>}</td>
                   <td><span className={`max-stage ${stageClass(l)}`}>{stageText(l)}</span></td>
                   <td>{!l.firstTouchAt && l.stage !== "Closed" ? "Not worked yet" : ""}</td>
+                  {cols.includes("calls") && <td className="num">{callCount.get(l.id) || ""}</td>}
                   {cols.includes("source") && <td>{l.source}</td>}
                   {cols.includes("value") && <td className="num">{l.value ? rupees(l.value) : ""}</td>}
                   {cols.includes("next") && <td>{crm.nextDue.get(l.id) ? new Date(crm.nextDue.get(l.id)).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) : ""}</td>}

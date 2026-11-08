@@ -46,12 +46,12 @@ const NAV_CALLER = [
 ];
 
 // The Salesmax look: its top menu, and the tabs of the purple bar for the pages that have more than one view.
-const MAX_NAV_LEAD = [["/business", "Dashboards"], ["/leads", "Leads"], ["/deals", "Opportunities"], ["/todo", "To-dos"], ["/engagements", "Engagements"], ["/messages", "Conversations"], ["/settings", "Settings"]];
-const MAX_NAV_CALLER = [["/my-day", "Dashboards"], ...MAX_NAV_LEAD.slice(1)];
+const MAX_NAV_LEAD = [["/business", "Dashboards", "dashboard"], ["/leads", "Leads", "people"], ["/deals", "Opportunities", "rupee"], ["/todo", "To-dos", "task"], ["/engagements", "Engagements", "trend"], ["/messages", "Conversations", "chat"], ["/settings", "Settings", "gear"]];
+const MAX_NAV_CALLER = [["/my-day", "Dashboards", "dashboard"], ...MAX_NAV_LEAD.slice(1)];
 const MAX_DASH = ["/business", "/my-day", "/team", "/goals"];
 const MAX_TABS = [
-  ["/todo", [["", "Board"], ["table", "Table"]], "To-dos"],
-  ["/deals", [["", "Board"], ["table", "Table"]], "Opportunities"],
+  ["/todo", [["", "To-do kanban"], ["table", "To-do table"]], "To-dos"],
+  ["/deals", [["", "Deals"], ["table", "Deals table"]], "Opportunities"],
   ["/engagements", [["", "Activities"], ["calls", "Calls"]], "Engagements"],
   ["/messages", [["", "Inbox"], ["stats", "Numbers"]], "Conversations"],
 ];
@@ -170,7 +170,7 @@ export default function App() {
   const baseNav = owner ? NAV_LEAD : NAV_CALLER;
   // that look has a search page of its own, right after Leads
   const max = skin === "salesmax";
-  const NAV = max ? (owner ? MAX_NAV_LEAD : MAX_NAV_CALLER).map(([to, label]) => [to, label, "dot"]) : skin === "telecrm" ? baseNav.flatMap((item) => (item[0] === "/leads" ? [item, ["/search", "Search", "search"]] : [item])) : baseNav;
+  const NAV = max ? (owner ? MAX_NAV_LEAD : MAX_NAV_CALLER) : skin === "telecrm" ? baseNav.flatMap((item) => (item[0] === "/leads" ? [item, ["/search", "Search", "search"]] : [item])) : baseNav;
   const isHere = (to) => (max && (to === "/business" || to === "/my-day") ? MAX_DASH.some((p) => path.startsWith(p)) : path.startsWith(to));
   const callers = meta.users;
   const viewing = owner ? (params.user || meta.id || callers[0]?.id) : meta.id;
@@ -217,6 +217,14 @@ export default function App() {
           ))}
         </nav>
         <div className="rail-foot">
+          {max && (
+            <>
+              <a className="max-customize" href={hashFor("/settings")}>Customize</a>
+              <a className="max-iconbtn" href={hashFor("/leads")} aria-label="Search leads"><Icon name="search" size={20} /></a>
+              <a className="max-iconbtn" href={hashFor("/messages")} aria-label="Conversations"><Icon name="chat" size={20} /></a>
+              <span className="max-org" lang="en">{session.company || "Devi Industries"}</span>
+            </>
+          )}
           {session.user ? (
             <div className="who">
               <span className="avatar">{initials(session.user.name)}</span>

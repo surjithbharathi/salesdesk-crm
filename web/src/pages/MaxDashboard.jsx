@@ -19,22 +19,15 @@ function change(now, before) {
 
 function Tile({ label, value, before, meter }) {
   const delta = change(value, before);
-  const up = !delta || delta.up;
+  const total = meter ? meter[0] + meter[1] : 0;
   return (
     <div className="max-tile">
-      <div className="max-tile-top">
-        <div className="max-tile-main">
-          <span className={`max-tile-icon ${up ? "up" : ""}`}><Icon name={up ? "spark" : "again"} size={16} /></span>
-          <span><b className="max-num num">{value}</b><small>{label}</small></span>
-        </div>
-        {delta && <span className={`max-chip ${delta.up ? "up" : ""}`} title="Compared with the 7 days before">{delta.text}</span>}
+      <b className="max-num num">{value}</b>
+      <span className="max-tile-sub" title="Compared with the 7 days before">{delta ? <span className={delta.up ? "up" : "down"}>{delta.text}</span> : null}{delta ? " · " : ""}{label}</span>
+      <div className="max-meter" role="img" aria-label={meter ? `${meter[0]} worked, ${meter[1]} not yet` : label}>
+        <span className={`seg-worked w-${total ? Math.max(5, Math.min(100, Math.round((meter[0] / total) * 20) * 5)) : 100}`}>{meter ? meter[0] : value}</span>
       </div>
-      {meter ? (
-        <div className="max-meter" role="img" aria-label={`${meter[0]} worked, ${meter[1]} not yet`}>
-          {meter[0] > 0 && <span className={`seg-worked w-${Math.max(5, Math.min(95, Math.round((meter[0] / (meter[0] + meter[1])) * 20) * 5))}`}>{meter[0]}</span>}
-          {meter[1] > 0 && <span className="seg-open">{meter[1]}</span>}
-        </div>
-      ) : null}
+      {meter && <small className="max-legend"><i />Remained uncontacted {meter[1]}</small>}
     </div>
   );
 }
@@ -100,6 +93,25 @@ export default function MaxDashboard({ meta }) {
       return { id: u.id, name: u.name, calls: calls.length };
     }).sort((a, b) => b.calls - a.calls);
   }, [crm.state, crm.users, crm.calls, today]);
+  // call numbers for today and the average day of the last 7 days, from the calls the phones synced
+  const metrics = useMemo(() => {
+    if (!crm.state) return [];
+    const calls = crm.calls.filter((c) => scope === "all" || c.owner === me);
+    const week = Date.now() - 7 * DAY;
+    const hms = (s) => `${Math.floor(s / 3600)}h:${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}m:${String(Math.round(s % 60)).padStart(2, "0")}s`;
+    const rows = [
+      ["phone", "Calls logged", () => true],
+      ["phone", "Connected calls", (c) => c.duration > 0],
+      ["phone", "Outgoing calls", (c) => c.direction === "Outgoing"],
+      ["phone", "Connected outgoing", (c) => c.direction === "Outgoing" && c.duration > 0],
+      ["phone", "Incoming calls", (c) => c.direction === "Incoming"],
+      ["phone", "Connected incoming", (c) => c.direction === "Incoming" && c.duration > 0],
+      ["phone", "Missed calls", (c) => c.direction === "Missed"],
+    ].map(([icon, name, test]) => [icon, name, calls.filter((c) => test(c) && c.startedAt >= today).length, Math.round((calls.filter((c) => test(c) && c.startedAt >= week).length / 7) * 10) / 10]);
+    const talk = (from) => calls.filter((c) => c.startedAt >= from).reduce((s, c) => s + (c.duration || 0), 0);
+    rows.push(["again", "Total call duration", hms(talk(today)), hms(talk(week) / 7)]);
+    return rows;
+  }, [crm.state, crm.calls, scope, me, today]);
   const [find, setFind] = useState("");
   if (!view) return <p className="muted">{crm.error || "Loading the dashboard…"}</p>;
   const active = people.filter((p) => p.calls > 0).length;
@@ -109,39 +121,38 @@ export default function MaxDashboard({ meta }) {
         {view.tiles.map(([label, value, before, meter]) => <Tile key={label} label={label} value={value} before={before} meter={meter} />)}
       </div>
 
-      <section className="max-card" aria-label="Work pipeline">
-        <header className="max-card-head">
-          <h2>Work pipeline <small>Customize</small></h2>
-          {crm.me.lead && (
-            <span className="max-toggle" role="group" aria-label="Whose work">
-              {[["all", "All"], ["mine", "My"]].map(([key, label]) => <button key={key} aria-pressed={scope === key} onClick={() => setScope(key)}>{label}</button>)}
-            </span>
-          )}
-        </header>
-        <ul className="max-rows">
-          <li className="max-adhoc">
-            <a className="max-row" href={hashFor("/todo")}>
-              <span className="max-row-icon"><Icon name="task" size={14} /></span>
-              <b>Ad-hoc tasks</b>
-              <span className="max-add">+ Add</span>
-              {view.tasksToday.length === 0 ? <span className="max-row-clear">No tasks for today</span> : <small>{view.tasksToday.length} due today</small>}
-            </a>
-          </li>
-          <Row icon="leads" title="New leads" note="New leads received within the last 7 days, yet to be worked" count={view.yetNew.length} done={view.newNow.length - view.yetNew.length} total={view.newNow.length} to={hashFor("/leads", { queue: "untouched" })} clear />
-          <Row icon="people" title="Newly assigned leads" note="Other assigned leads from the last 7 days, yet to be worked" count={view.assigned.length} to={hashFor("/leads")} clear />
-          <Row icon="again" title="Repeat enquiries" note="Leads that came back within the last 7 days" count={view.repeat.length} to={hashFor("/leads")} clear />
-          <Row icon="task" title="Follow-ups for today" note="Calls and messages scheduled for today" count={view.tasksToday.length} to={hashFor("/todo")} clear />
-        </ul>
-      </section>
+      <div className="max-dash3">
+        <section className="max-card" aria-label="Work pipeline">
+          <header className="max-card-head">
+            <h2>Today's plan <small>Customize</small></h2>
+            {crm.me.lead && (
+              <span className="max-toggle" role="group" aria-label="Whose work">
+                {[["all", "All"], ["mine", "My"]].map(([key, label]) => <button key={key} aria-pressed={scope === key} onClick={() => setScope(key)}>{label}</button>)}
+              </span>
+            )}
+          </header>
+          <ul className="max-rows">
+            <li className="max-adhoc">
+              <a className="max-row" href={hashFor("/todo")}>
+                <span className="max-row-icon"><Icon name="task" size={14} /></span>
+                <b>Ad-hoc tasks</b>
+                <span className="max-add">+ Add</span>
+                {view.tasksToday.length === 0 ? <span className="max-row-clear">No tasks for today</span> : <small>{view.tasksToday.length} due today</small>}
+              </a>
+            </li>
+            <Row icon="leads" title="New leads" note="New leads received within the last 7 days, yet to be worked" count={view.yetNew.length} done={view.newNow.length - view.yetNew.length} total={view.newNow.length} to={hashFor("/leads", { queue: "untouched" })} clear />
+            <Row icon="people" title="Newly assigned leads" note="Other assigned leads from the last 7 days, yet to be worked" count={view.assigned.length} to={hashFor("/leads")} clear />
+            <Row icon="again" title="Repeat enquiries" note="Leads that came back within the last 7 days" count={view.repeat.length} to={hashFor("/leads")} clear />
+            <Row icon="task" title="Follow-ups for today" note="Calls and messages scheduled for today" count={view.tasksToday.length} to={hashFor("/todo")} clear />
+          </ul>
+        </section>
 
-      <div className="max-split">
         <section className="max-card" aria-label="Overall activities">
           <header className="max-card-head"><h2>Overall activities</h2><span className="muted">Today</span></header>
-          <ul className="max-activity">
-            <li><Icon name="phone" size={16} /><span>Calls made</span><b className="num">{people.reduce((s, p) => s + p.calls, 0)}</b></li>
-            <li><Icon name="people" size={16} /><span>People who called</span><b className="num">{active}</b></li>
-            <li><Icon name="leads" size={16} /><span>Open leads</span><b className="num">{crm.leads.filter(crm.isOpen).length}</b></li>
-          </ul>
+          <table className="max-table max-metrics">
+            <thead><tr><th>Metric</th><th>Day</th><th>Week average</th></tr></thead>
+            <tbody>{metrics.map(([icon, name, day, avg]) => <tr key={name}><td><span className="max-metric"><Icon name={icon} size={14} />{name}</span></td><td className="num">{day}</td><td className="num">{avg}</td></tr>)}</tbody>
+          </table>
         </section>
         <section className="max-card" aria-label="User activity">
           <header className="max-card-head">
