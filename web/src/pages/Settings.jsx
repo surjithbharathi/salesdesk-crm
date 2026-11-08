@@ -7,6 +7,7 @@ import Users, { ROLES } from "./settings/Users.jsx";
 import Email from "./settings/Email.jsx";
 import WhatsApp from "./settings/WhatsApp.jsx";
 import Gateway from "./settings/Gateway.jsx";
+import TelecrmMirror from "./settings/TelecrmMirror.jsx";
 import CallAI from "./settings/CallAI.jsx";
 import Mcp from "./settings/Mcp.jsx";
 import Assign from "./settings/Assign.jsx";
@@ -45,6 +46,7 @@ export default function Settings({ params, me }) {
     ["email", "Email", can("integrations.manage"), <Email />],
     ["whatsapp", "WhatsApp", can("integrations.manage"), <WhatsApp />],
     ["gateway", "WhatsApp gateway", can("integrations.manage"), <Gateway users={me.users} />],
+    ["telecrm", "TeleCRM copy", can("integrations.manage"), <TelecrmMirror />],
     ["callai", "Call AI", admin, <CallAI />],
     ["mcp", "AI connections", admin, <Mcp />],
     ["assign", "Assign leads", can("leads.write") && me.lead, <Assign access={full} />],

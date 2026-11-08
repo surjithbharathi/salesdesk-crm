@@ -1,5 +1,6 @@
 import {createSmtpEmail} from './smtp-email.mjs';
 import { createWaGateway } from "./wa-gateway.mjs";
+import { createTelecrmMirror } from "./telecrm-mirror.mjs";
 import { createKpi } from "./kpi.mjs";
 import { extname, resolve as resolvePath, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -400,6 +401,9 @@ function permittedState(value,id){
 }
 const callAI = createCallAI({db,all,get,playback:mobile.playback,keyPath:(process.env.CRM_DB || new URL('./data/crm.sqlite',import.meta.url).pathname)+'.ai-key'});
 const smtpEmail=createSmtpEmail({db,keyPath:(process.env.CRM_DB||new URL('./data/crm.sqlite',import.meta.url).pathname)+'.smtp-key',origin:publicOrigin});
+// the one-way mirror of TeleCRM: it writes records directly (no per-lead uniqueness scan), the unique phone index still protects against duplicates
+const rawPut = (kind, v) => db.prepare("INSERT INTO records VALUES(?,?,?) ON CONFLICT(kind,id) DO UPDATE SET body=excluded.body").run(kind, v.id, JSON.stringify(v));
+const telecrm = createTelecrmMirror({ db, all, get, put, rawPut, tx, keyPath: (process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname) + ".telecrm-key", log: (m) => console.error(m) });
 const waGateway = createWaGateway({ db, all, get, put, stamp, tx, log, systemUser: process.env.CRM_OWNER_USER_ID || "", keyPath: (process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname) + ".wagw-key" });
 const mcpAccess=createMcpAccess({db,get,canAdmin:id=>workspaceAccess.can(id,'integrations.manage')});
 const mcpOAuth=createMcpOAuth({db,origin:publicOrigin||`http://localhost:${port}`,access:mcpAccess});
@@ -1051,6 +1055,14 @@ const server = http.createServer(async (req, res) => {
         return;
       }
     }
+    // the TeleCRM mirror: administrators only
+    if (url.pathname.startsWith("/api/telecrm/")) {
+      if (identity) workspaceAccess.requirePermission(identity, "integrations.manage");
+      if (url.pathname === "/api/telecrm/settings" && req.method === "GET") { send(200, telecrm.settings()); return; }
+      if (url.pathname === "/api/telecrm/settings" && req.method === "POST") { sameOrigin(); const out = telecrm.save(await body(req)); scheduleTelecrm(); send(200, out); return; }
+      if (url.pathname === "/api/telecrm/sync" && req.method === "POST") { sameOrigin(); const p = await body(req); telecrm.sync({ full: p.full === true }).catch(() => {}); send(202, telecrm.settings()); return; }
+      bad("Not found", 404);
+    }
     if (url.pathname.startsWith("/api/click-to-call/")) {
       if (!identity) bad("Set up shared login and sign in first", 401);
       if (url.pathname === "/api/click-to-call/devices" && req.method === "GET") {
@@ -1344,6 +1356,13 @@ const server = http.createServer(async (req, res) => {
     if (!e.status) console.error(e);
   }
 });
+let telecrmTimer = null;
+function scheduleTelecrm() {
+  clearInterval(telecrmTimer);
+  const s = telecrm.settings();
+  if (s.enabled) telecrmTimer = setInterval(() => telecrm.sync().catch(() => {}), s.intervalMinutes * 60000).unref();
+}
+scheduleTelecrm();
 server.listen(port, bindHost, () =>
   console.log(`Salesdesk CRM: ${publicOrigin || `http://localhost:${port}`}`),
 );
