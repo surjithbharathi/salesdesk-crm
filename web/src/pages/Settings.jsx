@@ -6,6 +6,7 @@ import { hashFor } from "../format.js";
 import Users, { ROLES } from "./settings/Users.jsx";
 import Email from "./settings/Email.jsx";
 import WhatsApp from "./settings/WhatsApp.jsx";
+import Gateway from "./settings/Gateway.jsx";
 import CallAI from "./settings/CallAI.jsx";
 import Mcp from "./settings/Mcp.jsx";
 import Assign from "./settings/Assign.jsx";
@@ -43,6 +44,7 @@ export default function Settings({ params, me }) {
     ["users", "People and access", can("users.manage"), <Users access={full} />],
     ["email", "Email", can("integrations.manage"), <Email />],
     ["whatsapp", "WhatsApp", can("integrations.manage"), <WhatsApp />],
+    ["gateway", "WhatsApp gateway", can("integrations.manage"), <Gateway users={me.users} />],
     ["callai", "Call AI", admin, <CallAI />],
     ["mcp", "AI connections", admin, <Mcp />],
     ["assign", "Assign leads", can("leads.write") && me.lead, <Assign access={full} />],

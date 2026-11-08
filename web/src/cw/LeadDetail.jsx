@@ -5,6 +5,7 @@ import { useToast } from "../toast.jsx";
 import { dueText } from "../format.js";
 import Icon from "../icons.jsx";
 import Recording from "../Recording.jsx";
+import GatewayChat from "../GatewayChat.jsx";
 import { PIPELINE, pipelineStep } from "../pipeline.js";
 import { buildModel, hms, initials, money, startOfDay } from "./model.js";
 
@@ -305,11 +306,8 @@ export default function CwLeadDetail({ id, onClose }) {
                   <div className="chat__who"><b>{l.name} <em className="chat__stage">{stageText(raw)}</em></b><small>{phoneLabel(raw)}</small></div>
                   <div className="chat__tools"><span className="chat__owner"><Icon name="people" size={14} /> {ownerName}</span><a className="chat__ic" href={telHref(raw)} aria-label="Call"><Icon name="phone" size={16} /></a></div>
                 </header>
-                <div className="chat__thread">
-                  {thread.map((x) => <div key={x.id} className={`msg msg--${x.direction === "Outgoing" ? "out" : "in"}`}><p>{x.text}</p><small>{when(Date.parse(x.occurredAt || x.createdAt))}</small></div>)}
-                  {!thread.length && <p className="chat__empty">No WhatsApp messages synced for this lead yet.</p>}
-                </div>
-                <div className="chat__notice"><Icon name="info" size={14} /> Replies are sent from WhatsApp itself. <a href={waHref(raw)} target="_blank" rel="noopener noreferrer">Open WhatsApp</a></div>
+                <GatewayChat leadId={id} />
+                <div className="chat__notice"><Icon name="info" size={14} /> You can also continue in WhatsApp itself. <a href={waHref(raw)} target="_blank" rel="noopener noreferrer">Open WhatsApp</a></div>
               </div>
             )}
             {tab === "documents" && (

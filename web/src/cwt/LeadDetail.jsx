@@ -6,6 +6,7 @@ import { initials } from "../format.js";
 import Recording from "../Recording.jsx";
 import { PIPELINE, pipelineStep } from "../pipeline.js";
 import { TIcon } from "./icons.jsx";
+import GatewayChat, { useGatewayOn } from "../GatewayChat.jsx";
 
 // One lead in the TeleCRM style: header with status and assignee, field tabs, the action bar and the activity history.
 // The class names are the reference web app's, so its style sheet (cwt/lead-detail.css) applies as written.
@@ -26,6 +27,7 @@ const localInput = (date) => new Date(date.getTime() - date.getTimezoneOffset() 
 export function LeadDetail({ id }) {
   const crm = useCrm();
   const notify = useToast();
+  const gatewayOn = useGatewayOn();
   const [fieldTab, setFieldTab] = useState("primary");
   const [showEmpty, setShowEmpty] = useState(true);
   const [fieldSearch, setFieldSearch] = useState("");
@@ -138,12 +140,13 @@ export function LeadDetail({ id }) {
           <nav className="action-bar">
             <a href={telHref(raw)}><TIcon name="phone" />CALL</a>
             <button type="button" className={composer === "later" ? "on" : ""} onClick={() => open("later")}><TIcon name="clock" />CALL LATER</button>
-            <a href={waHref(raw)} target="_blank" rel="noopener noreferrer"><TIcon name="whatsapp" />WHATSAPP</a>
+            {gatewayOn ? <button type="button" className={composer === "wa" ? "on" : ""} onClick={() => open("wa")}><TIcon name="whatsapp" />WHATSAPP</button> : <a href={waHref(raw)} target="_blank" rel="noopener noreferrer"><TIcon name="whatsapp" />WHATSAPP</a>}
             <button type="button" className={composer === "note" ? "on" : ""} onClick={() => open("note")}><TIcon name="notePlus" />ADD NOTE</button>
             <button type="button" className={composer === "call" ? "on" : ""} onClick={() => open("call")}><TIcon name="calls" />LOG CALL</button>
             <button type="button" className={iqOpen ? "on" : ""} onClick={() => setIqOpen(!iqOpen)}><TIcon name="sparkle" />LEAD-IQ</button>
           </nav>
-          {composer && (
+          {composer === "wa" && <div className="composer"><GatewayChat leadId={id} /></div>}
+          {composer && composer !== "wa" && (
             <form className="composer" onSubmit={submit}>
               {composer === "later" && <><label>Call back on</label><input type="datetime-local" value={laterAt} onChange={(e) => setLaterAt(e.target.value)} required /></>}
               {composer === "note" && <textarea rows={3} value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Add Note..." required maxLength={4000} />}

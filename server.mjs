@@ -1,4 +1,5 @@
 import {createSmtpEmail} from './smtp-email.mjs';
+import { createWaGateway } from "./wa-gateway.mjs";
 import { createKpi } from "./kpi.mjs";
 import { extname, resolve as resolvePath, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -287,6 +288,16 @@ function validate(kind, p, old = {}) {
   }
   return v;
 }
+async function rawBody(req) {
+  let size = 0;
+  const chunks = [];
+  for await (const p of req) {
+    size += p.length;
+    if (size > 262144) bad("Request too large", 413);
+    chunks.push(p);
+  }
+  return Buffer.concat(chunks);
+}
 async function body(req) {
   let size = 0;
   const chunks = [];
@@ -389,6 +400,7 @@ function permittedState(value,id){
 }
 const callAI = createCallAI({db,all,get,playback:mobile.playback,keyPath:(process.env.CRM_DB || new URL('./data/crm.sqlite',import.meta.url).pathname)+'.ai-key'});
 const smtpEmail=createSmtpEmail({db,keyPath:(process.env.CRM_DB||new URL('./data/crm.sqlite',import.meta.url).pathname)+'.smtp-key',origin:publicOrigin});
+const waGateway = createWaGateway({ db, all, get, put, stamp, tx, log, systemUser: process.env.CRM_OWNER_USER_ID || "", keyPath: (process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname) + ".wagw-key" });
 const mcpAccess=createMcpAccess({db,get,canAdmin:id=>workspaceAccess.can(id,'integrations.manage')});
 const mcpOAuth=createMcpOAuth({db,origin:publicOrigin||`http://localhost:${port}`,access:mcpAccess});
 const mcpIdentity=owner=>({user:{id:owner,role:'admin'}});
@@ -816,6 +828,12 @@ const server = http.createServer(async (req, res) => {
       const result=await crmMcp.rpc(req.headers.authorization,await body(req));
       if(result===null){res.writeHead(202);res.end();}else send(200,result);return;
     }
+    // the WhatsApp gateway posts customer messages here, signed with a secret both sides know; no browser session
+    if (url.pathname === "/hooks/wa-gateway" && req.method === "POST") {
+      if (req.headers.origin) bad("Browser access is not supported here", 403);
+      send(200, waGateway.receive(await rawBody(req), req.headers["x-devi-signature"]));
+      return;
+    }
     let identity = null;
     if (userAuth.configured() && sessionToken(req)) {
       try {
@@ -1000,14 +1018,38 @@ const server = http.createServer(async (req, res) => {
         [
           "/api/state",
           "/api/mobile/devices",
+          "/api/wa-gateway/status",
           "/api/whatsapp/status",
           "/api/click-to-call/devices",
         ].includes(url.pathname) || /^\/api\/mobile\/recordings\/[a-f0-9-]{36}$/.test(url.pathname);
       const allowedWrite =
         (url.pathname === "/api/click-to-call/request" && req.method === "POST") ||
+        (/^\/api\/wa-gateway\/leads\/[\w-]{1,64}\/(send|history)$/.test(url.pathname) && req.method === "POST") ||
         (/^\/api\/(leads|tasks|activities)(?:\/[a-zA-Z0-9-]+)?$/.test(url.pathname) &&
           ["POST", "PATCH"].includes(req.method));
       if (!(req.method === "GET" ? allowedRead : allowedWrite)) bad("Administrator required", 403);
+    }
+    // the WhatsApp gateway link: settings are for administrators; sending and reading a lead chat are for whoever can reach that lead
+    {
+      const hookUrl = `${publicOrigin || ""}/hooks/wa-gateway`;
+      const needs = (permission) => identity && workspaceAccess.requirePermission(identity, permission);
+      if (url.pathname === "/api/wa-gateway/status" && req.method === "GET") { send(200, { enabled: waGateway.settings().enabled }); return; }
+      if (url.pathname === "/api/wa-gateway/settings") {
+        needs("integrations.manage");
+        if (req.method === "GET") send(200, { ...waGateway.settings(), hookUrl });
+        else if (req.method === "POST") { sameOrigin(); send(200, { ...(await waGateway.save(await body(req))), hookUrl }); }
+        else bad("Method not allowed", 405);
+        return;
+      }
+      if (url.pathname === "/api/wa-gateway/test" && req.method === "POST") { needs("integrations.manage"); sameOrigin(); send(200, await waGateway.test()); return; }
+      const waLead = /^\/api\/wa-gateway\/leads\/([\w-]{1,64})\/(send|history)$/.exec(url.pathname);
+      if (waLead && req.method === "POST") {
+        sameOrigin(); needs("leads.write");
+        if (identity) ownLead(identity.user.id, waLead[1]);
+        const input = await body(req);
+        send(200, waLead[2] === "send" ? await waGateway.send(waLead[1], input, identity?.user.id || "") : await waGateway.history(waLead[1]));
+        return;
+      }
     }
     if (url.pathname.startsWith("/api/click-to-call/")) {
       if (!identity) bad("Set up shared login and sign in first", 401);
