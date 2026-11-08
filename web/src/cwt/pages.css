@@ -1,5 +1,5 @@
 /* My Calls, Search, Follow Ups, Reports and the sliding lead panel of the TeleCRM style (written for the reference web app screens). */
-.cwt .cwt-panel .lp-backdrop { position: fixed; inset: 0; z-index: 900; background: rgba(0, 0, 0, .6); }
+.cwt .cwt-panel .lp-backdrop { position: fixed; inset: 0; z-index: 900; background: rgba(128, 128, 136, 0.55); }
 .cwt .cwt-panel .lp-drawer { position: fixed; top: 0; right: 0; bottom: 0; z-index: 901; width: min(1000px, calc(100vw - 40px)); overflow-y: auto; background: #f7f7f7; padding: 8px 14px 30px; }
 .cwt .cwt-panel .lp-close { position: fixed; top: 9px; right: calc(min(1000px, calc(100vw - 40px)) + 12px); z-index: 902; width: 30px; height: 30px; padding: 7px; border-radius: 50%; background: #fff; color: #333; box-shadow: 0 1px 3px rgba(0, 0, 0, .2); }
 .cwt .cwt-panel svg { fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }

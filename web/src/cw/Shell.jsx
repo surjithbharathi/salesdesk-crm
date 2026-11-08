@@ -6,7 +6,7 @@ import Icon from "../icons.jsx";
 // The class names are the reference web app's, so its style sheet (cw/shell.css) applies as written.
 
 const DASH_VIEWS = [["", "Default"], ["activity", "Activity Metrics"], ["sources", "Source Reports"], ["users", "User Leads"], ["attendance", "Attendance"]];
-const MORE = [["/my-day", "My day"], ["/team", "Team"], ["/goals", "Daily goals"]];
+const MORE = [["/team", "Team"], ["/goals", "Daily goals"]];
 const TABS = [
   ["/todo", [["", "To-do kanban"], ["table", "To-do table"]]],
   ["/deals", [["", "Deals"], ["table", "Deals table"]]],
@@ -27,7 +27,7 @@ export default function Shell({ path, params, owner, session, onLogout, children
   let views = null;
   if (inDash) {
     const own = owner ? DASH_VIEWS.map(([k, label]) => [hashFor("/business", { tab: k }), label, path.startsWith("/business") && (params.tab || "") === k]) : [];
-    const more = MORE.filter(([to]) => owner || to === "/my-day").map(([to, label]) => [hashFor(to), label, path.startsWith(to)]);
+    const more = (owner ? MORE : [["/my-day", "My day"]]).map(([to, label]) => [hashFor(to), label, path.startsWith(to)]);
     views = [...own, ...more];
   } else if (path.startsWith("/leads")) {
     views = LEAD_VIEWS.filter(([k]) => owner || k !== "unassigned").map(([k, label]) => [hashFor("/leads", { queue: k }), label, (params.queue || "") === k]);

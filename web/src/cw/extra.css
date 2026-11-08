@@ -149,3 +149,9 @@
 .cw-detail .sheet { width: auto; padding: 0; border: 0; max-width: none; margin: 0; }
 .cw-detail .quick { opacity: 1; display: grid; }
 .cw-detail .side h2, .cw-detail .main h2 { margin: 0; }
+
+/* the real app leaves a 2px white gap between the open tab and the purple bar: tabs start 6px from the top of the 55px menu */
+.cw-ws .top { height: 56px; }
+.cw-ws .top__tab { align-self: flex-start; margin-top: 6px; height: 48px; }
+.cw-ws .top__tab.on { margin-top: 6px; }
+.cw-ws .sub { top: 56px; }

@@ -160,16 +160,6 @@
   --press: #4f38a2; --on-press: #ffffff; --ghost: #efefef;
   --shadow: 0 18px 44px rgba(19, 0, 89, 0.18);
 }
-@media (prefers-color-scheme: dark) {
-  :root[data-skin="telecrm"]:not([data-theme="light"]) {
-    --iron: #130059; --iron-2: #2a1a78; --iron-text: #ece8ff; --iron-muted: #b3a8ea;
-    --bg: #14111f; --surface: #1d1930; --sunken: #100d1a; --line: #2d2748; --line-strong: #40396a;
-    --ink: #eeeaff; --ink-2: #cfc9ee; --muted: #9d96c0;
-    --oil: #7868ee; --oil-soft: #2a2250; --oil-ink: #bdb2ff;
-    --leaf: #4fc08e; --leaf-soft: #14332a; --kumkum: #ff8a85; --kumkum-soft: #3b1d1d; --steel: #5aa9f0; --steel-soft: #17303d;
-    --press: #7868ee; --on-press: #ffffff; --ghost: #2a2250;
-  }
-}
 :root[data-skin="telecrm"][data-theme="dark"] {
   --iron: #130059; --iron-2: #2a1a78; --iron-text: #ece8ff; --iron-muted: #b3a8ea;
   --bg: #14111f; --surface: #1d1930; --sunken: #100d1a; --line: #2d2748; --line-strong: #40396a;
@@ -224,9 +214,6 @@
 :root[data-skin="telecrm"] .table-frame, :root[data-skin="telecrm"] .sheet, :root[data-skin="telecrm"] .levelstrip { border-radius: 8px; box-shadow: none; }
 :root[data-skin="telecrm"] .tabs { gap: 20px; }
 :root[data-skin="telecrm"] .tab[aria-selected="true"] { color: #4f38a2; border-bottom-color: #4f38a2; }
-@media (prefers-color-scheme: dark) {
-  :root[data-skin="telecrm"]:not([data-theme="light"]) { --iron: #1d1930; --iron-2: #2a2250; --iron-text: #cfc9ee; --iron-muted: #9d96c0; --bg: #14111f; --surface: #1d1930; --sunken: #100d1a; }
-}
 :root[data-skin="telecrm"][data-theme="dark"] { --iron: #1d1930; --iron-2: #2a2250; --iron-text: #cfc9ee; --iron-muted: #9d96c0; --bg: #14111f; --surface: #1d1930; --sunken: #100d1a; }
 @media (max-width: 760px) {
   :root[data-skin="telecrm"] .shell { grid-template-columns: minmax(0, 1fr); }
@@ -574,3 +561,8 @@
 .max-table th { font-size: 13px; font-weight: 700; color: #475569; }
 .max-table td, .max-table { color: #1e293b; }
 .max-foot { color: #475569; font-size: 14px; }
+
+/* in these two looks the heavy near-black rules of the app's own lists and headers are soft grey */
+:root[data-skin="salesmax"] .worklist, :root[data-skin="salesmax"] .sidelist, :root[data-skin="telecrm"] .worklist, :root[data-skin="telecrm"] .sidelist { border-top: 1px solid #d9dce3; }
+:root[data-skin="salesmax"] .drawer-head, :root[data-skin="telecrm"] .drawer-head { border-bottom: 1px solid #d9dce3; }
+:root[data-skin="salesmax"] .grid th, :root[data-skin="telecrm"] .grid th { border-bottom: 1px solid #d9dce3; }

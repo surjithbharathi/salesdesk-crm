@@ -2,7 +2,7 @@
 .cw-detail { --plum: #800080; --blue: #4f5bd5; --ink: #1f2430; --muted: #6b7280; --line: #eceef2; font-size: 14px; color: var(--ink); }
 .cw-detail button,
 .cw-detail a { font: inherit; color: inherit; }
-.cw-detail .scrim { position: fixed; inset: 0; z-index: 70; background: #0f172a8c; }
+.cw-detail .scrim { position: fixed; inset: 0; z-index: 70; background: rgba(128, 128, 136, 0.55); }
 .cw-detail .sheet { position: fixed; z-index: 71; inset: 20px 20px 0; display: grid; grid-template-columns: clamp(400px, 26vw, 620px) minmax(0, 1fr); border-radius: 6px 6px 0 0; background: #fff; overflow: hidden; box-shadow: 0 20px 60px #00000059; animation: rise .18s ease-out; }
 @keyframes rise { from { transform: translateY(12px); opacity: .6; } }
 .cw-detail .side { display: grid; align-content: start; gap: 10px; padding: 12px; overflow-y: auto; background: #f4f4f7; border-right: 1px solid var(--line); }

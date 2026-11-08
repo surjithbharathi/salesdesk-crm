@@ -155,7 +155,7 @@
 .cwt .sidebar .lbl { flex: 1; }
 .cwt .sidebar .nav-item { height: 42px; font-size: 15px; color: #374151; }
 .cwt .menu-open .sidebar { transform: none; box-shadow: 4px 0 30px rgba(0, 0, 0, .15); }
-.cwt .menu-open .scrim { display: block; position: fixed; inset: 0; z-index: 25; background: rgba(0, 0, 0, .35); }
+.cwt .menu-open .scrim { display: block; position: fixed; inset: 0; z-index: 25; background: rgba(128, 128, 136, 0.45); }
 .cwt .hamburger { display: inline-flex; }
 .cwt .nav-pop { left: 200px; }
 .cwt .ws-label { max-width: 110px; }
