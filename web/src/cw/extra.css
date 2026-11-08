@@ -1,0 +1,151 @@
+/* Helpers for the Salesmax-style screens: widths and colours as classes, because the page may not carry inline styles. */
+.cw-w-0 { width: 0%; }
+.cw-w-1 { width: 1%; }
+.cw-w-2 { width: 2%; }
+.cw-w-3 { width: 3%; }
+.cw-w-4 { width: 4%; }
+.cw-w-5 { width: 5%; }
+.cw-w-6 { width: 6%; }
+.cw-w-7 { width: 7%; }
+.cw-w-8 { width: 8%; }
+.cw-w-9 { width: 9%; }
+.cw-w-10 { width: 10%; }
+.cw-w-11 { width: 11%; }
+.cw-w-12 { width: 12%; }
+.cw-w-13 { width: 13%; }
+.cw-w-14 { width: 14%; }
+.cw-w-15 { width: 15%; }
+.cw-w-16 { width: 16%; }
+.cw-w-17 { width: 17%; }
+.cw-w-18 { width: 18%; }
+.cw-w-19 { width: 19%; }
+.cw-w-20 { width: 20%; }
+.cw-w-21 { width: 21%; }
+.cw-w-22 { width: 22%; }
+.cw-w-23 { width: 23%; }
+.cw-w-24 { width: 24%; }
+.cw-w-25 { width: 25%; }
+.cw-w-26 { width: 26%; }
+.cw-w-27 { width: 27%; }
+.cw-w-28 { width: 28%; }
+.cw-w-29 { width: 29%; }
+.cw-w-30 { width: 30%; }
+.cw-w-31 { width: 31%; }
+.cw-w-32 { width: 32%; }
+.cw-w-33 { width: 33%; }
+.cw-w-34 { width: 34%; }
+.cw-w-35 { width: 35%; }
+.cw-w-36 { width: 36%; }
+.cw-w-37 { width: 37%; }
+.cw-w-38 { width: 38%; }
+.cw-w-39 { width: 39%; }
+.cw-w-40 { width: 40%; }
+.cw-w-41 { width: 41%; }
+.cw-w-42 { width: 42%; }
+.cw-w-43 { width: 43%; }
+.cw-w-44 { width: 44%; }
+.cw-w-45 { width: 45%; }
+.cw-w-46 { width: 46%; }
+.cw-w-47 { width: 47%; }
+.cw-w-48 { width: 48%; }
+.cw-w-49 { width: 49%; }
+.cw-w-50 { width: 50%; }
+.cw-w-51 { width: 51%; }
+.cw-w-52 { width: 52%; }
+.cw-w-53 { width: 53%; }
+.cw-w-54 { width: 54%; }
+.cw-w-55 { width: 55%; }
+.cw-w-56 { width: 56%; }
+.cw-w-57 { width: 57%; }
+.cw-w-58 { width: 58%; }
+.cw-w-59 { width: 59%; }
+.cw-w-60 { width: 60%; }
+.cw-w-61 { width: 61%; }
+.cw-w-62 { width: 62%; }
+.cw-w-63 { width: 63%; }
+.cw-w-64 { width: 64%; }
+.cw-w-65 { width: 65%; }
+.cw-w-66 { width: 66%; }
+.cw-w-67 { width: 67%; }
+.cw-w-68 { width: 68%; }
+.cw-w-69 { width: 69%; }
+.cw-w-70 { width: 70%; }
+.cw-w-71 { width: 71%; }
+.cw-w-72 { width: 72%; }
+.cw-w-73 { width: 73%; }
+.cw-w-74 { width: 74%; }
+.cw-w-75 { width: 75%; }
+.cw-w-76 { width: 76%; }
+.cw-w-77 { width: 77%; }
+.cw-w-78 { width: 78%; }
+.cw-w-79 { width: 79%; }
+.cw-w-80 { width: 80%; }
+.cw-w-81 { width: 81%; }
+.cw-w-82 { width: 82%; }
+.cw-w-83 { width: 83%; }
+.cw-w-84 { width: 84%; }
+.cw-w-85 { width: 85%; }
+.cw-w-86 { width: 86%; }
+.cw-w-87 { width: 87%; }
+.cw-w-88 { width: 88%; }
+.cw-w-89 { width: 89%; }
+.cw-w-90 { width: 90%; }
+.cw-w-91 { width: 91%; }
+.cw-w-92 { width: 92%; }
+.cw-w-93 { width: 93%; }
+.cw-w-94 { width: 94%; }
+.cw-w-95 { width: 95%; }
+.cw-w-96 { width: 96%; }
+.cw-w-97 { width: 97%; }
+.cw-w-98 { width: 98%; }
+.cw-w-99 { width: 99%; }
+.cw-w-100 { width: 100%; }
+.cw-sw-new { background: #7c3aed; } .cw-sw-pro { background: #3b82f6; } .cw-sw-opp { background: #22c55e; } .cw-sw-closed { background: #94a3b8; }
+.cw-sw-pk { background: #800080; } .cw-sw-sl { background: #94a3b8; }
+.cw-fill-pk { background: #c56bd0; } .cw-fill-gr { background: #16a34a; }
+.cw-p0 { background: #800080; } .cw-p1 { background: #a64ca6; } .cw-p2 { background: #c785cf; } .cw-p3 { background: #64748b; } .cw-p4 { background: #94a3b8; } .cw-p5 { background: #cbd5e1; }
+.cw-dash .bar__fill i { flex: none; display: block; height: 100%; }
+.cw-dash .legend i { display: inline-block; }
+.cw-dash .trend .chart, .cw-dash .pulse__plot .chart { height: auto; }
+.cw-dash .svgx { font-size: 11.5px; fill: #4b5563; }
+.cw-dash .svgx--y { text-anchor: end; }
+.cw-dash .svgx--x { text-anchor: middle; }
+
+/* the reference app's base reset, kept inside the Salesmax frame */
+.cw-ws { color-scheme: light; --bg: #f3e3f7; color: #1f2430; }
+.cw-ws button { background: none; border: 0; padding: 0; border-radius: 0; box-shadow: none; text-align: left; cursor: pointer; }
+.cw-ws button:disabled { cursor: default; opacity: 0.55; }
+.cw-ws input, .cw-ws select, .cw-ws textarea { background: #ffffff; color: #1f2430; font: inherit; }
+.cw-ws table { border-collapse: collapse; }
+.cw-ws ul, .cw-ws ol { list-style: none; margin: 0; padding: 0; }
+.cw-ws h1, .cw-ws h2, .cw-ws h3, .cw-ws p { margin: 0; }
+.cw-ws small { font-size: inherit; }
+.cw-ws .ws__content { grid-template-columns: minmax(0, 1fr); }
+.cw-views .board--deals { grid-template-columns: repeat(11, minmax(230px, 1fr)); }
+.cw-views .chips-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.cw-views .chips-row > span { flex-basis: 100%; font-size: 13px; font-weight: 600; }
+.cw-views .dialog { position: fixed; z-index: 61; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(480px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow-y: auto; }
+.cw-views .chat-pane { border-top: 1px solid #eceef2; }
+.cw-views .chat-pane header { display: flex; align-items: center; gap: 14px; padding: 12px 16px; }
+.cw-views .chat-pane__body { display: grid; gap: 8px; padding: 12px 16px 16px; max-height: 420px; overflow-y: auto; background: #f6f7fb; }
+.cw-views .bubble { max-width: min(520px, 85%); background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 8px 12px; }
+.cw-views .bubble.out { justify-self: end; background: #f3e8f5; }
+.cw-views .bubble p { margin: 0 0 4px; overflow-wrap: anywhere; }
+.cw-views .bubble small { color: #6b7280; font-size: 11.5px; }
+.cw-views .ic-btn .plus { font-weight: 700; margin-left: 2px; }
+
+/* the app's own classes share a few names with the reference sheets; neutralise what would leak into these screens */
+.cw-ws .tag::before { content: none; display: none; }
+.cw-ws .tag { display: inline-block; }
+.cw-ws .bar { margin-bottom: 0; }
+.cw-ws .board b { text-align: left; }
+.cw-ws .scrim { z-index: 60; }
+.cw-ws .late { font-weight: inherit; }
+.cw-ws .empty b { font-size: 15px; }
+.cw-detail .check-row { display: flex; align-items: flex-start; gap: 8px; margin-top: 10px; font-size: 12.5px; color: #4b5563; }
+.cw-detail .quick-days { display: flex; gap: 8px; flex-wrap: wrap; }
+.cw-detail .chat__thread .msg--in { justify-self: start; }
+/* "sheet" and "quick" are also names of the app's own login card and row actions */
+.cw-detail .sheet { width: auto; padding: 0; border: 0; max-width: none; margin: 0; }
+.cw-detail .quick { opacity: 1; display: grid; }
+.cw-detail .side h2, .cw-detail .main h2 { margin: 0; }

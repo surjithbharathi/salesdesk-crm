@@ -8,12 +8,12 @@
   --font: "Roboto", "Noto Sans Tamil", system-ui, -apple-system, "Segoe UI", sans-serif;
   --display: var(--font);
   --iron: #ffffff; --iron-2: #f3e8f5; --iron-text: #1a1a1a; --iron-muted: #6b7280;
-  --bg: #f4e6f6; --surface: #ffffff; --sunken: #f4f4f7; --line: #eceef2; --line-strong: #d9dce3;
+  --bg: #f3e3f7; --surface: #ffffff; --sunken: #f4f4f7; --line: #eceef2; --line-strong: #d9dce3;
   --ink: #1f2430; --ink-2: #23282c; --muted: #6b7280;
   --oil: #800080; --oil-soft: #f3e8f5; --oil-ink: #800080;
   --leaf: #17845c; --leaf-soft: #e6f7ef; --kumkum: #d64545; --kumkum-soft: #fdeeee; --steel: #5b63eb; --steel-soft: #eef0fd;
   --press: #800080; --on-press: #ffffff; --ghost: #f3e8f5;
-  --max-bar: #800080; --max-pill: #c58bd0; --max-green: #0f3d33; --max-yellow: #fffde7;
+  --max-bar: #800080; --max-pill: #c184cd; --max-green: #0f3d33; --max-yellow: #fffde7;
   --shadow: 0 10px 28px rgba(16, 24, 40, 0.16);
   font-size: 14px;
 }
@@ -556,3 +556,28 @@
 @media (max-width: 1100px) { .max-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 560px) { .max-tiles { grid-template-columns: minmax(0, 1fr); } }
 .max-col-head small.num { background: transparent; color: var(--muted); padding: 0; }
+
+/* ---- Salesmax style: sizes measured on the real web app (header, tabs, purple bar, cards) ---- */
+:root[data-skin="salesmax"] .rail { height: 55px; }
+:root[data-skin="salesmax"] .rail-link { height: 48px; margin-top: 6px; padding: 12px 12.8px; border-radius: 8px 8px 0 0; font-size: 14px; font-weight: 500; color: #000000; }
+:root[data-skin="salesmax"] .rail-link[aria-current="page"] { margin-top: 6px; font-weight: 600; color: #ffffff; box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.1); }
+:root[data-skin="salesmax"] .rail-link svg { width: 20px; height: 20px; }
+:root[data-skin="salesmax"] .max-customize { height: 35px; padding: 5px 10px; border-radius: 10px; background: #ff4081; font-size: 14px; font-weight: 500; letter-spacing: 0; box-shadow: 0 4px 15px rgba(156, 39, 176, 1); }
+:root[data-skin="salesmax"] .max-customize:hover { background: #f50057; }
+:root[data-skin="salesmax"] .max-iconbtn, :root[data-skin="salesmax"] .rail-foot button { width: 36px; height: 36px; border-radius: 8px; color: #475569; }
+:root[data-skin="salesmax"] .maxbar { top: 55px; height: 40px; min-height: 40px; padding: 0 8px 0 16px; box-shadow: 0 3px 1px -2px rgba(0, 0, 0, 0.2), 0 2px 2px 0 rgba(0, 0, 0, 0.14), 0 1px 5px 0 rgba(0, 0, 0, 0.12); }
+:root[data-skin="salesmax"] .maxbar a { height: 31px; padding: 5.6px 12px; border-radius: 8px; font-size: 13px; font-weight: 500; }
+.max-card, .max-tile { border-color: #e2e8f0; border-radius: 12px; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06); }
+.max-tile b.max-num { font-size: 22px; font-weight: 700; color: #0f172a; }
+
+/* toolbar controls, as measured on the real leads page */
+.max-chipbtn { height: 34px; display: inline-flex; align-items: center; padding: 0 12px; border: 1px solid #cbd5e1; border-radius: 8px; background: #ffffff; color: #1e293b; font-size: 12px; font-weight: 600; }
+.max-find { height: 40px; flex: 1 1 320px; max-width: 540px; border: 1px solid #cbd5e1; border-radius: 8px; }
+.max-find input { flex: 1; font-size: 13px; font-weight: 500; color: #1e293b; }
+.max-search { height: 40px; border: 1px solid #cbd5e1; border-radius: 8px; color: #1e293b; }
+.max-toggle { background: #e8ecf1; border-radius: 8px; }
+.max-toggle button { border-radius: 4px; font-size: 11.5px; font-weight: 700; color: #475569; }
+.max-toggle button[aria-pressed="true"] { background: #ffffff; color: #0f172a; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12); }
+.max-table th { font-size: 13px; font-weight: 700; color: #475569; }
+.max-table td, .max-table { color: #1e293b; }
+.max-foot { color: #475569; font-size: 14px; }

@@ -8,12 +8,10 @@ import TeleDashboard from "./pages/TeleDashboard.jsx";
 import TeleLeads from "./pages/TeleLeads.jsx";
 import TeleCalls from "./pages/TeleCalls.jsx";
 import TeleSearch from "./pages/TeleSearch.jsx";
-import MaxDashboard from "./pages/MaxDashboard.jsx";
-import MaxLeads from "./pages/MaxLeads.jsx";
-import MaxTodos from "./pages/MaxTodos.jsx";
-import MaxDeals from "./pages/MaxDeals.jsx";
-import MaxEngagements from "./pages/MaxEngagements.jsx";
-import MaxConversations from "./pages/MaxConversations.jsx";
+import CwShell from "./cw/Shell.jsx";
+import CwDashboard from "./cw/Dashboard.jsx";
+import CwLeads from "./cw/LeadsGrid.jsx";
+import { CwDeals, CwTodos, CwEngagements, CwConversations } from "./cw/Views.jsx";
 import Business from "./pages/Business.jsx";
 import Leads from "./pages/Leads.jsx";
 import Calls from "./pages/Calls.jsx";
@@ -43,17 +41,6 @@ const NAV_CALLER = [
   ["/todo", "To-do", "task"],
   ["/messages", "Messages", "chat"],
   ["/settings", "Settings", "gear"],
-];
-
-// The Salesmax look: its top menu, and the tabs of the purple bar for the pages that have more than one view.
-const MAX_NAV_LEAD = [["/business", "Dashboards", "dashboard"], ["/leads", "Leads", "people"], ["/deals", "Opportunities", "rupee"], ["/todo", "To-dos", "task"], ["/engagements", "Engagements", "trend"], ["/messages", "Conversations", "chat"], ["/settings", "Settings", "gear"]];
-const MAX_NAV_CALLER = [["/my-day", "Dashboards", "dashboard"], ...MAX_NAV_LEAD.slice(1)];
-const MAX_DASH = ["/business", "/my-day", "/team", "/goals"];
-const MAX_TABS = [
-  ["/todo", [["", "To-do kanban"], ["table", "To-do table"]], "To-dos"],
-  ["/deals", [["", "Deals"], ["table", "Deals table"]], "Opportunities"],
-  ["/engagements", [["", "Activities"], ["calls", "Calls"]], "Engagements"],
-  ["/messages", [["", "Inbox"], ["stats", "Numbers"]], "Conversations"],
 ];
 
 function readTheme() {
@@ -110,17 +97,6 @@ function LoginForm({ onDone }) {
   );
 }
 
-// The purple page bar of the Salesmax look: the pages of the part of the app you are in.
-function MaxBar({ path, params, lead }) {
-  const dash = [["/business", "Business"], ["/my-day", "My day"], ["/team", "Team"], ["/goals", "Daily goals"]].filter(([to]) => lead || to === "/my-day");
-  const leads = [["", "Active leads"], ["new", "New leads"], ["untouched", "Not worked"], ["unassigned", "No owner"], ["all", "All leads"]].filter(([key]) => lead || key !== "unassigned");
-  if (dash.some(([to]) => path.startsWith(to))) return <nav className="maxbar" aria-label="Dashboards">{dash.map(([to, label]) => <a key={to} href={hashFor(to)} aria-current={path.startsWith(to) ? "page" : undefined}>{label}</a>)}</nav>;
-  if (path.startsWith("/leads")) return <nav className="maxbar" aria-label="Leads">{leads.map(([key, label]) => <a key={key || "active"} href={hashFor("/leads", { queue: key })} aria-current={(params.queue || "") === key ? "page" : undefined}>{label}</a>)}</nav>;
-  const tabs = MAX_TABS.find(([to]) => path.startsWith(to));
-  if (tabs) return <nav className="maxbar" aria-label={tabs[2]}>{tabs[1].map(([key, label]) => <a key={key || "first"} href={hashFor(tabs[0], { tab: key })} aria-current={(params.tab || "") === key ? "page" : undefined}>{label}</a>)}</nav>;
-  return null;
-}
-
 export default function App() {
   const hash = useHash();
   const [session, setSession] = useState({ state: "loading" });
@@ -170,18 +146,18 @@ export default function App() {
   const baseNav = owner ? NAV_LEAD : NAV_CALLER;
   // that look has a search page of its own, right after Leads
   const max = skin === "salesmax";
-  const NAV = max ? (owner ? MAX_NAV_LEAD : MAX_NAV_CALLER) : skin === "telecrm" ? baseNav.flatMap((item) => (item[0] === "/leads" ? [item, ["/search", "Search", "search"]] : [item])) : baseNav;
-  const isHere = (to) => (max && (to === "/business" || to === "/my-day") ? MAX_DASH.some((p) => path.startsWith(p)) : path.startsWith(to));
+  const NAV = skin === "telecrm" ? baseNav.flatMap((item) => (item[0] === "/leads" ? [item, ["/search", "Search", "search"]] : [item])) : baseNav;
+  const isHere = (to) => path.startsWith(to);
   const callers = meta.users;
   const viewing = owner ? (params.user || meta.id || callers[0]?.id) : meta.id;
   const page =
-    path.startsWith("/leads") ? (skin === "telecrm" ? <TeleLeads key="tleads" params={params} /> : skin === "salesmax" ? <MaxLeads key="mleads" params={params} /> : <Leads key="leads" params={params} />) :
+    path.startsWith("/leads") ? (skin === "telecrm" ? <TeleLeads key="tleads" params={params} /> : skin === "salesmax" ? <CwLeads key="cwleads" params={params} /> : <Leads key="leads" params={params} />) :
     path.startsWith("/search") && skin === "telecrm" ? <TeleSearch key="tsearch" params={params} /> :
     path.startsWith("/calls") ? (skin === "telecrm" ? <TeleCalls key="tcalls" /> : <Calls key="calls" />) :
-    path.startsWith("/deals") && max ? <MaxDeals key={`deals${params.tab || ""}`} params={params} /> :
-    path.startsWith("/engagements") && max ? <MaxEngagements key={`eng${params.tab || ""}`} params={params} /> :
-    path.startsWith("/todo") ? (max ? <MaxTodos key={`mtodo${params.tab || ""}`} params={params} /> : <Tasks key="todo" />) :
-    path.startsWith("/messages") ? (max ? <MaxConversations key={`mchat${params.tab || ""}`} params={params} /> : <Messages key="messages" />) :
+    path.startsWith("/deals") && max ? <CwDeals key={`deals${params.tab || ""}`} params={params} /> :
+    path.startsWith("/engagements") && max ? <CwEngagements key={`eng${params.tab || ""}`} params={params} /> :
+    path.startsWith("/todo") ? (max ? <CwTodos key={`mtodo${params.tab || ""}`} params={params} /> : <Tasks key="todo" />) :
+    path.startsWith("/messages") ? (max ? <CwConversations key={`mchat${params.tab || ""}`} params={params} /> : <Messages key="messages" />) :
     path.startsWith("/settings") ? <Settings key="settings" params={params} me={meta} /> :
     path.startsWith("/team") && owner ? <Team key="team" /> :
     path.startsWith("/goals") && owner ? <Goals key="goals" meta={meta} /> :
@@ -197,8 +173,15 @@ export default function App() {
         <MyDay key={viewing} userId={viewing} meta={meta} />
       </>
     ) :
-    skin === "telecrm" ? <TeleDashboard key="tele" meta={meta} /> : skin === "salesmax" ? <MaxDashboard key="maxdash" meta={meta} /> : <Business key="business" />;
+    skin === "telecrm" ? <TeleDashboard key="tele" meta={meta} /> : skin === "salesmax" ? <CwDashboard key={`cwdash${params.tab || ""}`} tab={params.tab || "default"} /> : <Business key="business" />;
 
+  if (max) {
+    return (
+      <CwShell path={path} params={params} owner={owner} session={session} onLogout={async () => { await logout(); location.reload(); }}>
+        <CrmProvider me={meta}>{page}</CrmProvider>
+      </CwShell>
+    );
+  }
   return (
     <div className="shell" data-route={hash}>
       <aside className="rail">
@@ -217,14 +200,6 @@ export default function App() {
           ))}
         </nav>
         <div className="rail-foot">
-          {max && (
-            <>
-              <a className="max-customize" href={hashFor("/settings")}>Customize</a>
-              <a className="max-iconbtn" href={hashFor("/leads")} aria-label="Search leads"><Icon name="search" size={20} /></a>
-              <a className="max-iconbtn" href={hashFor("/messages")} aria-label="Conversations"><Icon name="chat" size={20} /></a>
-              <span className="max-org" lang="en">{session.company || "Devi Industries"}</span>
-            </>
-          )}
           {session.user ? (
             <div className="who">
               <span className="avatar">{initials(session.user.name)}</span>
@@ -249,7 +224,6 @@ export default function App() {
           <span className="topbar-co" lang="en">{session.company || "Devi Industries"}</span>
           <span className="topbar-user" title={session.user?.name || ""}><span className="avatar">{initials(session.user?.name || "Demo")}</span></span>
         </header>
-        {skin === "salesmax" && <MaxBar path={path} params={params} lead={owner} />}
         <main className="work"><CrmProvider me={meta}>{page}</CrmProvider></main>
       </div>
     </div>

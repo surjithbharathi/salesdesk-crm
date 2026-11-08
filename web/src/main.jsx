@@ -14,6 +14,13 @@ import "./styles.css";
 import "./settings.css";
 import "./game.css";
 import "./skins.css";
+import "./cw/shell.css";
+import "./cw/dashboard.css";
+import "./cw/leads-grid.css";
+import "./cw/views.css";
+import "./cw/more.css";
+import "./cw/detail.css";
+import "./cw/extra.css";
 
 createRoot(document.getElementById("root")).render(
   <ToastProvider>
