@@ -18,6 +18,7 @@ import { createExtensions } from "./extensions.mjs";
 import { encryptedAuth } from "./whatsapp-auth.mjs";
 import { createWhatsApp, phoneDigits } from "./whatsapp.mjs";
 import { createMobileSync, MAX_AUDIO } from "./mobile-sync.mjs";
+import { PIPELINE } from "./pipeline.mjs";
 import { createUserAuth } from "./user-auth.mjs";
 import { scopedState } from "./user-scope.mjs";
 import { createClickToCall } from "./click-to-call.mjs";
@@ -213,6 +214,15 @@ function validate(kind, p, old = {}) {
     b("archived");
     b("repeat");
     b("noCallSync"); // phone calls with this lead are not copied into the CRM
+    // the pipeline step; it decides the basic stage. A change of basic stage on its own (older screens, the phone app) clears the step.
+    c("deal", ["", ...PIPELINE.map((d) => d.name)]);
+    if (Object.hasOwn(p, "deal")) {
+      const step = PIPELINE.find((d) => d.name === v.deal);
+      if (step) {
+        v.stage = step.stage;
+        v.disposition = step.disposition;
+      }
+    } else if (old.stage !== undefined && v.stage !== old.stage) v.deal = "";
   }
   if (kind === "tasks") {
     s("title", 300);
@@ -1218,16 +1228,21 @@ const server = http.createServer(async (req, res) => {
         if (kind === "conversations" && !old) event("Conversation opened");
         if (kind === "conversations" && record.status === "Resolved" && old?.status !== "Resolved")
           event("Conversation resolved");
-        if (kind === "leads")
+        if (kind === "leads") {
+          const stepChanged = old && (old.deal || "") !== (record.deal || "") && record.deal;
           log(
             record.id,
             "System",
             old && old.stage !== record.stage
               ? `Lead stage changed: ${old.stage} → ${record.stage}`
-              : old
-                ? "Lead details updated"
-                : "Lead created",
+              : stepChanged
+                ? `Pipeline step changed: ${old.deal || "none"} → ${record.deal}`
+                : old
+                  ? "Lead details updated"
+                  : "Lead created",
           );
+          if (stepChanged && old.stage !== record.stage) log(record.id, "System", `Pipeline step changed: ${old.deal || "none"} → ${record.deal}`);
+        }
         if (kind === "tasks" && record.leadId)
           log(
             record.leadId,
@@ -1250,6 +1265,7 @@ const server = http.createServer(async (req, res) => {
               l.stage = "Prospecting";
               l.disposition = "";
             }
+            if (l.stage !== previous) l.deal = "";
             l.updatedAt = now();
             put("leads", l);
             if (l.stage === "Closed" && previous !== "Closed") event("Lead closed", leadId);

@@ -10,6 +10,10 @@ import TeleCalls from "./pages/TeleCalls.jsx";
 import TeleSearch from "./pages/TeleSearch.jsx";
 import MaxDashboard from "./pages/MaxDashboard.jsx";
 import MaxLeads from "./pages/MaxLeads.jsx";
+import MaxTodos from "./pages/MaxTodos.jsx";
+import MaxDeals from "./pages/MaxDeals.jsx";
+import MaxEngagements from "./pages/MaxEngagements.jsx";
+import MaxConversations from "./pages/MaxConversations.jsx";
 import Business from "./pages/Business.jsx";
 import Leads from "./pages/Leads.jsx";
 import Calls from "./pages/Calls.jsx";
@@ -39,6 +43,17 @@ const NAV_CALLER = [
   ["/todo", "To-do", "task"],
   ["/messages", "Messages", "chat"],
   ["/settings", "Settings", "gear"],
+];
+
+// The Salesmax look: its top menu, and the tabs of the purple bar for the pages that have more than one view.
+const MAX_NAV_LEAD = [["/business", "Dashboards"], ["/leads", "Leads"], ["/deals", "Opportunities"], ["/todo", "To-dos"], ["/engagements", "Engagements"], ["/messages", "Conversations"], ["/settings", "Settings"]];
+const MAX_NAV_CALLER = [["/my-day", "Dashboards"], ...MAX_NAV_LEAD.slice(1)];
+const MAX_DASH = ["/business", "/my-day", "/team", "/goals"];
+const MAX_TABS = [
+  ["/todo", [["", "Board"], ["table", "Table"]], "To-dos"],
+  ["/deals", [["", "Board"], ["table", "Table"]], "Opportunities"],
+  ["/engagements", [["", "Activities"], ["calls", "Calls"]], "Engagements"],
+  ["/messages", [["", "Inbox"], ["stats", "Numbers"]], "Conversations"],
 ];
 
 function readTheme() {
@@ -101,6 +116,8 @@ function MaxBar({ path, params, lead }) {
   const leads = [["", "Active leads"], ["new", "New leads"], ["untouched", "Not worked"], ["unassigned", "No owner"], ["all", "All leads"]].filter(([key]) => lead || key !== "unassigned");
   if (dash.some(([to]) => path.startsWith(to))) return <nav className="maxbar" aria-label="Dashboards">{dash.map(([to, label]) => <a key={to} href={hashFor(to)} aria-current={path.startsWith(to) ? "page" : undefined}>{label}</a>)}</nav>;
   if (path.startsWith("/leads")) return <nav className="maxbar" aria-label="Leads">{leads.map(([key, label]) => <a key={key || "active"} href={hashFor("/leads", { queue: key })} aria-current={(params.queue || "") === key ? "page" : undefined}>{label}</a>)}</nav>;
+  const tabs = MAX_TABS.find(([to]) => path.startsWith(to));
+  if (tabs) return <nav className="maxbar" aria-label={tabs[2]}>{tabs[1].map(([key, label]) => <a key={key || "first"} href={hashFor(tabs[0], { tab: key })} aria-current={(params.tab || "") === key ? "page" : undefined}>{label}</a>)}</nav>;
   return null;
 }
 
@@ -152,15 +169,19 @@ export default function App() {
   const owner = meta.lead; // owners, admins and managers see the whole team; callers see only their own day
   const baseNav = owner ? NAV_LEAD : NAV_CALLER;
   // that look has a search page of its own, right after Leads
-  const NAV = skin === "telecrm" ? baseNav.flatMap((item) => (item[0] === "/leads" ? [item, ["/search", "Search", "search"]] : [item])) : baseNav;
+  const max = skin === "salesmax";
+  const NAV = max ? (owner ? MAX_NAV_LEAD : MAX_NAV_CALLER).map(([to, label]) => [to, label, "dot"]) : skin === "telecrm" ? baseNav.flatMap((item) => (item[0] === "/leads" ? [item, ["/search", "Search", "search"]] : [item])) : baseNav;
+  const isHere = (to) => (max && (to === "/business" || to === "/my-day") ? MAX_DASH.some((p) => path.startsWith(p)) : path.startsWith(to));
   const callers = meta.users;
   const viewing = owner ? (params.user || meta.id || callers[0]?.id) : meta.id;
   const page =
     path.startsWith("/leads") ? (skin === "telecrm" ? <TeleLeads key="tleads" params={params} /> : skin === "salesmax" ? <MaxLeads key="mleads" params={params} /> : <Leads key="leads" params={params} />) :
     path.startsWith("/search") && skin === "telecrm" ? <TeleSearch key="tsearch" params={params} /> :
     path.startsWith("/calls") ? (skin === "telecrm" ? <TeleCalls key="tcalls" /> : <Calls key="calls" />) :
-    path.startsWith("/todo") ? <Tasks key="todo" /> :
-    path.startsWith("/messages") ? <Messages key="messages" /> :
+    path.startsWith("/deals") && max ? <MaxDeals key={`deals${params.tab || ""}`} params={params} /> :
+    path.startsWith("/engagements") && max ? <MaxEngagements key={`eng${params.tab || ""}`} params={params} /> :
+    path.startsWith("/todo") ? (max ? <MaxTodos key={`mtodo${params.tab || ""}`} params={params} /> : <Tasks key="todo" />) :
+    path.startsWith("/messages") ? (max ? <MaxConversations key={`mchat${params.tab || ""}`} params={params} /> : <Messages key="messages" />) :
     path.startsWith("/settings") ? <Settings key="settings" params={params} me={meta} /> :
     path.startsWith("/team") && owner ? <Team key="team" /> :
     path.startsWith("/goals") && owner ? <Goals key="goals" meta={meta} /> :
@@ -190,7 +211,7 @@ export default function App() {
         </a>
         <nav className="rail-nav" aria-label="Main">
           {NAV.map(([to, label, icon]) => (
-            <a key={to} className="rail-link" href={hashFor(to)} title={skin === "telecrm" && label === "Business" ? "Dashboard" : label} aria-current={path.startsWith(to) ? "page" : undefined}>
+            <a key={to} className="rail-link" href={hashFor(to)} title={skin === "telecrm" && label === "Business" ? "Dashboard" : label} aria-current={isHere(to) ? "page" : undefined}>
               <Icon name={icon} /><span className="label">{skin === "telecrm" && label === "Business" ? "Dashboard" : label}</span>
             </a>
           ))}

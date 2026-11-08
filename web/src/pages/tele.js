@@ -21,3 +21,14 @@ export function absTime(t) {
 export const talk = (s) => (s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`);
 
 export const tagClass = (lead) => (lead.stage === "Closed" ? (lead.disposition === "Won" ? "tag-WON" : "tag-LOST") : lead.stage === "New" ? "tag-FRESH" : "tag-ACTIVE");
+
+// When each lead was last worked: its latest call or note. System entries (stage changes and the like) do not count.
+export function lastWorkedMap(activities) {
+  const map = new Map();
+  for (const a of activities || []) {
+    if (a.type === "System") continue;
+    const t = ms(a.occurredAt || a.createdAt);
+    if (t > (map.get(a.leadId) || 0)) map.set(a.leadId, t);
+  }
+  return map;
+}

@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { crmState } from "./api.js";
+import { pipelineStep } from "./pipeline.js";
 
 const CrmContext = createContext(null);
 export const useCrm = () => useContext(CrmContext);
@@ -47,4 +48,5 @@ export const waHref = (lead) => `https://wa.me/${String(lead.phone || "").replac
 
 export const STAGES = [["New", "New"], ["Prospecting", "Discussion"], ["Opportunity", "Interested customer"], ["Quotation given", "Quotation given"], ["Closed", "Closed"]];
 export const stageLabel = (stage) => STAGES.find(([key]) => key === stage)?.[1] || stage;
-export const stageText = (lead) => (lead.stage === "Closed" ? lead.disposition || "Closed" : stageLabel(lead.stage));
+// What people see as the stage: the pipeline step when there is one, else the basic stage.
+export const stageText = (lead) => (lead.stage === "New" ? "New" : pipelineStep(lead) || (lead.stage === "Closed" ? lead.disposition || "Closed" : stageLabel(lead.stage)));

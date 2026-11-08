@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { crmSend } from "../api.js";
-import { useCrm, userName, phoneLabel, telHref, waHref, STAGES, stageText } from "../crm.jsx";
+import { useCrm, userName, phoneLabel, telHref, waHref, stageText } from "../crm.jsx";
+import { PIPELINE, pipelineStep } from "../pipeline.js";
 import { useToast } from "../toast.jsx";
 import { when, day, rupees, dueText, timeOnly, dayLabel, minutes } from "../format.js";
 import Icon from "../icons.jsx";
@@ -59,8 +60,7 @@ function Timeline({ items }) {
 export function Update({ lead, crm }) {
   const notify = useToast();
   const [busy, setBusy] = useState(false);
-  const [stage, setStage] = useState(lead.stage);
-  const [disposition, setDisposition] = useState(lead.disposition || "");
+  const [step, setStep] = useState(lead.stage === "New" ? "New" : pipelineStep(lead));
   const [note, setNote] = useState("");
   const [outcome, setOutcome] = useState("");
   const [callText, setCallText] = useState("");
@@ -68,7 +68,6 @@ export function Update({ lead, crm }) {
   const [title, setTitle] = useState("");
   const [due, setDue] = useState(atTen(1));
   const tasks = crm.openTasks.filter((t) => t.leadId === lead.id).sort((a, b) => a.due.localeCompare(b.due));
-  const closing = stage === "Closed";
 
   async function change(label, call) {
     setBusy(true);
@@ -136,19 +135,14 @@ export function Update({ lead, crm }) {
       <h3>Stage</h3>
       <form className="work-form" onSubmit={(e) => {
         e.preventDefault();
-        change(`Moved to ${closing ? disposition : STAGES.find(([k]) => k === stage)[1]}`, () => crmSend("PATCH", `leads/${lead.id}`, { stage, disposition: closing ? disposition : "" }));
+        change(`Moved to ${step}`, () => crmSend("PATCH", `leads/${lead.id}`, step === "New" ? { stage: "New", disposition: "", deal: "" } : { deal: step }));
       }}>
-        <select className="field-input" value={stage} onChange={(e) => setStage(e.target.value)} aria-label="Stage">
-          {STAGES.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+        <select className="field-input" value={step} onChange={(e) => setStep(e.target.value)} aria-label="Stage">
+          <option value="New">New</option>
+          {!pipelineStep(lead) && lead.stage !== "New" && <option value="">Choose a stage…</option>}
+          {PIPELINE.map((d) => <option key={d.name} value={d.name}>{d.name}</option>)}
         </select>
-        {closing && (
-          <select className="field-input" value={disposition} onChange={(e) => setDisposition(e.target.value)} aria-label="Won or lost" required>
-            <option value="">Won or lost?</option>
-            <option value="Won">Won</option>
-            <option value="Lost">Lost</option>
-          </select>
-        )}
-        <button className="btn" disabled={busy || (stage === lead.stage && (!closing || disposition === (lead.disposition || "")))}>Change stage</button>
+        <button className="btn" disabled={busy || !step || step === (lead.stage === "New" ? "New" : pipelineStep(lead))}>Change stage</button>
       </form>
 
       <h3>Phone call sync</h3>

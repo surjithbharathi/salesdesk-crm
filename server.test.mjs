@@ -140,6 +140,23 @@ test("CRM lifecycle, transaction rollback, validation, and persistent storage", 
         (a) => a.leadId === id && a.text === "Lead stage changed: Closed → Prospecting",
       ),
     );
+    // pipeline steps decide the basic stage; a plain stage change clears the step
+    assert.equal((await request("leads/" + id, "PATCH", { deal: "Nonsense" })).status, 400);
+    assert.equal((await request("leads/" + id, "PATCH", { deal: "Loan in Process" })).status, 200);
+    let step = (await request("state")).data;
+    assert.equal(step.leads.find((l) => l.id === id).stage, "Quotation given");
+    assert.equal(step.leads.find((l) => l.id === id).deal, "Loan in Process");
+    assert.ok(step.activities.some((a) => a.leadId === id && a.text === "Lead stage changed: Prospecting → Quotation given"));
+    assert.ok(step.activities.some((a) => a.leadId === id && a.text === "Pipeline step changed: none → Loan in Process"));
+    assert.equal((await request("leads/" + id, "PATCH", { deal: "Machine Dispatched" })).status, 200);
+    step = (await request("state")).data;
+    assert.ok(step.activities.some((a) => a.leadId === id && a.text === "Pipeline step changed: Loan in Process → Machine Dispatched"));
+    assert.equal((await request("leads/" + id, "PATCH", { deal: "Won" })).status, 200);
+    step = (await request("state")).data.leads.find((l) => l.id === id);
+    assert.deepEqual([step.stage, step.disposition], ["Closed", "Won"]);
+    assert.equal((await request("leads/" + id, "PATCH", { stage: "Prospecting" })).status, 200);
+    step = (await request("state")).data.leads.find((l) => l.id === id);
+    assert.deepEqual([step.stage, step.deal], ["Prospecting", ""]);
     await request("leads/" + id, "PATCH", { stage: "Closed" });
     assert.equal(
       (
