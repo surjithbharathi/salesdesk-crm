@@ -261,8 +261,41 @@ export function createMobileSync({ db, all, get, put, stamp, tx, log, keyPath, o
         `Phone recording attached · ${meta.mode === "manual" ? "user-reviewed" : "automatic match"}`,
       );
       assistantJob = onRecording({ recordingId: id, callId: c.id });
+      const twin = twinOf(c, all("mobileCalls").filter((o) => o.deviceId === "telecrm" && !o.recordingId));
+      if (twin) giveRecording(twin, { id: c.id, recordingId: id });
     });
     return { id, duplicate: false, ...(assistantJob ? { assistantJobId: assistantJob.id } : {}) };
+  }
+  // One call is often seen twice: by this phone app and by TeleCRM. TeleCRM does not hand out its recordings,
+  // so the phone's recording is shown on the TeleCRM copy too. Twins share the number's last 10 digits, a start
+  // or end time within 2 minutes, and a similar length; only the closest twin is used.
+  const TWIN_MS = 120000, tail = (p) => String(p || "").replace(/\D/g, "").slice(-10);
+  const gap = (a, b) => { const s = (c) => [c.startedAt, c.startedAt + (c.duration || 0) * 1000]; return Math.min(...s(a).flatMap((x) => s(b).map((y) => Math.abs(x - y)))); };
+  function twinOf(c, pool) {
+    const key = tail(c.phone);
+    if (key.length !== 10 || !Number.isFinite(c.startedAt)) return null;
+    const near = pool.filter((o) => o.id !== c.id && (o.deviceId === "telecrm") !== (c.deviceId === "telecrm") && tail(o.phone) === key && Number.isFinite(o.startedAt) &&
+      gap(o, c) <= TWIN_MS && Math.abs((o.duration || 0) - (c.duration || 0)) <= Math.max(10, (c.duration || 0) * 0.2));
+    return near.sort((a, b) => gap(a, c) - gap(b, c))[0] || null;
+  }
+  function giveRecording(target, from) {
+    put("mobileCalls", { ...target, recordingId: from.recordingId, matchMode: "twin", twinCallId: from.id });
+    const activity = get("activities", target.activityId);
+    if (activity) put("activities", { ...activity, recordingId: from.recordingId });
+  }
+  // TeleCRM calls still without a recording take the phone twin's recording. Returns how many were filled.
+  function shareTwins() {
+    const calls = all("mobileCalls"), phones = calls.filter((c) => c.deviceId !== "telecrm" && c.recordingId);
+    if (!phones.length) return 0;
+    let shared = 0;
+    tx(() => {
+      for (const c of calls) {
+        if (c.deviceId !== "telecrm" || c.recordingId) continue;
+        const twin = twinOf(c, phones);
+        if (twin) { giveRecording(c, twin); shared++; }
+      }
+    });
+    return shared;
   }
   // A recording that already exists elsewhere (the TeleCRM copy): kept encrypted like a phone recording, attached to its call,
   // and never sent to call AI by itself.
@@ -314,5 +347,5 @@ export function createMobileSync({ db, all, get, put, stamp, tx, log, keyPath, o
       return log(call.leadId,"Note",text.trim() || "Post-call voice feedback",{userId:d.owner,callId,feedbackId:clientId,feedbackSha:sha,...(voiceNoteId?{voiceNoteId}:{})});
     });
   }
-  return { devices, issue, revoke, authenticate, targets, nameLead, preferences, call, recording, importRecording, playback, feedback };
+  return { devices, issue, revoke, authenticate, targets, nameLead, preferences, call, recording, importRecording, shareTwins, playback, feedback };
 }

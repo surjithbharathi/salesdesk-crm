@@ -50,7 +50,7 @@ const msOf = (v) => {
 };
 const text = (v, max = 4000) => (typeof v === "string" ? v : v == null ? "" : typeof v === "object" ? JSON.stringify(v) : String(v)).slice(0, max);
 
-export function createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecording = () => null, now = () => Date.now(), keyPath, fetchImpl = (...a) => globalThis.fetch(...a), log = () => {} }) {
+export function createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecording = () => null, shareTwins = () => 0, now = () => Date.now(), keyPath, fetchImpl = (...a) => globalThis.fetch(...a), log = () => {} }) {
   db.exec("CREATE TABLE IF NOT EXISTS telecrm_settings(id INTEGER PRIMARY KEY CHECK(id=1), body BLOB)");
   let key, running = null;
   function secretKey() {
@@ -209,7 +209,9 @@ export function createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecor
     return copying;
   }
   async function copyRecordings() {
-    const s = raw(), counts = { recordings: 0, recordingsWaiting: 0, errors: 0 };
+    const s = raw(), counts = { recordings: 0, recordingsWaiting: 0, errors: 0, fromPhone: 0 };
+    // the phone app's recording of the same call comes first: TeleCRM does not share its own through the API
+    try { counts.fromPhone = shareTwins(); } catch (e) { log("Phone recordings for TeleCRM calls: " + e.message); }
     if (!s.enabled || !s.enterpriseId || !s.token) return counts;
     try { await fetchRecordings(s, counts); } catch (e) { log("TeleCRM recordings: " + e.message); }
     return counts;
