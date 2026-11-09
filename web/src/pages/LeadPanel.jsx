@@ -6,7 +6,7 @@ import { useToast } from "../toast.jsx";
 import { when, day, rupees, dueText, timeOnly, dayLabel, minutes } from "../format.js";
 import Icon from "../icons.jsx";
 import Recording from "../Recording.jsx";
-import ChatEntry, { fromActivity, userForNumber } from "../ChatEntry.jsx";
+import ChatEntry, { fromActivity, userForNumber, saidInChat } from "../ChatEntry.jsx";
 
 const OUTCOMES = ["Interested", "Callback", "No answer", "Not interested", "Connected"];
 const ICON = { Call: "phone", Note: "note", Message: "chat", Visit: "pin", System: "dot" };
@@ -39,13 +39,14 @@ function Timeline({ items, crm, customer, owner }) {
     groups[groups.length - 1].items.push(item);
   }
   if (!items.length) return <p className="empty">Nothing has been recorded for this lead yet.</p>;
+  const said = saidInChat(items);
   return groups.map((g) => (
     <section key={g.label}>
       <h3 className="tl-day">{g.label}</h3>
       <ul className="timeline">
         {g.items.map((a) => (
           <li key={a.id} className="tl-item wa-li">
-            <ChatEntry e={fromActivity(a, { customer, badge: userForNumber(crm?.users, a.numberLabel)?.badge || crm?.users?.get?.(a.senderId || a.userId || owner)?.badge || "", by: userForNumber(crm?.users, a.numberLabel)?.name || crm?.users?.get?.(a.userId || owner)?.name || "", at: timeOnly(a.createdAt) })} />
+            <ChatEntry e={fromActivity(a, { customer, badge: userForNumber(crm?.users, a.numberLabel)?.badge || crm?.users?.get?.(a.senderId || a.userId || owner)?.badge || "", by: userForNumber(crm?.users, a.numberLabel)?.name || crm?.users?.get?.(a.userId || owner)?.name || "", at: timeOnly(a.createdAt), said })} />
           </li>
         ))}
       </ul>

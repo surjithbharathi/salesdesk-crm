@@ -12,7 +12,12 @@ export const secondsText = (s) => {
 };
 
 // From a stored activity record to what a ChatEntry draws.
-export function fromActivity(a, { by = "", at = "", recordingId = "", customer = "", badge = "", recordingPending = false } = {}) {
+// What the customer already said in chat, so a lead card does not repeat the same words as the message beside it.
+const norm = (s) => String(s || "").replace(/\s+/g, " ").trim().toLowerCase();
+export const saidInChat = (activities) => new Set((activities || []).filter((a) => a.type === "Message").map((a) => norm(a.text)).filter(Boolean));
+const unrepeated = (lead, said) => (lead && said?.has(norm(lead.intro)) ? { ...lead, intro: "" } : lead);
+
+export function fromActivity(a, { by = "", at = "", recordingId = "", customer = "", badge = "", recordingPending = false, said = null } = {}) {
   const type = a.type;
   if (type === "Call") {
     const secs = Number(a.duration) || 0, dir = a.direction || "Outgoing";
@@ -20,7 +25,7 @@ export function fromActivity(a, { by = "", at = "", recordingId = "", customer =
   }
   if (type === "Message") return { id: a.id, kind: "message", customer, badge, out: a.direction === "Outgoing", text: a.text, sender: a.sender, via: a.via, label: a.numberLabel, by, at };
   if (type === "System") {
-    const arrived = leadArrivedOf(a.text);
+    const arrived = unrepeated(leadArrivedOf(a.text), said);
     return arrived ? { id: a.id, kind: "buylead", customer, badge, out: false, lead: arrived, by, at } : { id: a.id, kind: "system", text: a.text, at };
   }
   const lead = buyLeadOf(a);
