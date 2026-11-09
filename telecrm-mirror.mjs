@@ -95,6 +95,8 @@ export function createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecor
         if (attempt < 3) { await new Promise((r) => setTimeout(r, 500 * attempt)); continue; }
         fail("TeleCRM did not answer: " + (e.message || "network error"), 502);
       }
+      // The file download answers 403 when a path is not an attachment of the lead, which is how it treats call recordings.
+      if (res.status === 403 && path.includes("/file/download-url")) fail("TeleCRM does not share this recording through its API", 403);
       if (res.status === 401 || res.status === 403) fail("TeleCRM refused the token. Make a new Sync token under Settings, Website and API.", 502);
       if ((res.status === 429 || res.status >= 500) && attempt < 4) { await new Promise((r) => setTimeout(r, 1000 * attempt)); continue; }
       if (!res.ok) fail(`TeleCRM answered ${res.status} for ${method} ${path.split("?")[0]}`, 502);
@@ -241,7 +243,8 @@ export function createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecor
     } catch (e) {
       if (/refused the token/.test(e.message)) throw e;
       const cur = get("mobileCalls", call.id) || call;
-      if (!cur.recordingId) rawPut("mobileCalls", { ...cur, recordingTries: (cur.recordingTries || 0) + 1, recordingNote: text(e.message, 120) });
+      // a 403 will not change on a retry: give up on it at once
+      if (!cur.recordingId) rawPut("mobileCalls", { ...cur, recordingTries: e.status === 403 ? 9 : (cur.recordingTries || 0) + 1, recordingNote: text(e.message, 120) });
       counts.errors++;
     }
   }

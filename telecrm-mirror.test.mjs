@@ -46,6 +46,7 @@ function world(t) {
       const rows = body.actions ? tele.leads.filter((l) => tele.touched?.has(l.id)) : tele.leads;
       return ok({ data: rows.slice(skip, skip + limit), total_count: rows.length });
     }
+    if (/\/file\/download-url$/.test(path) && tele.denyFiles) return { ok: false, status: 403, json: async () => ({}) };
     if (/\/file\/download-url$/.test(path)) return ok({ download_url: "https://files.example/" + encodeURIComponent(u.searchParams.get("path")), expires_in: 3600, size: 10, content_type: "audio/mpeg" });
     const m = /^\/lead\/([^/]+)$/.exec(path);
     if (m) { const acts = tele.actions[m[1]] || []; return ok({ id: m[1], actions: acts.slice(skip, skip + limit) }); }
@@ -246,6 +247,20 @@ test("the newest recordings are copied first, and the waiting count is the whole
   assert.equal(one.recordingsWaiting, 10);
   assert.ok(w.get("mobileCalls", "tcc-c159").recordingId, "the newest call has its recording");
   assert.ok(!w.get("mobileCalls", "tcc-c0").recordingId, "the oldest waits for the next run");
+});
+
+test("a recording TeleCRM will not share (403) is given up at once and does not fail the sync", async (t) => {
+  const w = world(t);
+  connect(w);
+  w.tele.leads = [lead("aaa")];
+  w.tele.actions.aaa = [{ id: "c1", type: "INCOMING_CALL", creationTimestamp: 1799500000000, employeeid: "bala@deviindustries.com", duration: 40, feedback: "CONNECTED", callRecording: { name: "r.m4a", filePath: "x/y.mp3" } }];
+  w.tele.denyFiles = true;
+  const r = await w.mirror.sync();
+  assert.equal(r.ok, true, r.message);
+  const c = w.get("mobileCalls", "tcc-c1");
+  assert.equal(c.recordingTries, 9);
+  assert.match(c.recordingNote, /does not share/);
+  assert.equal((await w.mirror.copyRecordings()).recordingsWaiting, 0);
 });
 
 test("recordings can be copied on their own, without reading the leads again", async (t) => {

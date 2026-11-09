@@ -191,7 +191,7 @@ export default function ChatEntry({ e }) {
       <article className={`gwchat-msg call ${out ? "out" : ""} ${e.secs > 0 ? "" : "missed"}`}>
         <p className="call-line"><Phone /> <b>{callTitle(e)}</b>{e.secs > 0 ? <span> · {secondsText(e.secs)}</span> : null}</p>
         {!generic && <p>{e.text}</p>}
-        {e.recordingId ? <Recording id={e.recordingId} /> : e.recordingPending === "failed" ? <p className="rec-wait">Recording could not be copied from TeleCRM</p> : e.recordingPending ? <p className="rec-wait">Recording is being copied from TeleCRM</p> : null}
+        {e.recordingId ? <Recording id={e.recordingId} /> : e.recordingPending === "failed" ? <p className="rec-wait">Recording is only in TeleCRM</p> : e.recordingPending ? <p className="rec-wait">Recording is being copied from TeleCRM</p> : null}
         <small>{e.by || (out ? "Our team" : "Customer")}{e.outcome ? ` · ${e.outcome}` : ""}{e.at ? `, ${e.at}` : ""}</small>
       </article>
     );
