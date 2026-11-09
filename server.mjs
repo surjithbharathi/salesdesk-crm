@@ -16,6 +16,7 @@ import { phoneParts, phoneKeyOf, assertUniqueLead, initializeLeadPhoneIndex } fr
 import { readFile, mkdir } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
 import { randomUUID } from "node:crypto";
+import { gzipSync } from "node:zlib";
 import { createExtensions } from "./extensions.mjs";
 import { encryptedAuth } from "./whatsapp-auth.mjs";
 import { createWhatsApp, phoneDigits } from "./whatsapp.mjs";
@@ -372,7 +373,9 @@ function handleKpi(req, url, identity, send, body) {
 // The new web app (built into web/dist) is served under /next/. Static files only; its data comes from /api/kpi.
 const WEB_ROOT = fileURLToPath(new URL("./web/dist/", import.meta.url));
 const WEB_TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon", ".json": "application/json", ".webmanifest": "application/manifest+json", ".woff2": "font/woff2", ".woff": "font/woff" };
-async function serveWebApp(pathname, res) {
+const GZ_TYPES = new Set([".html", ".js", ".css", ".svg", ".json", ".webmanifest"]);
+const gzCache = new Map();
+async function serveWebApp(pathname, res, req) {
   let relative;
   try {
     relative = decodeURIComponent(pathname.slice("/next/".length)) || "index.html";
@@ -388,7 +391,15 @@ async function serveWebApp(pathname, res) {
   }
   try {
     const data = await readFile(file);
-    res.writeHead(200, { "Content-Type": type, "Cache-Control": relative.startsWith("assets/") ? "public, max-age=31536000, immutable" : "no-store" });
+    const headers = { "Content-Type": type, "Cache-Control": relative.startsWith("assets/") ? "public, max-age=31536000, immutable" : "no-store" };
+    // text files go out gzipped when the browser accepts it (the app script is about a third of its size then)
+    if (GZ_TYPES.has(extname(file)) && data.length > 1024 && /gzip/.test(req?.headers["accept-encoding"] || "")) {
+      let zipped = gzCache.get(file);
+      if (!zipped || !zipped.raw.equals(data)) { zipped = { raw: data, body: gzipSync(data, { level: 9 }) }; gzCache.set(file, zipped); }
+      res.writeHead(200, { ...headers, "Content-Encoding": "gzip", Vary: "Accept-Encoding" });
+      return res.end(zipped.body);
+    }
+    res.writeHead(200, headers);
     res.end(data);
   } catch {
     res.writeHead(404, { "Content-Type": "text/plain" });
@@ -797,8 +808,21 @@ const server = http.createServer(async (req, res) => {
     "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
   );
   const send = (status, v, headers) => {
-    res.writeHead(status, headers || { "Content-Type": "application/json" });
-    res.end(headers ? v : JSON.stringify(v));
+    if (headers) {
+      res.writeHead(status, headers);
+      res.end(v);
+      return;
+    }
+    // JSON answers can be many megabytes (the whole CRM state); gzip them when the browser accepts it,
+    // which makes them about ten times smaller on a phone connection.
+    const body = JSON.stringify(v);
+    if (body.length > 2048 && /\bgzip\b/.test(req.headers["accept-encoding"] || "")) {
+      res.writeHead(status, { "Content-Type": "application/json", "Content-Encoding": "gzip", Vary: "Accept-Encoding" });
+      res.end(gzipSync(body, { level: 6 }));
+      return;
+    }
+    res.writeHead(status, { "Content-Type": "application/json" });
+    res.end(body);
   };
   try {
     const url = new URL(req.url, "http://localhost");
@@ -1015,6 +1039,8 @@ const server = http.createServer(async (req, res) => {
       if(url.pathname==='/api/workspace/users'&&req.method==='POST'){sameOrigin();const input=await body(req);if(input.sendEmail&&!smtpEmail.settings().enabled)bad('Configure and enable SMTP before sending invitations');const result=workspaceAccess.invite(identity,input);if(input.sendEmail){try{await smtpEmail.send({to:input.email,purpose:'invitation',setupUrl:result.setupUrl,actor:identity.user.id});result.emailStatus='accepted';}catch{result.emailStatus='failed';}}send(201,result);return;}
       const accessUser=/^\/api\/workspace\/users\/([a-f0-9-]{36})(?:\/(setup-link))?$/.exec(url.pathname);
       if(accessUser&&['PATCH','POST'].includes(req.method)){sameOrigin();send(200,accessUser[2]?workspaceAccess.reset(identity,accessUser[1]):workspaceAccess.update(identity,accessUser[1],await body(req)));return;}
+      const numbersUser=/^\/api\/workspace\/users\/([\w-]{1,64})\/numbers$/.exec(url.pathname);
+      if(numbersUser&&req.method==='PUT'){sameOrigin();send(200,workspaceAccess.setNumbers(identity,numbersUser[1],await body(req)));return;}
       const removeUser=/^\/api\/workspace\/users\/([\w-]{1,64})$/.exec(url.pathname);
       if(removeUser&&req.method==='DELETE'){sameOrigin();send(200,workspaceAccess.remove(identity,removeUser[1]));return;}
       if(url.pathname==='/api/workspaces'&&req.method==='GET'){if(!workspaceRegistry)bad('CRM Owner access required',403);send(200,workspaceRegistry.list(identity));return;}
@@ -1350,7 +1376,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     // The new app is the front door. The earlier screens stay reachable at /classic/ for settings not rebuilt yet.
-    if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html")) return serveWebApp("/next/", res);
+    if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html")) return serveWebApp("/next/", res, req);
     if (req.method === "GET" && (url.pathname === "/classic" || url.pathname === "/classic/")) {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
       res.end(await readFile(new URL("public/index.html", import.meta.url)));
@@ -1361,7 +1387,7 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(301, { Location: "/next/" });
         return res.end();
       }
-      return serveWebApp(url.pathname, res);
+      return serveWebApp(url.pathname, res, req);
     }
     if (req.method === "GET" && files[url.pathname]) {
       const [path, type] = files[url.pathname];

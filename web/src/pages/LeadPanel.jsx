@@ -6,7 +6,7 @@ import { useToast } from "../toast.jsx";
 import { when, day, rupees, dueText, timeOnly, dayLabel, minutes } from "../format.js";
 import Icon from "../icons.jsx";
 import Recording from "../Recording.jsx";
-import ChatEntry, { fromActivity } from "../ChatEntry.jsx";
+import ChatEntry, { fromActivity, userForNumber } from "../ChatEntry.jsx";
 
 const OUTCOMES = ["Interested", "Callback", "No answer", "Not interested", "Connected"];
 const ICON = { Call: "phone", Note: "note", Message: "chat", Visit: "pin", System: "dot" };
@@ -31,7 +31,7 @@ export function Facts({ rows }) {
   );
 }
 
-function Timeline({ items, crm, customer }) {
+function Timeline({ items, crm, customer, owner }) {
   const groups = [];
   for (const item of items) {
     const label = dayLabel(item.createdAt);
@@ -45,7 +45,7 @@ function Timeline({ items, crm, customer }) {
       <ul className="timeline">
         {g.items.map((a) => (
           <li key={a.id} className="tl-item wa-li">
-            <ChatEntry e={fromActivity(a, { customer, badge: crm?.users?.get?.(a.senderId || a.userId)?.badge || "", by: crm?.users?.get?.(a.userId)?.name || "", at: timeOnly(a.createdAt) })} />
+            <ChatEntry e={fromActivity(a, { customer, badge: userForNumber(crm?.users, a.numberLabel)?.badge || crm?.users?.get?.(a.senderId || a.userId || owner)?.badge || "", by: userForNumber(crm?.users, a.numberLabel)?.name || crm?.users?.get?.(a.userId || owner)?.name || "", at: timeOnly(a.createdAt) })} />
           </li>
         ))}
       </ul>
@@ -222,7 +222,7 @@ export default function LeadPanel({ id, onClose }) {
               ))}
             </div>
             <div className="drawer-body" role="tabpanel">
-              {tab === "timeline" ? <Timeline items={activities} crm={crm} customer={lead.name} /> : tab === "work" ? <Update key={lead.id} lead={lead} crm={crm} /> : (
+              {tab === "timeline" ? <Timeline items={activities} crm={crm} customer={lead.name} owner={lead.owner} /> : tab === "work" ? <Update key={lead.id} lead={lead} crm={crm} /> : (
                 <>
                   <h3>Work so far</h3>
                   <Facts rows={[

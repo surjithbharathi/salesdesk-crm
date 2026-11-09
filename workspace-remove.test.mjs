@@ -61,3 +61,14 @@ test("the last active workspace owner cannot be removed", () => {
   w.db.prepare("INSERT INTO workspace_roles VALUES('boss','admin','{}')").run();
   assert.throws(() => w.access.remove(w.as("boss"), "admin1"), (e) => e.status === 400 || e.status === 403);
 });
+
+test("a person's phone and WhatsApp numbers are saved as digits without signing them out", () => {
+  const w = world();
+  const out = w.access.setNumbers(w.as("boss"), "bala", { numbers: ["90390 36583", "+91 98428-71640", "90390 36583"] });
+  assert.deepEqual(out.numbers, ["9039036583", "919842871640"]);
+  assert.deepEqual(w.get("users", "bala").numbers, ["9039036583", "919842871640"]);
+  assert.equal(w.db.prepare("SELECT COUNT(*) n FROM auth_sessions WHERE user_id='bala'").get().n, 1, "still signed in");
+  assert.throws(() => w.access.setNumbers(w.as("boss"), "bala", { numbers: ["123"] }), /8 to 15 digits/);
+  assert.throws(() => w.access.setNumbers(w.as("bala"), "admin1", { numbers: [] }), status(403));
+  assert.deepEqual(w.access.setNumbers(w.as("boss"), "bala", { numbers: [] }).numbers, []);
+});

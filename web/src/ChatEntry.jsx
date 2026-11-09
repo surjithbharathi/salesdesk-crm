@@ -23,6 +23,16 @@ export function fromActivity(a, { by = "", at = "", recordingId = "", customer =
   return { id: a.id, kind: type === "Visit" ? "visit" : "note", customer, badge, out: true, text: a.text, by, at, voiceNoteId: a.voiceNoteId, type };
 }
 
+// The team member whose phone / WhatsApp number appears in a label like "Sales 90390 36589" (numbers are set in Settings, People).
+export function userForNumber(users, label) {
+  const digits = String(label || "").replace(/[^0-9]/g, "");
+  if (digits.length < 8) return null;
+  for (const u of users?.values?.() || []) {
+    if ((u.numbers || []).some((n) => { const tail = String(n).slice(-10); return tail.length >= 8 && digits.endsWith(tail); })) return u;
+  }
+  return null;
+}
+
 // Two letters of a name, like a profile picture: Surjith -> SU, Bala -> BA
 export const initialsOf = (name) => {
   const s = String(name || "").replace(/[^p{L}p{N} ]/gu, "").trim();
@@ -70,7 +80,10 @@ export default function ChatEntry({ e }) {
     );
   }
   // who did it: our team member on the right, the customer on the left
-  const who = out ? (e.kind === "message" ? e.sender || e.by : e.by) || "Our team" : e.kind === "message" && e.sender && e.sender !== "Customer" ? e.sender : e.customer || "Customer";
-  const avatar = <span className={`wa-av ${out ? "us" : "them"}`} title={who} aria-label={who}>{out && e.badge ? e.badge : initialsOf(who)}</span>;
+  // The badge always names the team member whose number the thing happened on, on both sides:
+  // right = what they did, left = what the customer did to them (their number was called or messaged).
+  const handler = (out && e.kind === "message" ? e.sender : "") || e.by || "Our team";
+  const title = out ? handler : `${e.customer || "Customer"} to ${handler}`;
+  const avatar = <span className={`wa-av ${out ? "us" : "them"}`} title={title} aria-label={title}>{e.badge || initialsOf(handler)}</span>;
   return <div className={`wa-row ${out ? "out" : ""}`}>{!out && avatar}{body}{out && avatar}</div>;
 }

@@ -20,8 +20,15 @@ export function CrmProvider({ me, children }) {
     }
   }, []);
   useEffect(() => {
+    let loadedAt = Date.now();
     reload();
-    const refresh = () => document.visibilityState === "visible" && reload();
+    // Coming back to the tab refreshes the data, but not more than once a minute: on a phone every app switch
+    // would otherwise download the whole CRM again.
+    const refresh = () => {
+      if (document.visibilityState !== "visible" || Date.now() - loadedAt < 60000) return;
+      loadedAt = Date.now();
+      reload();
+    };
     document.addEventListener("visibilitychange", refresh);
     return () => document.removeEventListener("visibilitychange", refresh);
   }, [reload]);

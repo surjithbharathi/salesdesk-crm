@@ -85,6 +85,39 @@ function Edit({ user, access, onSaved, onCancel }) {
   );
 }
 
+// Which phone / WhatsApp numbers this person works on. Chats and calls on those numbers then show this person.
+function Numbers({ user, onSaved, onCancel }) {
+  const notify = useToast();
+  const [text, setText] = useState((user.numbers || []).join(", "));
+  const [busy, setBusy] = useState(false);
+  async function save(event) {
+    event.preventDefault();
+    setBusy(true);
+    try {
+      const numbers = text.split(/[,\n;]+/).map((n) => n.trim()).filter(Boolean);
+      await crmSend("PUT", `workspace/users/${user.id}/numbers`, { numbers });
+      notify("Numbers saved.");
+      onSaved();
+    } catch (e) {
+      notify(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <form className="user-edit" onSubmit={save}>
+      <label>Numbers {user.name} uses (phone and WhatsApp)
+        <input className="field-input" value={text} onChange={(e) => setText(e.target.value)} placeholder="90390 36589, 98428 71640" inputMode="tel" />
+      </label>
+      <small className="muted">Separate numbers with commas. Calls and WhatsApp messages on these numbers show {user.name}'s badge in the activity history. Saving does not sign them out.</small>
+      <span className="newlead-actions">
+        <button className="btn btn-primary" disabled={busy}>Save numbers</button>
+        <button type="button" className="btn btn-quiet" onClick={onCancel}>Cancel</button>
+      </span>
+    </form>
+  );
+}
+
 export default function Users({ access, meId }) {
   const notify = useToast();
   const [version, setVersion] = useState(0);
@@ -147,16 +180,18 @@ export default function Users({ access, meId }) {
       <Section title="People" desc="Everyone who can open this CRM. Changing someone's access signs them out on their devices." status={users ? `${users.length} people` : undefined} tone="off">
         <div className="table-frame">
           <table className="grid">
-            <thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Status</th><th><span className="sr">Actions</span></th></tr></thead>
+            <thead><tr><th>Name</th><th>Username</th><th>Numbers</th><th>Role</th><th>Status</th><th><span className="sr">Actions</span></th></tr></thead>
             <tbody>
               {(users || []).map((u) => (
                 <React.Fragment key={u.id}>
                   <tr>
                     <td><b>{u.name}</b>{u.crmOwner && <span className="note note-warn small-note">Ultra Admin</span>}</td>
                     <td>{u.username || <span className="muted">No login</span>}</td>
+                    <td>{u.numbers?.length ? u.numbers.join(", ") : <span className="muted">None</span>}</td>
                     <td>{ROLES.find(([r]) => r === u.role)?.[1] || u.role}</td>
                     <td>{u.active ? "Active" : <span className="muted">Disabled</span>}</td>
                     <td className="right">
+                      <button className="btn btn-quiet" onClick={() => setEditing(editing === `n:${u.id}` ? "" : `n:${u.id}`)}>Numbers</button>
                       {u.hasLogin ? (
                         <span className="quick-actions">
                           <button className="btn" onClick={() => setEditing(editing === u.id ? "" : u.id)}>Edit access</button>
@@ -167,7 +202,10 @@ export default function Users({ access, meId }) {
                     </td>
                   </tr>
                   {editing === u.id && (
-                    <tr className="reasons"><td colSpan={5}><Edit user={u} access={access} onCancel={() => setEditing("")} onSaved={() => { setEditing(""); reload(); }} /></td></tr>
+                    <tr className="reasons"><td colSpan={6}><Edit user={u} access={access} onCancel={() => setEditing("")} onSaved={() => { setEditing(""); reload(); }} /></td></tr>
+                  )}
+                  {editing === `n:${u.id}` && (
+                    <tr className="reasons"><td colSpan={6}><Numbers user={u} onCancel={() => setEditing("")} onSaved={() => { setEditing(""); reload(); }} /></td></tr>
                   )}
                 </React.Fragment>
               ))}

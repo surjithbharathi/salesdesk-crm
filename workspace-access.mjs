@@ -16,7 +16,7 @@ export function createWorkspaceAccess({db,get,put,userAuth,crmOwnerId='',origin=
   const requirePermission=(identity,permission)=>{if(!identity||!can(identity.user.id,permission))fail('Permission required: '+permission,403);};
   const audit=(actor,target,action)=>db.prepare('INSERT INTO workspace_access_audit VALUES(?,?,?,?,?)').run(randomUUID(),auditActorId||actor,target,action,new Date().toISOString());
   const withinAuthority=(actor,permissions)=>{if(actor.role!=='owner'&&PERMISSIONS.some(key=>permissions[key]&&!actor.permissions[key]))fail('Workspace Owner must manage permissions beyond your own access',403);};
-  function list(identity){requirePermission(identity,'users.manage');const accounts=userAuth.listAccounts();return db.prepare("SELECT body FROM records WHERE kind='users'").all().map(row=>{const user=JSON.parse(row.body),account=accounts.find(account=>account.id===user.id);return {id:user.id,name:user.name,username:account?.username||'',email:user.email||'',active:Boolean(user.active),hasLogin:Boolean(account),...profile(user.id)};});}
+  function list(identity){requirePermission(identity,'users.manage');const accounts=userAuth.listAccounts();return db.prepare("SELECT body FROM records WHERE kind='users'").all().map(row=>{const user=JSON.parse(row.body),account=accounts.find(account=>account.id===user.id);return {id:user.id,name:user.name,username:account?.username||'',email:user.email||'',active:Boolean(user.active),hasLogin:Boolean(account),numbers:Array.isArray(user.numbers)?user.numbers:[],...profile(user.id)};});}
   function invite(identity,input){
     requirePermission(identity,'users.manage');
     if(!['owner','admin','manager','member','viewer'].includes(input.role))fail('Choose a valid workspace role');
@@ -59,6 +59,17 @@ export function createWorkspaceAccess({db,get,put,userAuth,crmOwnerId='',origin=
     return {updated:true};
   }
   // Removes a person for good: their login, sessions and role go, and what they owned becomes unassigned (leads, follow-ups, deals, chats keep their history).
+  // The phone / WhatsApp numbers a person works on, so chats and calls on that number show who it belongs to.
+  // Saving them does not sign the person out.
+  function setNumbers(identity,id,input){
+    requirePermission(identity,'users.manage');
+    const target=get('users',id);if(!target)fail('User not found',404);
+    const list=Array.isArray(input?.numbers)?input.numbers:null;if(!list||list.length>10)fail('Up to 10 numbers');
+    const numbers=[...new Set(list.map(n=>String(n||'').replace(/[^0-9]/g,'')).filter(Boolean))];
+    if(numbers.some(n=>n.length<8||n.length>15))fail('Each number needs 8 to 15 digits');
+    put('users',{...target,numbers,updatedAt:new Date().toISOString()});audit(identity.user.id,id,'numbers.updated');
+    return {numbers};
+  }
   function remove(identity,id){
     requirePermission(identity,'users.manage');
     const target=get('users',id);if(!target)fail('User not found',404);
@@ -80,5 +91,5 @@ export function createWorkspaceAccess({db,get,put,userAuth,crmOwnerId='',origin=
     return {removed:true,name:target.name,unassigned:{leads:counts.leads,tasks:counts.tasks,deals:counts.deals}};
   }
   function reset(identity,id){requirePermission(identity,'users.manage');const actor=profile(identity.user.id),target=profile(id);if(target.role==='owner'&&actor.role!=='owner')fail('Only a Workspace Owner can reset owner access',403);withinAuthority(actor,target.permissions);hierarchy(actor,target.role);const account=db.prepare('SELECT username FROM auth_accounts WHERE user_id=?').get(id);if(!account)fail('User not found',404);const value=userAuth.issuePasswordReset(account.username);audit(identity.user.id,id,'setup_link.created');return {setupUrl:origin+'/reset-password.html#token='+encodeURIComponent(value.token),expiresAt:value.expiresAt};}
-  return {profile,can,requirePermission,list,invite,update,reset,remove};
+  return {profile,can,requirePermission,list,invite,update,reset,remove,setNumbers};
 }
