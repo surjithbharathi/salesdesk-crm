@@ -87,7 +87,9 @@ export const sourceLabel = (s) => {
 export const sourceKeys = (s) => {
   const v = String(s || "");
   if (/whatsapp\s*cloud|click.?to.?whatsapp|ctwa/i.test(v)) return ["meta", "whatsapp"];
-  if (/facebook|instagram|meta/i.test(v)) return ["meta"];
+  if (/instagram/i.test(v)) return ["instagram"];
+  if (/facebook/i.test(v)) return ["facebook"];
+  if (/meta/i.test(v)) return ["meta"];
   if (/indiamart/i.test(v)) return ["indiamart"];
   if (/trade\s*india/i.test(v)) return ["tradeindia"];
   if (/just\s*dial/i.test(v)) return ["justdial"];
@@ -97,14 +99,13 @@ export const sourceKeys = (s) => {
   return ["other"];
 };
 
-// Small source marks in each platform's colour (simple glyphs, not the platforms' artwork).
-const LETTERS = { indiamart: "IM", tradeindia: "TI", justdial: "Jd", google: "G" };
+// Each platform's own logo (web/public/sources: IndiaMART, TradeIndia and JustDial site icons; Meta, WhatsApp, Google,
+// Facebook and Instagram marks in their brand colour). Website and unknown sources get a plain drawn mark.
+const LOGOS = { indiamart: "indiamart.png", tradeindia: "tradeindia.png", justdial: "justdial.png", meta: "meta.svg", whatsapp: "whatsapp.svg", google: "google.svg", facebook: "facebook.svg", instagram: "instagram.svg" };
 function Mark({ k }) {
+  if (LOGOS[k]) return <img className={`src-logo src-${k}`} src={`${import.meta.env.BASE_URL}sources/${LOGOS[k]}`} width="16" height="16" alt="" />;
   const common = { className: `src-logo src-${k}`, viewBox: "0 0 24 24", width: 16, height: 16, "aria-hidden": "true" };
-  if (k === "meta") return <svg {...common}><rect width="24" height="24" rx="6" /><path d="M4.5 12c0-2.3 1.3-4.2 3-4.2 2.6 0 4.4 8.4 7 8.4 1.7 0 3-1.9 3-4.2s-1.3-4.2-3-4.2c-2.6 0-4.4 8.4-7 8.4-1.7 0-3-1.9-3-4.2z" fill="none" stroke="#fff" strokeWidth="2" /></svg>;
-  if (k === "whatsapp") return <svg {...common}><circle cx="12" cy="12" r="12" /><path d="M9.2 6.8c.3 0 .6.1.7.5l.8 1.9c.1.3 0 .6-.2.8l-.6.7c.7 1.4 1.8 2.5 3.3 3.3l.7-.6c.2-.2.5-.3.8-.2l1.9.8c.4.1.5.4.5.7v1.3c0 .7-.6 1.2-1.3 1.2C10.6 17 7 13.4 7 9.4c0-.7.5-1.3 1.2-1.3z" fill="#fff" /></svg>;
   if (k === "website") return <svg {...common}><circle cx="12" cy="12" r="12" /><path d="M5 12h14M12 5c2.2 2 2.2 12 0 14M12 5c-2.2 2-2.2 12 0 14" fill="none" stroke="#fff" strokeWidth="1.5" /><circle cx="12" cy="12" r="7" fill="none" stroke="#fff" strokeWidth="1.5" /></svg>;
-  if (LETTERS[k]) return <svg {...common}><rect width="24" height="24" rx="6" /><text x="12" y="16.2" textAnchor="middle" fontSize="11" fontWeight="700" fill="#fff">{LETTERS[k]}</text></svg>;
   return <svg {...common}><rect width="24" height="24" rx="6" /><path d="M7 7h6l4 4-6 6-4-4z" fill="none" stroke="#fff" strokeWidth="1.8" /></svg>;
 }
 export const SourceLogo = ({ source }) => <span className="src-logos">{sourceKeys(source).map((k) => <Mark key={k} k={k} />)}</span>;
