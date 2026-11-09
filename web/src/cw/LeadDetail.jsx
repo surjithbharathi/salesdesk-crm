@@ -6,6 +6,7 @@ import { dueText } from "../format.js";
 import Icon from "../icons.jsx";
 import Recording from "../Recording.jsx";
 import GatewayChat from "../GatewayChat.jsx";
+import ChatEntry from "../ChatEntry.jsx";
 import { PIPELINE, pipelineStep } from "../pipeline.js";
 import { buildModel, hms, initials, money, startOfDay } from "./model.js";
 
@@ -249,20 +250,14 @@ export default function CwLeadDetail({ id, onClose }) {
                     <div className="row"><button type="button" className="ghost" onClick={() => setCallForm(null)}>Cancel</button><button type="button" className="ghost" disabled={busy} onClick={() => logCall(false)}>Not answered</button><button type="submit" className="solid" disabled={busy}>Save call</button></div>
                   </form>
                 )}
-                {timeline.map((a) => a.kind === "call" ? (
-                  <div key={a.id} className="item item--call">
-                    <span className={`item__ic ${a.connected ? "" : "item__ic--missed"}`}><Icon name={a.connected ? iconOf(a) : "missed"} size={15} /></span>
-                    <div className="callcard">
-                      <header><b>{a.by || ownerName}</b> {a.dir === "in" ? (a.connected ? "received a call" : "missed a call") : a.connected ? "placed a call" : "called, no answer"}{a.secs ? <em className="dur">{hms(a.secs)}</em> : null}<small>{ago(a.at)}</small></header>
-                      {recordings.get(a.id) && <Recording id={recordings.get(a.id)} />}
-                    </div>
-                  </div>
-                ) : (
-                  <div key={a.id} className="item">
-                    <span className={`item__ic item__ic--${a.kind}`}><Icon name={iconOf(a)} size={15} /></span>
-                    <span className="item__body"><b>{a.text}</b><small>{a.by || ownerName} · {when(a.at)}</small></span>
-                  </div>
-                ))}
+                {timeline.map((a) => {
+                  const by = a.by || ownerName;
+                  const e = a.kind === "call" ? { id: a.id, kind: "call", out: a.dir === "out", dir: a.dir === "in" ? "Incoming" : "Outgoing", secs: a.secs, by, at: when(a.at), recordingId: recordings.get(a.id) || "" }
+                    : a.kind === "whatsapp" ? { id: a.id, kind: "message", out: a.out, text: a.text, sender: a.sender, via: a.via, label: a.label, by, at: when(a.at) }
+                    : a.kind === "stage" ? { id: a.id, kind: "system", text: a.text, at: when(a.at) }
+                    : { id: a.id, kind: a.kind === "visit" ? "visit" : "note", out: true, text: a.text, by, at: when(a.at) };
+                  return <div key={a.id} className="item item--wa"><ChatEntry e={e} /></div>;
+                })}
                 {!timeline.length && (
                   <div className="empty">
                     <span className="empty__ic"><Icon name="clock" size={24} /></span><b>No {chip === "all" ? "interactions" : `${CHIPS.find(([k]) => k === chip)[1].toLowerCase()} interactions`} yet</b>

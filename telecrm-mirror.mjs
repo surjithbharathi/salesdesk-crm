@@ -12,8 +12,10 @@ import { PIPELINE } from "./pipeline.mjs";
 
 const BASE = "https://next.telecrm.in/autoupdate/v2";
 const fail = (message, status = 400) => { throw Object.assign(Error(message), { status }); };
-const DEFAULTS = { enabled: false, enterpriseId: "", token: "", intervalMinutes: 5, lastFullAt: 0, lastRun: null, uidMap: {} };
+const DEFAULTS = { enabled: false, enterpriseId: "", token: "", intervalMinutes: 5, lastFullAt: 0, lastRun: null, uidMap: {}, importVersion: 0 };
 const MAX_AUDIO = 20 * 1024 * 1024;
+// Bump when the way things are mapped changes: the next run then reads every lead again instead of skipping the ones TeleCRM has not touched.
+const IMPORT_VERSION = 2;
 const RECORDINGS_PER_RUN = 150;
 const norm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
@@ -145,7 +147,7 @@ export function createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecor
     if (f === "NA" || f === "" || !duration) return "No answer";
     return f.charAt(0) + f.slice(1).toLowerCase().replace(/_/g, " ");
   };
-  const WA = /^(Customer|Sent from gateway)\s*\|\s*([^\n]*)\n?([\s\S]*)$/;
+  const WA = /^(Customer|Sent from [^|\n]{1,40}?)\s*\|\s*([^\n]*)\n?([\s\S]*)$/;
   const nameOf = (ctx, id) => ([...ctx.users.values()].find((u) => u.id === id)?.name) || "";
 
   function importActions(lead, actions, ctx) {
@@ -166,12 +168,12 @@ export function createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecor
           ctx.counts.calls++;
           if (rec?.filePath && !prior?.recordingId) ctx.counts.recordingsWaiting++;
         } else if (wa || /WHATSAPP/.test(type)) {
-          const incoming = wa ? wa[1] === "Customer" : type.startsWith("INCOMING"), label = wa ? wa[2].trim() : "", body = text(wa ? wa[3] : notes);
+          const incoming = wa ? wa[1] === "Customer" : type.startsWith("INCOMING"), via = wa && !incoming ? (/gateway/i.test(wa[1]) ? "Gateway" : /whatsapp/i.test(wa[1]) ? "WhatsApp" : wa[1].replace(/^Sent from\s+/i, "")) : "", label = wa ? wa[2].trim() : "", body = text(wa ? wa[3] : notes);
           const convId = "tcv-" + tid;
           if (!get("conversations", convId)) rawPut("conversations", { id: convId, leadId: lead.id, subject: "WhatsApp · TeleCRM", channel: "WhatsApp", provider: "telecrm", status: "Open", owner: lead.owner || "", createdAt: iso(at), updatedAt: iso(at) });
-          const sender = incoming ? "" : person, senderName = incoming ? lead.name : wa && wa[1] === "Sent from gateway" ? "Gateway" : nameOf(ctx, person) || "Team";
-          rawPut("messages", { ...base, id: "tcm-" + a.id, provider: "telecrm", providerId: a.id, jid: lead.phoneKey ? lead.phoneKey + "@s.whatsapp.net" : "", conversationId: convId, direction: incoming ? "Incoming" : "Outgoing", text: body, status: incoming ? "Received" : "Sent", sender: senderName, senderId: sender, numberLabel: label });
-          rawPut("activities", { ...base, id: "tca-" + tid + "-" + a.id, type: "Message", direction: incoming ? "Incoming" : "Outgoing", text: body, userId: sender, sender: senderName });
+          const sender = incoming ? "" : person || lead.owner || "", senderName = incoming ? lead.name : nameOf(ctx, sender) || "Team";
+          rawPut("messages", { ...base, id: "tcm-" + a.id, provider: "telecrm", providerId: a.id, jid: lead.phoneKey ? lead.phoneKey + "@s.whatsapp.net" : "", conversationId: convId, direction: incoming ? "Incoming" : "Outgoing", text: body, status: incoming ? "Received" : "Sent", sender: senderName, senderId: sender, numberLabel: label, via });
+          rawPut("activities", { ...base, id: "tca-" + tid + "-" + a.id, type: "Message", direction: incoming ? "Incoming" : "Outgoing", text: body, userId: sender, sender: senderName, numberLabel: label, via });
           const conv = get("conversations", convId);
           if (conv && (!conv.lastAt || conv.lastAt < at)) rawPut("conversations", { ...conv, lastAt: at, updatedAt: iso(at) });
           ctx.counts.messages++;
@@ -274,7 +276,7 @@ export function createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecor
       const result = { at: started, mode: "", ok: false, message: "", ...counts };
       try {
         if (!s.enterpriseId || !s.token) fail("Add the workspace ID and the Sync token first");
-        const doFull = full || !s.lastFullAt || started - s.lastFullAt > 24 * 3600000;
+        const redo = (s.importVersion || 0) < IMPORT_VERSION, doFull = full || redo || !s.lastFullAt || started - s.lastFullAt > 24 * 3600000;
         result.mode = doFull ? "full" : "delta";
         const members = [];
         for (let skip = 0; skip < 500; skip += 10) { const r = await api(s, "GET", `/team-members?skip=${skip}&limit=10`); members.push(...(r.data || [])); if ((r.data || []).length < 10) break; }
@@ -296,7 +298,7 @@ export function createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecor
               counts.seen++;
               const cur = byTid.get(it.id), f = it.fields || {};
               const same = cur && cur.telecrm.modifiedOn === (Number(f.modified_on) || 0) && cur.telecrm.lastActivityOn === (Number(f.last_activity_on) || 0) && cur.telecrm.status === text(it.status || f.status, 100) && cur.telecrm.assignee === String(it.employeeid || "").toLowerCase() && cur.telecrm.nextFollowup === (msOf(f.next_followup) || null);
-              if (!same) todo.push(it);
+              if (!same || redo) todo.push(it);
             }
             const loaded = [];
             for (const it of todo) { try { loaded.push([it, await actionsOf(s, it.id)]); } catch (e) { if (e.status === 502 && /refused/.test(e.message)) throw e; counts.errors++; loaded.push([it, []]); } }
@@ -310,6 +312,7 @@ export function createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecor
         after.lastRun = { ...result, took: now() - started };
         if (ctx.uidDirty) after.uidMap = ctx.uidMap;
         if (doFull) after.lastFullAt = started;
+        if (redo) after.importVersion = IMPORT_VERSION;
         store(after);
       } catch (e) {
         Object.assign(result, counts, { ok: false, message: e.message || "Sync failed" });

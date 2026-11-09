@@ -7,6 +7,7 @@ import Recording from "../Recording.jsx";
 import { PIPELINE, pipelineStep } from "../pipeline.js";
 import { TIcon } from "./icons.jsx";
 import GatewayChat, { useGatewayOn } from "../GatewayChat.jsx";
+import ChatEntry, { fromActivity } from "../ChatEntry.jsx";
 
 // One lead in the TeleCRM style: header with status and assignee, field tabs, the action bar and the activity history.
 // The class names are the reference web app's, so its style sheet (cwt/lead-detail.css) applies as written.
@@ -185,26 +186,8 @@ export function LeadDetail({ id }) {
           </div>
           <ul className="history">
             {entries.map((a) => {
-              const at = Date.parse(a.occurredAt || a.createdAt), by = crm.users.get(a.userId)?.name || ownerName;
-              return (
-                <li key={a.id}>
-                  <TIcon name="pin" className="pin" />
-                  {a.type === "Call" ? (
-                    <>
-                      <span className={`kind-ic ${(Number(a.duration) || 0) > 0 ? "ok" : "bad"}`}><TIcon name="phone" /></span>
-                      <div className="body">{Number(a.duration) > 0 && <b>{duration(Number(a.duration))}</b>} <span className="call-state">{callLabel(a)}</span> <span className="muted">({a.direction || "Outgoing"})</span>{recordings.get(a.id) && <Recording id={recordings.get(a.id)} />}</div>
-                      <span className="when">{ago(at)}</span><span className="av">{initials(by)}</span>
-                    </>
-                  ) : a.type === "System" ? (
-                    <><span className="kind-ic"><TIcon name="robot" /></span><div className="body muted">{a.text}</div><span className="when">{ago(at)}</span></>
-                  ) : (
-                    <>
-                      <span className="kind-ic"><TIcon name="notePlus" /></span><span className="kind">{a.type === "Message" ? "WhatsApp Message" : a.type}</span>
-                      <div className="body">{a.text}{a.voiceNoteId && <Recording id={a.voiceNoteId} ai={false} />}</div><span className="when">{ago(at)}</span><span className="av">{initials(by)}</span>
-                    </>
-                  )}
-                </li>
-              );
+              const by = crm.users.get(a.userId)?.name || ownerName;
+              return <li key={a.id} className="wa-li"><ChatEntry e={fromActivity(a, { by, at: when(a.occurredAt || a.createdAt), recordingId: recordings.get(a.id) || "" })} /></li>;
             })}
             {!entries.length && <li className="none">No activity yet.</li>}
           </ul>

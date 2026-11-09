@@ -6,6 +6,7 @@ import { useToast } from "../toast.jsx";
 import { when, day, rupees, dueText, timeOnly, dayLabel, minutes } from "../format.js";
 import Icon from "../icons.jsx";
 import Recording from "../Recording.jsx";
+import ChatEntry, { fromActivity } from "../ChatEntry.jsx";
 
 const OUTCOMES = ["Interested", "Callback", "No answer", "Not interested", "Connected"];
 const ICON = { Call: "phone", Note: "note", Message: "chat", Visit: "pin", System: "dot" };
@@ -30,7 +31,7 @@ export function Facts({ rows }) {
   );
 }
 
-function Timeline({ items }) {
+function Timeline({ items, crm }) {
   const groups = [];
   for (const item of items) {
     const label = dayLabel(item.createdAt);
@@ -43,13 +44,8 @@ function Timeline({ items }) {
       <h3 className="tl-day">{g.label}</h3>
       <ul className="timeline">
         {g.items.map((a) => (
-          <li key={a.id} className="tl-item">
-            <span className="tl-icon"><Icon name={ICON[a.type] || "dot"} size={16} /></span>
-            <span>
-              <span className="tl-what">{a.text || a.type}</span>
-              <br /><span className="tl-when">{timeOnly(a.createdAt)}{a.outcome ? `, ${a.outcome}` : ""}</span>
-              {a.voiceNoteId && <Recording id={a.voiceNoteId} ai={false} />}
-            </span>
+          <li key={a.id} className="tl-item wa-li">
+            <ChatEntry e={fromActivity(a, { by: crm?.users?.get?.(a.userId)?.name || "", at: timeOnly(a.createdAt) })} />
           </li>
         ))}
       </ul>
@@ -226,7 +222,7 @@ export default function LeadPanel({ id, onClose }) {
               ))}
             </div>
             <div className="drawer-body" role="tabpanel">
-              {tab === "timeline" ? <Timeline items={activities} /> : tab === "work" ? <Update key={lead.id} lead={lead} crm={crm} /> : (
+              {tab === "timeline" ? <Timeline items={activities} crm={crm} /> : tab === "work" ? <Update key={lead.id} lead={lead} crm={crm} /> : (
                 <>
                   <h3>Work so far</h3>
                   <Facts rows={[

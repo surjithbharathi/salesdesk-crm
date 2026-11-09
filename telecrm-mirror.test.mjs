@@ -89,6 +89,7 @@ test("a full run mirrors people, leads, their timeline and the follow-up as a ta
     { id: "x2", type: "USER_NOTE", creationTimestamp: 1799600000000, employeeid: bala, text: "Wants 2 hp motor" },
     { id: "x3", type: "ACTION_1013", creationTimestamp: 1799700000000, employeeid: bala, fields: { notes: "Customer | Sales 82828 27732\nPrice please?" } },
     { id: "x4", type: "ACTION_1013", creationTimestamp: 1799800000000, employeeid: bala, fields: { notes: "Sent from gateway | Sales 82828 27732\nRs 2.5 lakh with GST" } },
+    { id: "x5", type: "ACTION_1013", creationTimestamp: 1799900000000, employeeid: bala, fields: { notes: "Sent from WhatsApp | Sales 82828 27732\nOk sir, will call you" } },
   ];
   const r = await w.mirror.sync();
   assert.equal(r.ok, true, r.message);
@@ -103,7 +104,7 @@ test("a full run mirrors people, leads, their timeline and the follow-up as a ta
   assert.equal(a.owner, users.find((u) => u.email === "bala@deviindustries.com").id);
   assert.match(a.phone, /^\+91/);
   const acts = w.all("activities").filter((x) => x.leadId === a.id);
-  assert.deepEqual(acts.map((x) => x.type).sort(), ["Call", "Call", "Message", "Message", "Note"]);
+  assert.deepEqual(acts.map((x) => x.type).sort(), ["Call", "Call", "Message", "Message", "Message", "Note"]);
   assert.equal(acts.find((x) => x.type === "Call" && x.duration === 95).outcome, "Connected");
   assert.equal(acts.find((x) => x.type === "Call" && x.duration === 0).outcome, "No answer");
   // calls are native phone-call records, recordings are real audio attached to them
@@ -118,8 +119,10 @@ test("a full run mirrors people, leads, their timeline and the follow-up as a ta
   assert.equal(r.recordings, 1);
   // WhatsApp: a conversation with both directions, who wrote, and which number
   const msgs = w.all("messages").filter((m) => m.leadId === a.id).sort((p, q) => p.occurredAt.localeCompare(q.occurredAt));
-  assert.deepEqual(msgs.map((m) => [m.direction, m.text, m.numberLabel, m.sender]), [["Incoming", "Price please?", "Sales 82828 27732", a.name], ["Outgoing", "Rs 2.5 lakh with GST", "Sales 82828 27732", "Gateway"]]);
+  assert.deepEqual(msgs.map((m) => [m.direction, m.text, m.numberLabel, m.sender, m.via || ""]), [["Incoming", "Price please?", "Sales 82828 27732", a.name, ""], ["Outgoing", "Rs 2.5 lakh with GST", "Sales 82828 27732", "Balaji", "Gateway"], ["Outgoing", "Ok sir, will call you", "Sales 82828 27732", "Balaji", "WhatsApp"]]);
   assert.equal(msgs[1].senderId, a.owner);
+  assert.ok(!acts.some((x) => x.type === "Note" && /^ACTION_1013/.test(x.text)), "no WhatsApp line is left as a note");
+  assert.equal(acts.filter((x) => x.type === "Message").length, 3);
   assert.equal(w.all("conversations").filter((c) => c.leadId === a.id && c.channel === "WhatsApp").length, 1);
   const task = w.get("tasks", "tct-aaa");
   assert.deepEqual([task.status, task.origin, task.owner], ["Open", "TeleCRM", a.owner]);
@@ -133,7 +136,7 @@ test("a full run mirrors people, leads, their timeline and the follow-up as a ta
   const again = await w.mirror.sync();
   assert.equal(again.mode, "delta");
   assert.equal(again.changed, 0);
-  assert.equal(w.all("activities").length, 5);
+  assert.equal(w.all("activities").length, 6);
   assert.equal(w.audio.length, 1, "a recording already kept is not fetched again");
   assert.ok(w.tele.calls.slice(before).every((c) => !/includeActions/.test(c.url)), "unchanged leads are not fetched again");
 });
@@ -231,4 +234,21 @@ test("a recording that cannot be fetched is tried again on the next run, and giv
   for (let i = 0; i < 6; i++) { w.tick(60000); await w.mirror.sync(); }
   assert.equal(w.get("mobileCalls", "tcc-c2").recordingTries, 4);
   assert.equal(w.audio.length, 1);
+});
+
+test("a copy made by an older version is read again once, so old notes become messages", async (t) => {
+  const w = world(t);
+  // what the first version left behind: the lead looks up to date, and the WhatsApp line sits in the history as a note
+  w.rawPut("leads", { id: "tc-aaa", name: "Customer aaa", phone: "", phoneKey: "", stage: "New", deal: "", disposition: "", telecrm: { id: "aaa", status: "New Lead", assignee: "bala@deviindustries.com", nextFollowup: null, modifiedOn: 1, lastActivityOn: 1, fields: {} } });
+  w.rawPut("activities", { id: "tca-aaa-m1", leadId: "tc-aaa", type: "Note", text: "ACTION_1013: {\"notes\":\"Customer | Sales 82828 27732\\nHello\"}" });
+  connect(w);
+  w.tele.leads = [lead("aaa", {}, { modified_on: 1, last_activity_on: 1 })];
+  w.tele.actions.aaa = [{ id: "m1", type: "ACTION_1013", creationTimestamp: 1799700000000, employeeid: "bala@deviindustries.com", fields: { notes: "Customer | Sales 82828 27732\nHello" } }];
+  const first = await w.mirror.sync();
+  assert.equal(first.mode, "full");
+  assert.equal(w.get("activities", "tca-aaa-m1").type, "Message");
+  assert.equal(w.all("messages").length, 1);
+  w.tick(60000);
+  const second = await w.mirror.sync();
+  assert.equal(second.changed, 0, "after that, unchanged leads are skipped again");
 });

@@ -56,7 +56,7 @@ export function buildModel(crm) {
       add(a.leadId, { id: a.id, kind: "call", text: a.text || "", at, by, dir: CALL_IN.has(a.direction) ? "in" : "out", connected: secs > 0, secs });
     } else if (a.type === "Note") add(a.leadId, { id: a.id, kind: "note", text: a.text || "", at, by });
     else if (a.type === "Visit") add(a.leadId, { id: a.id, kind: "visit", text: a.text || "Visit logged", at, by });
-    else if (a.type === "WhatsApp" || a.type === "Message") add(a.leadId, { id: a.id, kind: "whatsapp", text: a.text || "", at, by });
+    else if (a.type === "WhatsApp" || a.type === "Message") add(a.leadId, { id: a.id, kind: "whatsapp", text: a.text || "", at, by, out: a.direction === "Outgoing", sender: a.sender || "", via: a.via || "", label: a.numberLabel || "" });
     else if (a.type === "System") {
       const move = /^Lead stage changed: (.*) → (.+)$/.exec(a.text || "");
       if (move) add(a.leadId, { id: a.id, kind: "stage", text: `Stage changed ${move[1]} → ${move[2]}`, at, by });

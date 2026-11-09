@@ -16,6 +16,16 @@ export function useGatewayOn() {
   return on;
 }
 
+// One WhatsApp message as a chat bubble: what was said, who said it (the customer, or which sales person), through which number.
+export function WaBubble({ text, outgoing, sender, via, label, at }) {
+  return (
+    <article className={`gwchat-msg ${outgoing ? "out" : ""}`}>
+      <p>{text}</p>
+      <small>{sender || (outgoing ? "Our team" : "Customer")}{via ? ` · via ${via}` : ""}{label ? ` · ${label}` : ""}{at ? `, ${at}` : ""}</small>
+    </article>
+  );
+}
+
 export default function GatewayChat({ leadId, className = "" }) {
   const crm = useCrm();
   const notify = useToast();
@@ -62,10 +72,7 @@ export default function GatewayChat({ leadId, className = "" }) {
     <div className={`gwchat ${className}`}>
       <div className="gwchat-thread" role="log" aria-label="WhatsApp chat">
         {thread.map((m) => (
-          <article key={m.id} className={`gwchat-msg ${m.direction === "Outgoing" ? "out" : ""}`}>
-            <p>{m.text}</p>
-            <small>{m.sender || (m.direction === "Outgoing" ? "Our team" : "Customer")}{m.numberLabel ? ` · ${m.numberLabel}` : ""}, {when(stamp(m))}</small>
-          </article>
+          <WaBubble key={m.id} text={m.text} outgoing={m.direction === "Outgoing"} sender={m.sender} via={m.via} label={m.numberLabel} at={when(stamp(m))} />
         ))}
         {!thread.length && <p className="muted">No WhatsApp messages for this lead yet.</p>}
       </div>
