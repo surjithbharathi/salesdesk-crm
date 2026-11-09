@@ -1,3 +1,4 @@
+import { isBlocked } from "./blocked-numbers.mjs";
 // Connects this CRM to the Devi WhatsApp gateway (Meta Cloud API, several Devi numbers).
 //   The gateway tells us about every customer message with a signed POST (header X-Devi-Signature: "sha256=" + HMAC-SHA256 of the body),
 //   and we send messages and read history through its REST API (header X-Api-Key). Nothing here stores a customer's WhatsApp login.
@@ -157,6 +158,7 @@ export function createWaGateway({ db, all, get, put, stamp, tx, log, keyPath, sy
     const phone = String(d.wa_id || "");
     if (!/^[1-9]\d{7,14}$/.test(phone)) return { ignored: "no phone number for this customer" };
     if (typeof d.message_id !== "string" || !d.message_id) return { ignored: "no message id" };
+    if (isBlocked(db, phone)) return { ignored: "number is blocked in the CRM" };
     const text = String(d.text || "").slice(0, MAX_TEXT) || `[${String(d.kind || "message").slice(0, 30)}${d.has_file ? ", file in the gateway inbox" : ""}]`;
     const at = Number.isFinite(d.at) ? new Date(d.at * 1000).toISOString() : new Date(now()).toISOString();
     return tx(() => {

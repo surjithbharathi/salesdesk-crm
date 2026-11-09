@@ -141,3 +141,9 @@
 .cwt .kind { width: auto; }
 .cwt .history li { flex-wrap: wrap; }
 }
+
+/* the lead's "more" menu (archive, do not sync calls, delete, block): a clear three-dot button */
+.cwt .more-btn { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0; border: 1px solid #ddd6fe; border-radius: 6px; background: #fff; color: #4f38a2; cursor: pointer; }
+.cwt .more-btn:hover { background: #f6f4ff; }
+.cwt .more-btn svg.kebab { width: 18px; height: 18px; stroke-width: 3.6; stroke-linecap: round; background: none; margin: 0; padding: 0; }
+.cwt .menu button:disabled { opacity: 0.5; }

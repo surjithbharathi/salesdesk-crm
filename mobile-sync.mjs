@@ -1,3 +1,4 @@
+import { isBlocked } from "./blocked-numbers.mjs";
 import { createHash, randomBytes, randomUUID, createCipheriv, createDecipheriv } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync, chmodSync } from "node:fs";
 import { dirname } from "node:path";
@@ -138,6 +139,7 @@ export function createMobileSync({ db, all, get, put, stamp, tx, log, keyPath, o
       fail("Invalid call metadata");
     // a lead can be marked so that phone calls with it are never synced
     if (all("leads").some((l) => l.noCallSync && phoneKeyOf(l) === p.phone)) fail("Call sync is turned off for this number", 403);
+    if (isBlocked(db, p.phone)) fail("This number is blocked in the CRM", 403);
     const existing = all("mobileCalls").find((c) => c.deviceId === d.id && c.localId === p.localId);
     const policy = preferences(d);
     const configured = Object.keys(policy.sims).length > 0;

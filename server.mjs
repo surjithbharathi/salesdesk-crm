@@ -1,6 +1,7 @@
 import {createSmtpEmail} from './smtp-email.mjs';
 import { createWaGateway } from "./wa-gateway.mjs";
 import { createTelecrmMirror } from "./telecrm-mirror.mjs";
+import { createBlockedNumbers } from "./blocked-numbers.mjs";
 import { createKpi } from "./kpi.mjs";
 import { extname, resolve as resolvePath, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -430,6 +431,21 @@ const smtpEmail=createSmtpEmail({db,keyPath:(process.env.CRM_DB||new URL('./data
 const rawPut = (kind, v) => db.prepare("INSERT INTO records VALUES(?,?,?) ON CONFLICT(kind,id) DO UPDATE SET body=excluded.body").run(kind, v.id, JSON.stringify(v));
 const telecrm = createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecording: (callId, bytes) => mobile.importRecording(callId, bytes), keyPath: (process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname) + ".telecrm-key", log: (m) => console.error(m) });
 const waGateway = createWaGateway({ db, all, get, put, stamp, tx, log, systemUser: process.env.CRM_OWNER_USER_ID || "", keyPath: (process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname) + ".wagw-key" });
+const blocked = createBlockedNumbers(db);
+// Removes a lead and everything recorded against it (calls and their recordings, notes, messages, chats, follow-ups, deals).
+// With block, its number is blocked first so no sync brings it back.
+function deleteLead(id, { block = false, by = "" } = {}) {
+  const lead = get("leads", id);
+  if (!lead) bad("Lead not found", 404);
+  return tx(() => {
+    const blockedNumber = block ? blocked.add(lead.phoneKey || lead.phone, { name: lead.name, by }) : "";
+    const audio = db.prepare("SELECT json_extract(body,'$.recordingId') r FROM records WHERE kind='mobileCalls' AND json_extract(body,'$.leadId')=?").all(id).map((x) => x.r).filter(Boolean);
+    for (const r of audio) db.prepare("DELETE FROM mobile_audio WHERE id=?").run(r);
+    const removed = Number(db.prepare("DELETE FROM records WHERE kind<>'leads' AND json_extract(body,'$.leadId')=?").run(id).changes);
+    db.prepare("DELETE FROM records WHERE kind='leads' AND id=?").run(id);
+    return { deleted: true, name: lead.name, records: removed, recordings: audio.length, blocked: blockedNumber };
+  });
+}
 const mcpAccess=createMcpAccess({db,get,canAdmin:id=>workspaceAccess.can(id,'integrations.manage')});
 const mcpOAuth=createMcpOAuth({db,origin:publicOrigin||`http://localhost:${port}`,access:mcpAccess});
 const mcpIdentity=owner=>({user:{id:owner,role:'admin'}});
@@ -1241,6 +1257,24 @@ const server = http.createServer(async (req, res) => {
         return { added, skipped };
       });
       send(200, result);
+      return;
+    }
+    // Blocked numbers and deleting a lead for good (admins only). A blocked number is skipped by phone call sync,
+    // the TeleCRM copy and the WhatsApp gateway, so a deleted lead does not come back.
+    if (url.pathname === "/api/blocked-numbers" || url.pathname.startsWith("/api/blocked-numbers/")) {
+      if (identity && !["owner", "admin"].includes(workspaceAccess.profile(identity.user.id).role)) bad("Only an admin can block numbers", 403);
+      const one = decodeURIComponent(url.pathname.slice("/api/blocked-numbers/".length) || "");
+      if (req.method === "GET" && url.pathname === "/api/blocked-numbers") return send(200, blocked.list());
+      sameOrigin();
+      if (req.method === "POST" && url.pathname === "/api/blocked-numbers") { const p = await body(req); return send(200, { phone: blocked.add(p.phone, { name: p.name || "", by: identity?.user.id || "" }) }); }
+      if (req.method === "DELETE" && one) return send(200, { removed: blocked.remove(one) });
+      bad("Method not allowed", 405);
+    }
+    const leadDelete = req.method === "DELETE" && /^\/api\/leads\/([a-zA-Z0-9-]+)$/.exec(url.pathname);
+    if (leadDelete) {
+      if (identity && !["owner", "admin"].includes(workspaceAccess.profile(identity.user.id).role)) bad("Only an admin can delete a lead", 403);
+      sameOrigin();
+      send(200, deleteLead(leadDelete[1], { block: url.searchParams.get("block") === "1", by: identity?.user.id || "" }));
       return;
     }
     if (!member && (await extensions.handle(req, url, body, send))) return;

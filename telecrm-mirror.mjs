@@ -1,3 +1,4 @@
+import { isBlocked } from "./blocked-numbers.mjs";
 // One-way mirror of the TeleCRM workspace into this CRM: team members (with their permission template), leads with every field,
 // the activity timeline of each lead, and the follow-up of each lead as a task. TeleCRM stays the place where people work;
 // nothing here ever writes back to TeleCRM.
@@ -224,6 +225,7 @@ export function createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecor
     const digits = String(f.phone || "").replace(/\D/g, "");
     let parts = { phone: "", countryCode: "", mobileNumber: "", phoneKey: "" };
     if (digits) { try { parts = phoneParts("+" + digits.replace(/^0+/, "")); } catch { /* keep the raw number inside telecrm.fields only */ } }
+    if (parts.phoneKey && isBlocked(db, parts.phoneKey)) { ctx.counts.blocked = (ctx.counts.blocked || 0) + 1; return; }
     let cur = ctx.byTid.get(tid) || (parts.phoneKey && ctx.byPhone.get(parts.phoneKey)) || null;
     if (cur && ctx.claimed.has(cur.id)) cur = null;
     const status = text(item.status || f.status, 100), map = mapStatus(status), owner = ctx.users.get(String(item.employeeid || f.assignee || "").toLowerCase())?.id || cur?.owner || "";

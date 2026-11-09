@@ -14,6 +14,7 @@ import Mcp from "./settings/Mcp.jsx";
 import Assign from "./settings/Assign.jsx";
 import Workspaces from "./settings/Workspaces.jsx";
 import { Import, Export, Archived, Merge } from "./settings/LeadData.jsx";
+import Blocked from "./settings/Blocked.jsx";
 
 const THEMES = [["", "Automatic", "Follows your phone or computer"], ["light", "Light", "Bright pages"], ["dark", "Dark", "Easy on the eyes at night"]];
 function chooseTheme(value) {
@@ -71,6 +72,7 @@ export default function Settings({ params, me }) {
     ["import", "Add leads from a file", can("leads.write") && can("data.export"), <Import access={full} />, "Leads and data", "Bring in leads from a spreadsheet."],
     ["merge", "Merge duplicates", can("leads.write") && me.lead, <Merge />, "Leads and data", "Combine leads that share a mobile number."],
     ["archived", "Archived leads", can("leads.write"), <Archived />, "Leads and data", "Bring archived leads back."],
+    ["blocked", "Blocked numbers", access.crmOwner || ["owner", "admin"].includes(access.role), <Blocked />, "Leads and data", "Numbers whose calls and chats never become leads."],
     ["export", "Download data", can("data.export"), <Export />, "Leads and data", "Take a copy of your leads and activity."],
     ["workspaces", "Workspaces", Boolean(access.crmOwner), <Workspaces currentName={access.name} />, "Workspace", "Separate workspaces, each with its own data and sign-in."],
     ["look", "Appearance", true, <Appearance />, "Account", "Theme (light or dark) and the look of the app."],

@@ -54,6 +54,19 @@ export function LeadDetail({ id }) {
   const status = raw.stage === "New" ? "New" : pipelineStep(raw) || "New";
   const ownerName = crm.users.get(raw.owner)?.name || "Unassigned";
   const canEdit = crm.me?.lead;
+  const isAdmin = ["owner", "admin"].includes(crm.me?.role);
+  // Delete for good; with block, the number is also kept out of phone sync, TeleCRM and WhatsApp so the lead does not return.
+  const remove = (block) => {
+    setMenu("");
+    const what = block
+      ? `Delete ${raw.name} and block +${raw.phoneKey}?\n\nThe lead, its calls, recordings, notes, messages and follow-ups are removed. Calls and WhatsApp from this number will not create a lead again. Unblock it in Settings, Blocked numbers.`
+      : `Delete ${raw.name} for good?\n\nThe lead, its calls, recordings, notes, messages and follow-ups are removed. This cannot be undone. If the number calls again or TeleCRM syncs it, the lead comes back; use "Delete and block number" to stop that.`;
+    if (!confirm(what)) return;
+    run(block ? "Lead deleted and number blocked" : "Lead deleted", async () => {
+      await crmSend("DELETE", `leads/${id}${block ? "?block=1" : ""}`);
+      location.hash = location.hash.replace(/([?&])lead=[^&]*&?/, "$1").replace(/[?&]$/, "");
+    });
+  };
   const q = fieldSearch.trim().toLowerCase();
   const value = (key) => (key === "id" ? raw.id : raw[key] == null ? "" : String(raw[key]));
   const fields = FIELDS.filter(([tab, key, label]) => tab === fieldTab && (!q || label.toLowerCase().includes(q)) && (showEmpty || value(key).trim() !== ""));
@@ -103,12 +116,14 @@ export function LeadDetail({ id }) {
             <div className="icons">
               {raw.email && <a className="ic" title="Email" href={`mailto:${raw.email}`}><TIcon name="at" /></a>}
               <div className="drop">
-                <button type="button" className="ic" title="More" onClick={() => setMenu(menu === "more" ? "" : "more")}><TIcon name="kebab" className="dots" /></button>
+                <button type="button" className="more-btn" title="More: archive, delete, block number" aria-label="More actions" onClick={() => setMenu(menu === "more" ? "" : "more")}><TIcon name="kebab" className="kebab" /></button>
                 {menu === "more" && (
                   <div className="menu right" onMouseLeave={() => setMenu("")}>
                     <a className="menu-link" href={telHref(raw)}>Call now</a>
                     {canEdit && <button type="button" className="danger" onClick={() => { setMenu(""); confirm(`Archive ${raw.name}? The lead leaves the lists but is kept.`) && patch("Lead archived", { archived: true }); }}>Archive lead</button>}
                     <label className="menu-check"><input type="checkbox" checked={Boolean(raw.noCallSync)} disabled={busy} onChange={(e) => patch(e.target.checked ? "Calls with this lead are no longer synced" : "Calls with this lead are synced again", { noCallSync: e.target.checked })} /> Do not sync calls</label>
+                    {isAdmin && <button type="button" className="danger" disabled={busy} onClick={() => remove(false)}>Delete lead</button>}
+                    {isAdmin && raw.phoneKey && <button type="button" className="danger" disabled={busy} onClick={() => remove(true)}>Delete and block number</button>}
                   </div>
                 )}
               </div>
