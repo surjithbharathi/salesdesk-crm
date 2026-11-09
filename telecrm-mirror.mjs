@@ -18,6 +18,7 @@ const MAX_AUDIO = 20 * 1024 * 1024;
 // Bump when the way things are mapped changes: the next run then reads every lead again instead of skipping the ones TeleCRM has not touched.
 const IMPORT_VERSION = 2;
 const RECORDINGS_PER_RUN = 150;
+const RECORDING_DOWNLOADS = 4;
 const norm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
 // TeleCRM status label -> pipeline step of this CRM (spelling variations included); other labels fall back to a basic stage.
@@ -197,27 +198,38 @@ export function createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecor
 
   // Recordings are real audio files kept encrypted in this CRM, not links. They come after the leads, a limited number per run,
   // and the ones still waiting are picked up again on the next run.
+  // Newest calls first, so today's calls are not stuck behind an old backlog; a few downloads run side by side.
   async function fetchRecordings(s, counts) {
-    const waiting = db.prepare("SELECT body FROM records WHERE kind='mobileCalls' AND json_extract(body,'$.recordingPath')<>'' AND json_extract(body,'$.recordingId') IS NULL AND COALESCE(json_extract(body,'$.recordingTries'),0)<4 LIMIT ?").all(RECORDINGS_PER_RUN).map((r) => JSON.parse(r.body));
-    counts.recordingsWaiting = waiting.length;
-    for (const call of waiting) {
-      try {
-        const meta = await api(s, "GET", `/lead/${encodeURIComponent(call.telecrmLeadId)}/file/download-url?path=${encodeURIComponent(call.recordingPath)}`);
-        if (!/^https:\/\//.test(meta.download_url || "")) fail("No download address", 502);
-        if (Number(meta.size) > MAX_AUDIO) { rawPut("mobileCalls", { ...call, recordingTries: 9, recordingNote: "Larger than 20 MB" }); continue; }
-        const res = await fetchImpl(meta.download_url, { signal: AbortSignal.timeout(60000) });
-        if (!res.ok) fail("Recording download failed", 502);
-        const bytes = Buffer.from(await res.arrayBuffer());
-        attachRecording(call.id, bytes);
-        counts.recordings++;
-      } catch (e) {
-        if (/refused the token/.test(e.message)) throw e;
-        const cur = get("mobileCalls", call.id) || call;
-        if (!cur.recordingId) rawPut("mobileCalls", { ...cur, recordingTries: (cur.recordingTries || 0) + 1, recordingNote: text(e.message, 120) });
-        counts.errors++;
+    const where = "kind='mobileCalls' AND json_extract(body,'$.recordingPath')<>'' AND json_extract(body,'$.recordingId') IS NULL AND COALESCE(json_extract(body,'$.recordingTries'),0)<4";
+    const waiting = db.prepare(`SELECT body FROM records WHERE ${where} ORDER BY json_extract(body,'$.startedAt') DESC LIMIT ?`).all(RECORDINGS_PER_RUN).map((r) => JSON.parse(r.body));
+    const total = Number(db.prepare(`SELECT COUNT(*) n FROM records WHERE ${where}`).get().n) || 0;
+    let refused = null, next = 0;
+    const worker = async () => {
+      while (next < waiting.length && !refused) {
+        const call = waiting[next++];
+        try { await fetchOne(s, call, counts); } catch (e) { refused = e; }
       }
+    };
+    await Promise.all(Array.from({ length: RECORDING_DOWNLOADS }, worker));
+    if (refused) throw refused;
+    counts.recordingsWaiting = Math.max(0, total - counts.recordings);
+  }
+  async function fetchOne(s, call, counts) {
+    try {
+      const meta = await api(s, "GET", `/lead/${encodeURIComponent(call.telecrmLeadId)}/file/download-url?path=${encodeURIComponent(call.recordingPath)}`);
+      if (!/^https:\/\//.test(meta.download_url || "")) fail("No download address", 502);
+      if (Number(meta.size) > MAX_AUDIO) { rawPut("mobileCalls", { ...(get("mobileCalls", call.id) || call), recordingTries: 9, recordingNote: "Larger than 20 MB" }); return; }
+      const res = await fetchImpl(meta.download_url, { signal: AbortSignal.timeout(60000) });
+      if (!res.ok) fail("Recording download failed", 502);
+      const bytes = Buffer.from(await res.arrayBuffer());
+      attachRecording(call.id, bytes);
+      counts.recordings++;
+    } catch (e) {
+      if (/refused the token/.test(e.message)) throw e;
+      const cur = get("mobileCalls", call.id) || call;
+      if (!cur.recordingId) rawPut("mobileCalls", { ...cur, recordingTries: (cur.recordingTries || 0) + 1, recordingNote: text(e.message, 120) });
+      counts.errors++;
     }
-    counts.recordingsWaiting = Math.max(0, counts.recordingsWaiting - counts.recordings);
   }
 
   function writeLead(item, actions, ctx) {
@@ -317,6 +329,8 @@ export function createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecor
         if (redo) after.importVersion = IMPORT_VERSION;
         store(after);
       } catch (e) {
+        // a lead page that failed should not hold back recordings already known (unless TeleCRM refused the token)
+        if (!/refused the token|Add the workspace ID/.test(e.message || "")) { try { await fetchRecordings(s, counts); } catch { /* reported with the run */ } }
         Object.assign(result, counts, { ok: false, message: e.message || "Sync failed" });
         const after = raw();
         after.lastRun = { ...result, took: now() - started };

@@ -236,6 +236,18 @@ test("a recording that cannot be fetched is tried again on the next run, and giv
   assert.equal(w.audio.length, 1);
 });
 
+test("the newest recordings are copied first, and the waiting count is the whole backlog", async (t) => {
+  const w = world(t);
+  connect(w);
+  w.tele.leads = [lead("aaa")];
+  w.tele.actions.aaa = Array.from({ length: 160 }, (_, i) => ({ id: "c" + i, type: "INCOMING_CALL", creationTimestamp: 1799500000000 + i * 1000, employeeid: "bala@deviindustries.com", duration: 40, feedback: "CONNECTED", callRecording: { name: `r${i}.m4a`, filePath: `x/${i}.mp3` } }));
+  const one = await w.mirror.sync();
+  assert.equal(one.recordings, 150);
+  assert.equal(one.recordingsWaiting, 10);
+  assert.ok(w.get("mobileCalls", "tcc-c159").recordingId, "the newest call has its recording");
+  assert.ok(!w.get("mobileCalls", "tcc-c0").recordingId, "the oldest waits for the next run");
+});
+
 test("a copy made by an older version is read again once, so old notes become messages", async (t) => {
   const w = world(t);
   // what the first version left behind: the lead looks up to date, and the WhatsApp line sits in the history as a note

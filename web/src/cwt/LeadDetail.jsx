@@ -48,7 +48,8 @@ export function LeadDetail({ id }) {
   const acts = useMemo(() => crm.activities.filter((a) => a.leadId === id).sort((a, b) => String(b.occurredAt || b.createdAt).localeCompare(String(a.occurredAt || a.createdAt))), [crm.activities, id]);
   if (!crm.state || !raw) return <p className="muted">{crm.error || "Loading the lead…"}</p>;
 
-  const pendingRec = new Set((crm.calls || []).filter((c) => !c.recordingId && c.recordingPath).map((c) => c.activityId));
+  // A TeleCRM recording not here yet is either still being copied or gave up after 4 tries (or is too large).
+  const pendingRec = new Map((crm.calls || []).filter((c) => !c.recordingId && c.recordingPath).map((c) => [c.activityId, (c.recordingTries || 0) >= 4 ? "failed" : "copying"]));
   const recordings = new Map((crm.calls || []).filter((c) => c.recordingId).map((c) => [c.activityId, c.recordingId]));
   const tasks = crm.tasks.filter((t) => t.leadId === id).sort((a, b) => String(a.due).localeCompare(String(b.due)));
   const status = raw.stage === "New" ? "New" : pipelineStep(raw) || "New";
@@ -205,7 +206,7 @@ export function LeadDetail({ id }) {
               // whose number it happened on (Settings, People, Numbers) wins; then who logged it; then the lead owner
               const onNumber = userForNumber(crm.users, a.numberLabel);
               const by = onNumber?.name || crm.users.get(a.userId)?.name || ownerName;
-              return <li key={a.id} className="wa-li"><ChatEntry e={fromActivity(a, { by, customer: raw.name, badge: onNumber?.badge || crm.users.get(a.senderId || a.userId || raw.owner)?.badge || "", at: when(a.occurredAt || a.createdAt), recordingId: recordings.get(a.id) || "", recordingPending: pendingRec.has(a.id), said })} /></li>;
+              return <li key={a.id} className="wa-li"><ChatEntry e={fromActivity(a, { by, customer: raw.name, badge: onNumber?.badge || crm.users.get(a.senderId || a.userId || raw.owner)?.badge || "", at: when(a.occurredAt || a.createdAt), recordingId: recordings.get(a.id) || "", recordingPending: pendingRec.get(a.id) || false, said })} /></li>;
             }); })()}
             {!entries.length && <li className="none">No activity yet.</li>}
           </ul>
