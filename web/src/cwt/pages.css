@@ -92,3 +92,9 @@
 .cwt .cwt-reports .dl { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px; background: #fff; border: 1px solid var(--line-2); border-radius: 12px; }
 .cwt .cwt-reports .dl p { margin: 4px 0 0; color: #777; font-size: 13px; }
 @media (max-width: 767px) { .cwt .cwt-reports .podium { grid-template-columns: 1fr; } }
+.cwt .cwt-search .gone-note { display: flex; flex-direction: column; gap: 4px; width: 376px; max-width: 100%; margin: 6px 0 10px; padding: 10px 12px; border-left: 3px solid #dc2626; border-radius: 4px; background: #fef2f2; color: #7f1d1d; font-size: 13px; line-height: 1.4; }
+.cwt .cwt-search .gone-note b { font-size: 14px; color: #b91c1c; }
+.cwt .cwt-search .gone-note a { color: #4f38a2; font-weight: 600; }
+.cwt .cwt-search .gone-note:not(.blocked) { border-left-color: #64748b; background: #f1f5f9; color: #334155; }
+.cwt .cwt-search .gone-note:not(.blocked) b { color: #1e293b; }
+.cwt .cwt-search .st.archived { margin-left: 6px; background: #fef3c7; color: #92400e; }

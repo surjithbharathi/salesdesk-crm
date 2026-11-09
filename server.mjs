@@ -443,6 +443,7 @@ function deleteLead(id, { block = false, by = "" } = {}) {
     for (const r of audio) db.prepare("DELETE FROM mobile_audio WHERE id=?").run(r);
     const removed = Number(db.prepare("DELETE FROM records WHERE kind<>'leads' AND json_extract(body,'$.leadId')=?").run(id).changes);
     db.prepare("DELETE FROM records WHERE kind='leads' AND id=?").run(id);
+    blocked.recordDeleted(lead, { by, blocked: block });
     return { deleted: true, name: lead.name, records: removed, recordings: audio.length, blocked: blockedNumber };
   });
 }
@@ -1269,6 +1270,10 @@ const server = http.createServer(async (req, res) => {
       if (req.method === "POST" && url.pathname === "/api/blocked-numbers") { const p = await body(req); return send(200, { phone: blocked.add(p.phone, { name: p.name || "", by: identity?.user.id || "" }) }); }
       if (req.method === "DELETE" && one) return send(200, { removed: blocked.remove(one) });
       bad("Method not allowed", 405);
+    }
+    if (url.pathname === "/api/deleted-leads" && req.method === "GET") {
+      if (identity && !["owner", "admin"].includes(workspaceAccess.profile(identity.user.id).role)) bad("Only an admin can see deleted leads", 403);
+      return send(200, blocked.deleted());
     }
     const leadDelete = req.method === "DELETE" && /^\/api\/leads\/([a-zA-Z0-9-]+)$/.exec(url.pathname);
     if (leadDelete) {

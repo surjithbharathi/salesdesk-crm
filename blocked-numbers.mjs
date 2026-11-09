@@ -19,7 +19,11 @@ export function isBlocked(db, phone) {
 
 export function createBlockedNumbers(db) {
   ensureBlockedTable(db);
+  // A note of every lead deleted for good (name, number, who, when, blocked or not), so a search for the number can say what happened.
+  db.exec("CREATE TABLE IF NOT EXISTS deleted_leads(id TEXT PRIMARY KEY, phone TEXT, name TEXT, by TEXT, at TEXT, blocked INTEGER)");
   return {
+    recordDeleted: (lead, { by = "", blocked = false } = {}) => db.prepare("INSERT OR REPLACE INTO deleted_leads VALUES(?,?,?,?,?,?)").run(lead.id, numberKey(lead.phoneKey || lead.phone), String(lead.name || "").slice(0, 200), by, new Date().toISOString(), blocked ? 1 : 0),
+    deleted: () => db.prepare("SELECT id, phone, name, by, at, blocked FROM deleted_leads ORDER BY at DESC LIMIT 5000").all().map((r) => ({ ...r, blocked: Boolean(r.blocked) })),
     list: () => db.prepare("SELECT phone, name, by, at FROM blocked_numbers ORDER BY at DESC").all().map((r) => ({ ...r })),
     add(phone, { name = "", by = "" } = {}) {
       const key = numberKey(phone);
