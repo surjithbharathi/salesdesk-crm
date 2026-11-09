@@ -6,7 +6,7 @@ import { dueText } from "../format.js";
 import Icon from "../icons.jsx";
 import Recording from "../Recording.jsx";
 import GatewayChat from "../GatewayChat.jsx";
-import ChatEntry from "../ChatEntry.jsx";
+import ChatEntry, { buyLeadOf, leadArrivedOf } from "../ChatEntry.jsx";
 import { PIPELINE, pipelineStep } from "../pipeline.js";
 import { buildModel, hms, initials, money, startOfDay } from "./model.js";
 
@@ -252,7 +252,9 @@ export default function CwLeadDetail({ id, onClose }) {
                 )}
                 {timeline.map((a) => {
                   const by = a.by || ownerName;
-                  const e = a.kind === "call" ? { id: a.id, kind: "call", customer: l.name, out: a.dir === "out", dir: a.dir === "in" ? "Incoming" : "Outgoing", secs: a.secs, by, at: when(a.at), recordingId: recordings.get(a.id) || "" }
+                  const arrived = a.kind === "call" || a.kind === "whatsapp" ? null : buyLeadOf({ text: a.text }) || leadArrivedOf(a.text);
+                  const e = arrived ? { id: a.id, kind: "buylead", out: false, lead: arrived, by, at: when(a.at) }
+                    : a.kind === "call" ? { id: a.id, kind: "call", customer: l.name, out: a.dir === "out", dir: a.dir === "in" ? "Incoming" : "Outgoing", secs: a.secs, by, at: when(a.at), recordingId: recordings.get(a.id) || "" }
                     : a.kind === "whatsapp" ? { id: a.id, kind: "message", out: a.out, text: a.text, sender: a.sender, via: a.via, label: a.label, by, at: when(a.at) }
                     : a.kind === "stage" ? { id: a.id, kind: "system", text: a.text, at: when(a.at) }
                     : { id: a.id, kind: a.kind === "visit" ? "visit" : "note", out: true, text: a.text, by, at: when(a.at) };

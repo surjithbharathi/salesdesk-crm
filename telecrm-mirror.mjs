@@ -185,7 +185,7 @@ export function createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecor
           const changes = (Array.isArray(a.fieldsInfo) ? a.fieldsInfo : []).slice(0, 6).map((c) => `${c.apiName}: ${text(c.currentVal, 80)}`).join(", ");
           rawPut("activities", { ...base, id: "tca-" + tid + "-" + a.id, type: "System", userId: person, text: notes || (type === "STATUS_CHANGE" ? "Status changed" : type === "LEAD_ASSIGNMENT" ? "Lead assigned" : "Details updated") + (changes ? ": " + changes : "") });
         } else {
-          rawPut("activities", { ...base, id: "tca-" + tid + "-" + a.id, type: type === "OUTGOING_EMAIL" ? "Email" : "Note", userId: person, text: notes || (type.startsWith("ACTION_") ? `${type}: ${text(f, 600)}` : type.replace(/_/g, " ").toLowerCase()) });
+          rawPut("activities", { ...base, id: "tca-" + tid + "-" + a.id, type: type === "OUTGOING_EMAIL" ? "Email" : "Note", userId: person, text: notes || (type.startsWith("ACTION_") ? `${type}: ${text(f, 2500)}` : type.replace(/_/g, " ").toLowerCase()) });
         }
         ctx.counts.activities++;
       } catch {

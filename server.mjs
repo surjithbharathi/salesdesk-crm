@@ -414,13 +414,10 @@ function withBadges(state) {
   const clean = (s) => String(s || "").replace(/[^\p{L}\p{N}]/gu, "").toUpperCase();
   const base = state.users.map((u) => clean(names.get(u.id) || u.email?.split("@")[0] || u.name) || "?");
   const badges = base.map((b) => b.slice(0, 2));
-  for (let len = 3; len <= 12; len++) {
-    const seen = new Map();
-    badges.forEach((b, i) => seen.set(b, [...(seen.get(b) || []), i]));
-    let clash = false;
-    for (const idx of seen.values()) if (idx.length > 1) for (const i of idx) if (base[i].length >= len) { badges[i] = base[i].slice(0, len); clash = true; }
-    if (!clash) break;
-  }
+  // A badge fits a small circle: two letters, a third only when two clash, then a number (SU, SUR, SU2).
+  const group = () => { const seen = new Map(); badges.forEach((b, i) => seen.set(b, [...(seen.get(b) || []), i])); return [...seen.values()].filter((idx) => idx.length > 1); };
+  for (const idx of group()) for (const i of idx) if (base[i].length >= 3) badges[i] = base[i].slice(0, 3);
+  for (const idx of group()) idx.forEach((i, n) => { if (n) badges[i] = base[i].slice(0, 2) + (n + 1); });
   return { ...state, users: state.users.map((u, i) => ({ ...u, badge: badges[i] })) };
 }
 function permittedState(value,id){
