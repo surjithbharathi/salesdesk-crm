@@ -1437,11 +1437,16 @@ const server = http.createServer(async (req, res) => {
     if (!e.status) console.error(e);
   }
 });
-let telecrmTimer = null;
+let telecrmTimer = null, telecrmRecTimer = null;
 function scheduleTelecrm() {
   clearInterval(telecrmTimer);
+  clearInterval(telecrmRecTimer);
   const s = telecrm.settings();
-  if (s.enabled) telecrmTimer = setInterval(() => telecrm.sync().catch(() => {}), s.intervalMinutes * 60000).unref();
+  if (s.enabled) {
+    telecrmTimer = setInterval(() => telecrm.sync().catch(() => {}), s.intervalMinutes * 60000).unref();
+    // recordings of calls already copied come every 2 minutes, even while a long full read of every lead is running
+    telecrmRecTimer = setInterval(() => telecrm.copyRecordings().catch(() => {}), 2 * 60000).unref();
+  }
 }
 scheduleTelecrm();
 server.listen(port, bindHost, () =>

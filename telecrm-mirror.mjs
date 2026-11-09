@@ -198,8 +198,22 @@ export function createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecor
 
   // Recordings are real audio files kept encrypted in this CRM, not links. They come after the leads, a limited number per run,
   // and the ones still waiting are picked up again on the next run.
+  // Recordings also run on their own short timer (copyRecordings), so a long full read of every lead does not hold them back.
+  // One copy at a time: a sync that ends while a copy is running waits for it instead of starting another.
+  let copying = null;
+  function fetchRecordings(s, counts) {
+    if (copying) return copying;
+    copying = fetchRecordingsNow(s, counts).finally(() => { copying = null; });
+    return copying;
+  }
+  async function copyRecordings() {
+    const s = raw(), counts = { recordings: 0, recordingsWaiting: 0, errors: 0 };
+    if (!s.enabled || !s.enterpriseId || !s.token) return counts;
+    try { await fetchRecordings(s, counts); } catch (e) { log("TeleCRM recordings: " + e.message); }
+    return counts;
+  }
   // Newest calls first, so today's calls are not stuck behind an old backlog; a few downloads run side by side.
-  async function fetchRecordings(s, counts) {
+  async function fetchRecordingsNow(s, counts) {
     const where = "kind='mobileCalls' AND json_extract(body,'$.recordingPath')<>'' AND json_extract(body,'$.recordingId') IS NULL AND COALESCE(json_extract(body,'$.recordingTries'),0)<4";
     const waiting = db.prepare(`SELECT body FROM records WHERE ${where} ORDER BY json_extract(body,'$.startedAt') DESC LIMIT ?`).all(RECORDINGS_PER_RUN).map((r) => JSON.parse(r.body));
     const total = Number(db.prepare(`SELECT COUNT(*) n FROM records WHERE ${where}`).get().n) || 0;
@@ -341,5 +355,5 @@ export function createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecor
     })();
     return running;
   }
-  return { settings: status, save, sync, isRunning: () => Boolean(running) };
+  return { settings: status, save, sync, copyRecordings, isRunning: () => Boolean(running) };
 }
