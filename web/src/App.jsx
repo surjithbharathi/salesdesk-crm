@@ -63,6 +63,11 @@ function useTheme() {
       /* storage can be blocked; the choice then lasts for this visit only */
     }
   }, [theme]);
+  useEffect(() => {
+    const on = () => setTheme(readTheme());
+    window.addEventListener("salesdesk-theme", on);
+    return () => window.removeEventListener("salesdesk-theme", on);
+  }, []);
   const dark = theme ? theme === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
   return [dark, () => setTheme(dark ? "light" : "dark")];
 }

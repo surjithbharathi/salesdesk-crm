@@ -612,3 +612,20 @@ li.wa-li .pin, li.wa-li .kind-ic, li.wa-li .tl-icon { display: none !important; 
 .gwchat-msg.call .rec-audio { display: block; width: 100%; min-width: 230px; height: 34px; border-radius: 17px; }
 .gwchat-msg.call .rec-toggle { margin-top: 4px; padding: 2px 10px; font-size: 12px; }
 .gwchat-msg .rec-wait { margin: 4px 0 2px; font-size: 12px; color: #667781; }
+
+/* chat colours follow the theme: light and dark both read well */
+:root { --wa-in: #ffffff; --wa-out: #d9fdd3; --wa-note: #fff6cc; --wa-text: #111b21; --wa-sub: #667781; --wa-out-sub: #4f7a5a; --wa-note-sub: #8a6d00; --wa-sys: #eef2f4; --wa-edge: rgba(17, 27, 33, 0.08); --wa-us: #1fa855; --wa-them: #8696a0; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --wa-in: #263238; --wa-out: #145a3c; --wa-note: #4a3f14; --wa-text: #e9edef; --wa-sub: #9aa8b0; --wa-out-sub: #a6d9bd; --wa-note-sub: #e3c766; --wa-sys: #1f2a30; --wa-edge: rgba(255, 255, 255, 0.08); --wa-us: #25a35e; --wa-them: #5f7480; }
+}
+:root[data-theme="dark"] { --wa-in: #263238; --wa-out: #145a3c; --wa-note: #4a3f14; --wa-text: #e9edef; --wa-sub: #9aa8b0; --wa-out-sub: #a6d9bd; --wa-note-sub: #e3c766; --wa-sys: #1f2a30; --wa-edge: rgba(255, 255, 255, 0.08); --wa-us: #25a35e; --wa-them: #5f7480; }
+.gwchat-msg { background: var(--wa-in); box-shadow: 0 0 0 1px var(--wa-edge); }
+.gwchat-msg.out { background: var(--wa-out); }
+.gwchat-msg.note { background: var(--wa-note); }
+.gwchat-msg p { color: var(--wa-text); }
+.gwchat-msg small, .gwchat-msg .rec-wait { color: var(--wa-sub); }
+.gwchat-msg.out small { color: var(--wa-out-sub); }
+.gwchat-msg.note small { color: var(--wa-note-sub); }
+.wa-sys span { background: var(--wa-sys); color: var(--wa-sub); }
+.wa-av { background: var(--wa-them); }
+.wa-av.us { background: var(--wa-us); }

@@ -15,10 +15,27 @@ import Assign from "./settings/Assign.jsx";
 import Workspaces from "./settings/Workspaces.jsx";
 import { Import, Export, Archived, Merge } from "./settings/LeadData.jsx";
 
+const THEMES = [["", "Automatic", "Follows your phone or computer"], ["light", "Light", "Bright pages"], ["dark", "Dark", "Easy on the eyes at night"]];
+function chooseTheme(value) {
+  try { value ? localStorage.setItem("salesdesk-theme", value) : localStorage.removeItem("salesdesk-theme"); } catch { /* the choice then lasts for this visit only */ }
+  window.dispatchEvent(new Event("salesdesk-theme"));
+}
 function Appearance() {
   const [skin, setSkin] = useState(readSkin);
+  const [theme, setTheme] = useState(() => { try { return localStorage.getItem("salesdesk-theme") || ""; } catch { return ""; } });
   return (
-    <Section title="Appearance" desc="Pick the look you are used to. It stays in this browser, and the light or dark choice still works with each one.">
+    <>
+    <Section title="Theme" desc="Light or dark. It works with every look below and stays in this browser.">
+      <div className="skin-list" role="radiogroup" aria-label="Theme">
+        {THEMES.map(([id, name, note]) => (
+          <button key={id || "auto"} role="radio" aria-checked={theme === id} className="skin-option" onClick={() => { chooseTheme(id); setTheme(id); }}>
+            <b>{name}</b>
+            <small>{note}</small>
+          </button>
+        ))}
+      </div>
+    </Section>
+    <Section title="Look" desc="Pick the layout and colours you are used to. It stays in this browser.">
       <div className="skin-list" role="radiogroup" aria-label="Appearance">
         {SKINS.map((s) => (
           <button key={s.id} role="radio" aria-checked={skin === s.id} className="skin-option" onClick={() => { applySkin(s.id); setSkin(s.id); }}>
@@ -29,6 +46,7 @@ function Appearance() {
         ))}
       </div>
     </Section>
+    </>
   );
 }
 
@@ -55,7 +73,8 @@ export default function Settings({ params, me }) {
     ["archived", "Archived leads", can("leads.write"), <Archived />, "Leads and data", "Bring archived leads back."],
     ["export", "Download data", can("data.export"), <Export />, "Leads and data", "Take a copy of your leads and activity."],
     ["workspaces", "Workspaces", Boolean(access.crmOwner), <Workspaces currentName={access.name} />, "Workspace", "Separate workspaces, each with its own data and sign-in."],
-    ["account", "Your account", true, null, "Account", "Your sign-in, how the app looks, and signing out."],
+    ["look", "Appearance", true, <Appearance />, "Account", "Theme (light or dark) and the look of the app."],
+    ["account", "Your account", true, null, "Account", "Your sign-in and signing out."],
   ].filter(([, , allowed]) => allowed);
   const tab = sections.find(([key]) => key === params.tab) || sections[0];
   const groups = [...new Set(sections.map((s) => s[4]))];
@@ -84,7 +103,6 @@ export default function Settings({ params, me }) {
                     <button className="btn" onClick={async () => { await logout(); location.reload(); }}>Sign out</button>
                   </div>
                 </Section>
-                <Appearance />
               </>
             ) : tab[3]}
           </div>
