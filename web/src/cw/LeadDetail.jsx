@@ -252,11 +252,11 @@ export default function CwLeadDetail({ id, onClose }) {
                 )}
                 {timeline.map((a) => {
                   const by = a.by || ownerName;
-                  const e = a.kind === "call" ? { id: a.id, kind: "call", out: a.dir === "out", dir: a.dir === "in" ? "Incoming" : "Outgoing", secs: a.secs, by, at: when(a.at), recordingId: recordings.get(a.id) || "" }
+                  const e = a.kind === "call" ? { id: a.id, kind: "call", customer: l.name, out: a.dir === "out", dir: a.dir === "in" ? "Incoming" : "Outgoing", secs: a.secs, by, at: when(a.at), recordingId: recordings.get(a.id) || "" }
                     : a.kind === "whatsapp" ? { id: a.id, kind: "message", out: a.out, text: a.text, sender: a.sender, via: a.via, label: a.label, by, at: when(a.at) }
                     : a.kind === "stage" ? { id: a.id, kind: "system", text: a.text, at: when(a.at) }
                     : { id: a.id, kind: a.kind === "visit" ? "visit" : "note", out: true, text: a.text, by, at: when(a.at) };
-                  return <div key={a.id} className="item item--wa"><ChatEntry e={e} /></div>;
+                  return <div key={a.id} className="item item--wa"><ChatEntry e={{ ...e, customer: l.name }} /></div>;
                 })}
                 {!timeline.length && (
                   <div className="empty">

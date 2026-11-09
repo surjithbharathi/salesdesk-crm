@@ -12,16 +12,22 @@ export const secondsText = (s) => {
 };
 
 // From a stored activity record to what a ChatEntry draws.
-export function fromActivity(a, { by = "", at = "", recordingId = "" } = {}) {
+export function fromActivity(a, { by = "", at = "", recordingId = "", customer = "", badge = "", recordingPending = false } = {}) {
   const type = a.type;
   if (type === "Call") {
     const secs = Number(a.duration) || 0, dir = a.direction || "Outgoing";
-    return { id: a.id, kind: "call", out: dir === "Outgoing", dir, secs, text: a.text, outcome: a.outcome, by, at, recordingId: recordingId || a.recordingId || "" };
+    return { id: a.id, kind: "call", customer, badge, out: dir === "Outgoing", dir, secs, text: a.text, outcome: a.outcome, by, at, recordingPending, recordingId: recordingId || a.recordingId || "" };
   }
-  if (type === "Message") return { id: a.id, kind: "message", out: a.direction === "Outgoing", text: a.text, sender: a.sender, via: a.via, label: a.numberLabel, by, at };
+  if (type === "Message") return { id: a.id, kind: "message", customer, badge, out: a.direction === "Outgoing", text: a.text, sender: a.sender, via: a.via, label: a.numberLabel, by, at };
   if (type === "System") return { id: a.id, kind: "system", text: a.text, at };
-  return { id: a.id, kind: type === "Visit" ? "visit" : "note", out: true, text: a.text, by, at, voiceNoteId: a.voiceNoteId, type };
+  return { id: a.id, kind: type === "Visit" ? "visit" : "note", customer, badge, out: true, text: a.text, by, at, voiceNoteId: a.voiceNoteId, type };
 }
+
+// Two letters of a name, like a profile picture: Surjith -> SU, Bala -> BA
+export const initialsOf = (name) => {
+  const s = String(name || "").replace(/[^p{L}p{N} ]/gu, "").trim();
+  return (s ? s.replace(/s+/g, "").slice(0, 2) : "?").toUpperCase();
+};
 
 const Phone = () => (
   <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z" /></svg>
@@ -50,7 +56,7 @@ export default function ChatEntry({ e }) {
       <article className={`gwchat-msg call ${out ? "out" : ""} ${e.secs > 0 ? "" : "missed"}`}>
         <p className="call-line"><Phone /> <b>{callTitle(e)}</b>{e.secs > 0 ? <span> · {secondsText(e.secs)}</span> : null}</p>
         {!generic && <p>{e.text}</p>}
-        {e.recordingId && <Recording id={e.recordingId} />}
+        {e.recordingId ? <Recording id={e.recordingId} /> : e.recordingPending ? <p className="rec-wait">Recording is being copied from TeleCRM</p> : null}
         <small>{e.by || (out ? "Our team" : "Customer")}{e.outcome ? ` · ${e.outcome}` : ""}{e.at ? `, ${e.at}` : ""}</small>
       </article>
     );
@@ -63,5 +69,8 @@ export default function ChatEntry({ e }) {
       </article>
     );
   }
-  return <div className={`wa-row ${out ? "out" : ""}`}>{body}</div>;
+  // who did it: our team member on the right, the customer on the left
+  const who = out ? (e.kind === "message" ? e.sender || e.by : e.by) || "Our team" : e.kind === "message" && e.sender && e.sender !== "Customer" ? e.sender : e.customer || "Customer";
+  const avatar = <span className={`wa-av ${out ? "us" : "them"}`} title={who} aria-label={who}>{out && e.badge ? e.badge : initialsOf(who)}</span>;
+  return <div className={`wa-row ${out ? "out" : ""}`}>{!out && avatar}{body}{out && avatar}</div>;
 }

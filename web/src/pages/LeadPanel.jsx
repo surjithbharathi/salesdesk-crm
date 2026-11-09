@@ -31,7 +31,7 @@ export function Facts({ rows }) {
   );
 }
 
-function Timeline({ items, crm }) {
+function Timeline({ items, crm, customer }) {
   const groups = [];
   for (const item of items) {
     const label = dayLabel(item.createdAt);
@@ -45,7 +45,7 @@ function Timeline({ items, crm }) {
       <ul className="timeline">
         {g.items.map((a) => (
           <li key={a.id} className="tl-item wa-li">
-            <ChatEntry e={fromActivity(a, { by: crm?.users?.get?.(a.userId)?.name || "", at: timeOnly(a.createdAt) })} />
+            <ChatEntry e={fromActivity(a, { customer, badge: crm?.users?.get?.(a.senderId || a.userId)?.badge || "", by: crm?.users?.get?.(a.userId)?.name || "", at: timeOnly(a.createdAt) })} />
           </li>
         ))}
       </ul>
@@ -222,7 +222,7 @@ export default function LeadPanel({ id, onClose }) {
               ))}
             </div>
             <div className="drawer-body" role="tabpanel">
-              {tab === "timeline" ? <Timeline items={activities} crm={crm} /> : tab === "work" ? <Update key={lead.id} lead={lead} crm={crm} /> : (
+              {tab === "timeline" ? <Timeline items={activities} crm={crm} customer={lead.name} /> : tab === "work" ? <Update key={lead.id} lead={lead} crm={crm} /> : (
                 <>
                   <h3>Work so far</h3>
                   <Facts rows={[

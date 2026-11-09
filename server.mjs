@@ -395,6 +395,23 @@ async function serveWebApp(pathname, res) {
     res.end("The new web app has not been built. Run: npm run web:build");
   }
 }
+// A short unique badge per person for chat bubbles, taken from their login username (unique by rule):
+// the first two letters, or more letters when two people would otherwise share the same badge.
+function withBadges(state) {
+  if (!state || !Array.isArray(state.users)) return state;
+  const names = new Map(userAuth.listAccounts().map((a) => [a.id, a.username]));
+  const clean = (s) => String(s || "").replace(/[^\p{L}\p{N}]/gu, "").toUpperCase();
+  const base = state.users.map((u) => clean(names.get(u.id) || u.email?.split("@")[0] || u.name) || "?");
+  const badges = base.map((b) => b.slice(0, 2));
+  for (let len = 3; len <= 12; len++) {
+    const seen = new Map();
+    badges.forEach((b, i) => seen.set(b, [...(seen.get(b) || []), i]));
+    let clash = false;
+    for (const idx of seen.values()) if (idx.length > 1) for (const i of idx) if (base[i].length >= len) { badges[i] = base[i].slice(0, len); clash = true; }
+    if (!clash) break;
+  }
+  return { ...state, users: state.users.map((u, i) => ({ ...u, badge: badges[i] })) };
+}
 function permittedState(value,id){
   if(!id)return value;const calls=workspaceAccess.can(id,'calls.read'),messages=workspaceAccess.can(id,'messages.read');
   return {...value,mobileCalls:calls?value.mobileCalls:[],activities:(value.activities||[]).filter(a=>(calls||a.type!=='Call')&&(messages||a.type!=='Message')),messages:messages?value.messages:[],conversations:messages?value.conversations:[]};
@@ -1080,13 +1097,13 @@ const server = http.createServer(async (req, res) => {
     }
     if (url.pathname === "/api/state" && req.method === "GET") {
       if (member) {
-        send(200, permittedState(scopedState(all, identity.user.id),identity.user.id));
+        send(200, withBadges(permittedState(scopedState(all, identity.user.id),identity.user.id)));
         return;
       }
-      send(200, permittedState({
+      send(200, withBadges(permittedState({
         ...Object.fromEntries(kinds.map((k) => [k, all(k)])),
         mobileCalls: all("mobileCalls"),
-      },identity?.user.id));
+      },identity?.user.id)));
       return;
     }
     if (url.pathname === "/api/mobile/devices" && req.method === "GET") {
