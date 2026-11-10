@@ -85,12 +85,24 @@ db.exec(`CREATE TABLE IF NOT EXISTS record_versions(kind TEXT PRIMARY KEY, v INT
   CREATE TRIGGER IF NOT EXISTS records_v_insert AFTER INSERT ON records BEGIN INSERT INTO record_versions VALUES(NEW.kind,1) ON CONFLICT(kind) DO UPDATE SET v=v+1; END;
   CREATE TRIGGER IF NOT EXISTS records_v_update AFTER UPDATE ON records BEGIN INSERT INTO record_versions VALUES(NEW.kind,1) ON CONFLICT(kind) DO UPDATE SET v=v+1; INSERT INTO record_versions VALUES(OLD.kind,1) ON CONFLICT(kind) DO UPDATE SET v=v+1; END;
   CREATE TRIGGER IF NOT EXISTS records_v_delete AFTER DELETE ON records BEGIN INSERT INTO record_versions VALUES(OLD.kind,1) ON CONFLICT(kind) DO UPDATE SET v=v+1; END;`);
+const linkedState = (kind) => unalias(kind, kind === "mobileCalls" ? all(kind) : stateAll(kind));
 const kindVersion = db.prepare("SELECT v FROM record_versions WHERE kind=?");
 // versions of only the record kinds the screens' state is built from (background bookkeeping such as
 // workflowState is written every 30 seconds and must not throw the state away)
 const stateVersions = () => [...new Set([...kinds, "mobileCalls", "conversations", "messages", "documents", "tickets"])].map((k) => `${k}:${kindVersion.get(k)?.v ?? 0}`).join();
 const recordCache = new Map();
 const stateCache = new Map(); // finished /api/state answers, per person (see the route)
+// "Same person": a TeleCRM copy of a person (or an old account) shown as one with their real login.
+// Stored records keep the copy's id (the TeleCRM mirror writes them); screens and numbers see one person.
+db.exec("CREATE TABLE IF NOT EXISTS user_links(alias TEXT PRIMARY KEY, user_id TEXT NOT NULL)");
+const linkRows = db.prepare("SELECT alias, user_id FROM user_links ORDER BY alias");
+const userLinks = () => new Map(linkRows.all().map((r) => [r.alias, r.user_id]));
+function unalias(kind, rows, links = userLinks()) {
+  if (!links.size) return rows;
+  if (kind === "users") return rows.filter((u) => !links.has(u.id));
+  for (const r of rows) for (const f of ["owner", "userId", "createdBy"]) if (r[f] && links.has(r[f])) r[f] = links.get(r[f]);
+  return rows;
+}
 // returns fresh top-level objects each call, so a caller changing a record never changes the kept copy
 function cachedRows(key, kind, load) {
   // inside an open transaction the rows may still be rolled back: read them fresh and keep nothing
@@ -401,8 +413,8 @@ const workspaceAccess=createWorkspaceAccess({db,get,put,userAuth,crmOwnerId:proc
 const workspaceRegistry=process.env.CRM_OWNER_CONTEXT==='1'?createWorkspaceRegistry({db,dbPath:process.env.CRM_DB||new URL('./data/crm.sqlite',import.meta.url).pathname,ownerId:process.env.CRM_OWNER_USER_ID||'',get,baseDomain:process.env.WORKSPACE_BASE_DOMAIN,mainOrigin:publicOrigin}):null;
 // KPI scorecard (My day, Team, Business, goals). Counted from the existing records; only daily goals are stored.
 const kpi = createKpi({
-  db, all, get, put,
-  deviceOwners: () => new Map(db.prepare("SELECT body FROM mobile_devices").all().map((r) => JSON.parse(r.body)).map((d) => [d.id, d.owner])),
+  db, all: (kind) => unalias(kind, all(kind)), get, put,
+  deviceOwners: () => { const links = userLinks(); return new Map(db.prepare("SELECT body FROM mobile_devices").all().map((r) => JSON.parse(r.body)).map((d) => [d.id, links.get(d.owner) || d.owner])); },
 });
 function handleKpi(req, url, identity, send, body) {
   const p = url.searchParams;
@@ -701,7 +713,7 @@ const mobileServer = http.createServer(async (req, res) => {
     }
     if (url.pathname === "/v1/workspace" && req.method === "GET") {
       if (!identity) bad("Shared user login required", 401);
-      reply(200, { ...phoneWorkspace(permittedState(scopedState(stateAll, identity.user.id), identity.user.id)), user: identity.user, company: identity.company });
+      reply(200, { ...phoneWorkspace(permittedState(scopedState(linkedState, identity.user.id), identity.user.id)), user: identity.user, company: identity.company });
       return;
     }
     if (
@@ -1222,6 +1234,22 @@ const server = http.createServer(async (req, res) => {
       if(url.pathname==='/api/email/test'&&req.method==='POST'){workspaceAccess.requirePermission(identity,'integrations.manage');sameOrigin();send(200,await smtpEmail.send({to:(await body(req)).to,purpose:'test',actor:identity.user.id}));return;}
       const emailUser=/^\/api\/workspace\/users\/([a-f0-9-]{36})\/email-setup$/.exec(url.pathname);
       if(emailUser&&req.method==='POST'){sameOrigin();workspaceAccess.requirePermission(identity,'users.manage');const target=get('users',emailUser[1]);if(!target?.email)bad('Add an email address for this user first');const reset=workspaceAccess.reset(identity,emailUser[1]);send(200,await smtpEmail.send({to:target.email,purpose:'reset',setupUrl:reset.setupUrl,actor:identity.user.id}));return;}
+      // "same person" links: owners and admins join a TeleCRM copy of a person to their real login
+      if(url.pathname==='/api/workspace/user-links'){
+        workspaceAccess.requirePermission(identity,'users.manage');if(identity.user.role!=='admin')bad('Administrator required',403);
+        const people=()=>all('users').filter((u)=>u.active!==false).map((u)=>({id:u.id,name:u.name,email:u.email||'',login:Boolean(db.prepare('SELECT 1 FROM auth_accounts WHERE user_id=?').get(u.id)),telecrm:Boolean(u.telecrmEmail||String(u.id).startsWith('tc-user-'))}));
+        if(req.method==='GET'){send(200,{links:linkRows.all().map((r)=>({alias:r.alias,userId:r.user_id})),people:people()});return;}
+        if(req.method==='POST'){sameOrigin();const p=await body(req);const alias=String(p.alias||'');const target=p.userId?String(p.userId):'';
+          if(!get('users',alias))bad('Choose the person to join');
+          if(!target){db.prepare('DELETE FROM user_links WHERE alias=?').run(alias);send(200,{links:linkRows.all().map((r)=>({alias:r.alias,userId:r.user_id})),people:people()});return;}
+          if(target===alias)bad('Choose two different people');
+          if(!get('users',target)?.active)bad('Choose an active person to keep');
+          if(db.prepare('SELECT 1 FROM user_links WHERE alias=?').get(target))bad('The person to keep is itself joined to someone else');
+          if(db.prepare('SELECT 1 FROM user_links WHERE user_id=?').get(alias))bad('Others are joined to this person; unlink them first');
+          if(db.prepare('SELECT 1 FROM auth_accounts WHERE user_id=?').get(alias))bad('The person to join has their own login; keep that one instead');
+          db.prepare('INSERT INTO user_links VALUES(?,?) ON CONFLICT(alias) DO UPDATE SET user_id=excluded.user_id').run(alias,target);
+          send(200,{links:linkRows.all().map((r)=>({alias:r.alias,userId:r.user_id})),people:people()});return;}
+      }
       // workspace owners and admins can rename the workspace
       if(url.pathname==='/api/workspace/name'&&req.method==='POST'){sameOrigin();workspaceAccess.requirePermission(identity,'users.manage');if(identity.user.role!=='admin')bad('Administrator required',403);send(200,userAuth.setCompany((await body(req)).name));return;}
       if(url.pathname==='/api/workspace/access'&&req.method==='GET'){send(200,{...workspaceAccess.profile(identity.user.id),name:db.prepare("SELECT value FROM auth_settings WHERE key='company'").get()?.value||'Workspace'});return;}
@@ -1317,13 +1345,13 @@ const server = http.createServer(async (req, res) => {
       // The whole state is many megabytes; build and gzip it once per person and keep it until a record,
       // a login or that person's permissions change.
       const id = identity?.user.id || "";
-      const key = [id, member ? "m" : "a", id ? `${workspaceAccess.can(id, "calls.read")}${workspaceAccess.can(id, "messages.read")}` : "", stateVersions(), userAuth.listAccounts().map((a) => a.id + a.username).join()].join("|");
+      const key = [id, member ? "m" : "a", id ? `${workspaceAccess.can(id, "calls.read")}${workspaceAccess.can(id, "messages.read")}` : "", stateVersions(), userAuth.listAccounts().map((a) => a.id + a.username).join(), linkRows.all().map((r) => r.alias + ">" + r.user_id).join()].join("|");
       const gzipOk = /\bgzip\b/.test(req.headers["accept-encoding"] || "");
       let hit = stateCache.get(id);
       if (!hit || hit.key !== key || db.isTransaction) {
         const value = member
-          ? withBadges(permittedState(scopedState(stateAll, identity.user.id), identity.user.id))
-          : withBadges(permittedState({ ...Object.fromEntries(kinds.map((k) => [k, stateAll(k)])), mobileCalls: all("mobileCalls") }, identity?.user.id));
+          ? withBadges(permittedState(scopedState(linkedState, identity.user.id), identity.user.id))
+          : withBadges(permittedState({ ...Object.fromEntries(kinds.map((k) => [k, linkedState(k)])), mobileCalls: linkedState("mobileCalls") }, identity?.user.id));
         // only the gzipped copy is kept (a few MB); the plain JSON can be over 100 MB
         hit = { key, gz: gzipSync(JSON.stringify(value), { level: 6 }) };
         stateCache.delete(id);

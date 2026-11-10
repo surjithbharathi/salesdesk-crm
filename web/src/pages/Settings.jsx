@@ -20,6 +20,7 @@ import SalesmaxImport from "./settings/SalesmaxImport.jsx";
 import Integrations from "./settings/Integrations.jsx";
 import SigninMethods from "./settings/SigninMethods.jsx";
 import WorkspaceName from "./settings/WorkspaceName.jsx";
+import SamePerson from "./settings/SamePerson.jsx";
 
 const THEMES = [["", "Automatic", "Follows your phone or computer"], ["light", "Light", "Bright pages"], ["dark", "Dark", "Easy on the eyes at night"]];
 function chooseTheme(value) {
@@ -72,6 +73,7 @@ export default function Settings({ params, me }) {
   // A new section is one more line here: pick a key (it becomes #/settings?tab=<key>), a group from GROUPS above and a component.
   const sections = [
     ["workspace", "Workspace name", admin && can("users.manage"), <WorkspaceName current={access.name} />, "Workspace", "The company name everyone sees in the app."],
+    ["same", "Same person", admin && can("users.manage"), <SamePerson />, "Workspace", "Show two entries of one person (like a TeleCRM copy and their login) as one."],
     ["users", "People and roles", can("users.manage"), <Users access={full} meId={me.id} />, "Workspace", "Who can sign in, what each person can see and change."],
     ["assign", "Lead assignment", can("leads.write") && me.lead, <Assign access={full} />, "Workspace", "Hand leads to people in bulk."],
     ["workflows", "Workflows", manager, <Workflows users={me.users} />, "Workspace", "Rules that act on leads by themselves: assign, follow up, message."],
