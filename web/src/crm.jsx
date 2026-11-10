@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { crmGet, crmState } from "./api.js";
 import { pipelineStep } from "./pipeline.js";
 import { PhoneDial } from "./PhoneDial.jsx";
@@ -22,13 +22,44 @@ export function useLeadHistory(id) {
 
 const open = (lead) => lead.stage !== "Closed" && !lead.archived;
 
-// Loads the CRM's records once and keeps simple lookups. `reload` is called after every change so screens never show stale numbers.
+// Puts changed records into the state: replaced where they were, new ones first (the state lists newest first),
+// deleted ones dropped. Kinds that did not change keep their arrays, so their screens do not redraw.
+function mergeChanges(state, { changes = {}, deleted = {}, syncSeq }) {
+  const next = { ...state, syncSeq };
+  for (const kind of new Set([...Object.keys(changes), ...Object.keys(deleted)])) {
+    const list = state[kind] || [];
+    const gone = new Set(deleted[kind] || []);
+    const fresh = new Map((changes[kind] || []).map((r) => [r.id, r]));
+    const kept = [];
+    for (const r of list) {
+      if (gone.has(r.id)) continue;
+      if (fresh.has(r.id)) { kept.push(fresh.get(r.id)); fresh.delete(r.id); } else kept.push(r);
+    }
+    next[kind] = [...fresh.values(), ...kept];
+  }
+  return next;
+}
+
+// Loads the CRM's records once and keeps simple lookups. `reload` is called after every change so screens never show
+// stale numbers: after the first load it asks only for what changed, instead of downloading the whole CRM again.
 export function CrmProvider({ me, children }) {
   const [state, setState] = useState(null);
   const [error, setError] = useState("");
+  const seq = useRef(null);
   const reload = useCallback(async () => {
     try {
-      setState(await crmState());
+      if (seq.current != null) {
+        const delta = await crmGet(`state/changes?after=${seq.current}`);
+        if (!delta.full) {
+          seq.current = delta.syncSeq;
+          if (Object.keys(delta.changes || {}).length || Object.keys(delta.deleted || {}).length) setState((s) => (s ? mergeChanges(s, delta) : s));
+          setError("");
+          return;
+        }
+      }
+      const full = await crmState();
+      seq.current = Number.isInteger(full.syncSeq) ? full.syncSeq : null;
+      setState(full);
       setError("");
     } catch (e) {
       setError(e.message);

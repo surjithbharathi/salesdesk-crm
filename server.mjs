@@ -86,6 +86,16 @@ db.exec(`CREATE TABLE IF NOT EXISTS record_versions(kind TEXT PRIMARY KEY, v INT
   CREATE TRIGGER IF NOT EXISTS records_v_update AFTER UPDATE ON records BEGIN INSERT INTO record_versions VALUES(NEW.kind,1) ON CONFLICT(kind) DO UPDATE SET v=v+1; INSERT INTO record_versions VALUES(OLD.kind,1) ON CONFLICT(kind) DO UPDATE SET v=v+1; END;
   CREATE TRIGGER IF NOT EXISTS records_v_delete AFTER DELETE ON records BEGIN INSERT INTO record_versions VALUES(OLD.kind,1) ON CONFLICT(kind) DO UPDATE SET v=v+1; END;`);
 const linkedState = (kind) => unalias(kind, kind === "mobileCalls" ? all(kind) : stateAll(kind));
+// A running list of changed records, so a screen that already has the state can ask only for what changed
+// (GET /api/state/changes?after=<seq>) instead of downloading everything again after each save.
+db.exec(`CREATE TABLE IF NOT EXISTS record_changes(seq INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, id TEXT NOT NULL);
+  CREATE TRIGGER IF NOT EXISTS records_c_insert AFTER INSERT ON records BEGIN INSERT INTO record_changes(kind,id) VALUES(NEW.kind,NEW.id); END;
+  CREATE TRIGGER IF NOT EXISTS records_c_update AFTER UPDATE ON records BEGIN INSERT INTO record_changes(kind,id) VALUES(NEW.kind,NEW.id); END;
+  CREATE TRIGGER IF NOT EXISTS records_c_delete AFTER DELETE ON records BEGIN INSERT INTO record_changes(kind,id) VALUES(OLD.kind,OLD.id); END;`);
+const changeSeq = () => db.prepare("SELECT COALESCE(MAX(seq),0) AS s FROM record_changes").get().s;
+const pruneChanges = () => { try { db.prepare("DELETE FROM record_changes WHERE seq < (SELECT MAX(seq) FROM record_changes) - 200000").run(); } catch {} };
+pruneChanges();
+setInterval(pruneChanges, 3600000).unref();
 const kindVersion = db.prepare("SELECT v FROM record_versions WHERE kind=?");
 // versions of only the record kinds the screens' state is built from (background bookkeeping such as
 // workflowState is written every 30 seconds and must not throw the state away)
@@ -1341,6 +1351,35 @@ const server = http.createServer(async (req, res) => {
       }
       bad("Not found", 404);
     }
+    // Only what changed since the screen's copy of the state (its syncSeq). Anything this cannot express
+    // exactly (people, a scoped member's view, too many changes) answers { full: true } and the screen reloads.
+    if (url.pathname === "/api/state/changes" && req.method === "GET") {
+      const after = Number(url.searchParams.get("after"));
+      const seq = changeSeq();
+      const oldest = db.prepare("SELECT COALESCE(MIN(seq),0) AS s FROM record_changes").get().s;
+      if (member || !Number.isInteger(after) || after < 0 || after > seq || (after < oldest - 1 && after !== seq)) { send(200, { full: true }); return; }
+      const rows = db.prepare("SELECT DISTINCT kind, id FROM record_changes WHERE seq > ? LIMIT 3001").all(after);
+      const shown = new Set([...kinds, "mobileCalls"]);
+      const relevant = rows.filter((r) => shown.has(r.kind));
+      if (rows.length > 3000 || relevant.some((r) => r.kind === "users")) { send(200, { full: true }); return; }
+      const id = identity?.user.id;
+      const calls = !id || workspaceAccess.can(id, "calls.read"), messages = !id || workspaceAccess.can(id, "messages.read");
+      const links = userLinks();
+      const changes = {}, deleted = {};
+      for (const { kind, id: recordId } of relevant) {
+        const row = db.prepare("SELECT body FROM records WHERE kind=? AND id=?").get(kind, recordId);
+        let value = row ? JSON.parse(row.body) : null;
+        if (value && kind === "leads") { try { value = { ...value, ...phoneParts(value.phone) }; } catch {} delete value.salesmax; }
+        if (value && kind === "activities" && (value.importedFrom || (!calls && value.type === "Call") || (!messages && value.type === "Message"))) value = null;
+        if (value && kind === "tasks" && value.importedFrom && value.status === "Done") value = null;
+        if (value && kind === "mobileCalls" && !calls) value = null;
+        if (value && (kind === "messages" || kind === "conversations") && !messages) value = null;
+        if (value) (changes[kind] ||= []).push(unalias(kind, [value], links)[0]);
+        else (deleted[kind] ||= []).push(recordId);
+      }
+      send(200, { syncSeq: seq, changes, deleted });
+      return;
+    }
     if (url.pathname === "/api/state" && req.method === "GET") {
       // The whole state is many megabytes; build and gzip it once per person and keep it until a record,
       // a login or that person's permissions change.
@@ -1349,11 +1388,12 @@ const server = http.createServer(async (req, res) => {
       const gzipOk = /\bgzip\b/.test(req.headers["accept-encoding"] || "");
       let hit = stateCache.get(id);
       if (!hit || hit.key !== key || db.isTransaction) {
+        const syncSeq = changeSeq(); // read before the records, so nothing changed meanwhile is missed later
         const value = member
           ? withBadges(permittedState(scopedState(linkedState, identity.user.id), identity.user.id))
           : withBadges(permittedState({ ...Object.fromEntries(kinds.map((k) => [k, linkedState(k)])), mobileCalls: linkedState("mobileCalls") }, identity?.user.id));
         // only the gzipped copy is kept (a few MB); the plain JSON can be over 100 MB
-        hit = { key, gz: gzipSync(JSON.stringify(value), { level: 6 }) };
+        hit = { key, gz: gzipSync(JSON.stringify({ ...value, syncSeq }), { level: 6 }) };
         stateCache.delete(id);
         if (!db.isTransaction) stateCache.set(id, hit);
         while (stateCache.size > 6) stateCache.delete(stateCache.keys().next().value);
