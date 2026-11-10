@@ -74,3 +74,15 @@ test("deals, tasks and activities hang on the lead by number; calls already here
   assert.throws(() => s.imp.importBatch("nope", []), /Unknown/);
   assert.throws(() => s.imp.importBatch("contacts", Array(401).fill({})), /at most/);
 });
+
+test("a lead uploaded to TeleCRM from Excel gets Salesmax's real date and source; a real source is kept", () => {
+  const s = setup();
+  s.put("leads", { id: "tc-1", name: "Ravi", phone: "+919876500001", phoneKey: "919876500001", owner: "u2", stage: "Opportunity", source: "Excel", createdAt: "2026-09-14T09:01:59.733Z", updatedAt: "2026-09-14T09:01:59.733Z" });
+  s.put("leads", { id: "tc-2", name: "Kumar", phone: "+919876500002", phoneKey: "919876500002", owner: "u2", stage: "New", source: "TradeIndia", createdAt: "2025-01-01T00:00:00.000Z" });
+  const c = s.imp.importBatch("contacts", [contact({}), contact({ "MOBILE NUMBER": "+919876500002", "LEAD SOURCE": "WHATSAPP" })]);
+  const ravi = s.get("leads", "tc-1"), kumar = s.get("leads", "tc-2");
+  assert.deepEqual([ravi.source, ravi.createdAt, ravi.owner, ravi.stage], ["IndiaMART", "2026-03-06T06:30:53.000Z", "u2", "Opportunity"]);
+  assert.ok(ravi.importTouch && ravi.importTouch === ravi.updatedAt);
+  assert.deepEqual([kumar.source, kumar.createdAt], ["TradeIndia", "2025-01-01T00:00:00.000Z"], "a real source and an earlier date stay");
+  assert.equal(c.updated, 2);
+});

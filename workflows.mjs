@@ -446,7 +446,8 @@ export function createWorkflows({ db, get, put, stamp, tx, log, users, sendWhats
         for (const k of watch) {
           const v = k === "owner" ? String(l.owner || "") : valueOf(l, k);
           cur[k] = v;
-          if (l.r > state.leadRow || !Object.hasOwn(was, k) || was[k] === v) continue;
+          // a change written by an import in the last 10 minutes is remembered but starts nothing
+          if (l.r > state.leadRow || !Object.hasOwn(was, k) || was[k] === v || (l.importTouch && t - Date.parse(l.importTouch) < 600000)) continue;
           const tag = `${l.id}:${was[k].slice(0, 40)}>${v.slice(0, 40)}:${l.updatedAt || ""}`;
           if (k === "owner") events.push(["owner_changed", l, "owner:" + tag, `assigned to ${userName(v) || "nobody"}`, { to: v }]);
           else if (k === "rating") events.push(["rating_changed", l, "rating:" + tag, `rating ${was[k] || 0} → ${v || 0}`, { to: v }]);

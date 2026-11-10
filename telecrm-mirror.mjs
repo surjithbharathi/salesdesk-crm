@@ -264,7 +264,9 @@ export function createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecor
     const created = msOf(f.created_on);
     const lead = {
       ...(cur || {}), id: cur?.id || id, name: text(f.name, 200).trim() || (parts.phone && `+${parts.phoneKey}`) || "TeleCRM lead", company: text(company, 200) || cur?.company || "",
-      email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email || "") ? email : cur?.email || "", city: text(city || place, 200) || cur?.city || "", source: text(lead_source, 200) || cur?.source || "TeleCRM",
+      email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email || "") ? email : cur?.email || "", city: text(city || place, 200) || cur?.city || "",
+      // "Excel" only says the lead was uploaded from a sheet; a real source found here earlier (e.g. by the Salesmax import) stays
+      source: (/^excel$/i.test(text(lead_source, 200)) && cur?.source && !/^(excel|telecrm)$/i.test(cur.source) ? cur.source : text(lead_source, 200)) || cur?.source || "TeleCRM",
       value: Number(String(expected_revenue ?? "").replace(/[^\d.]/g, "")) || cur?.value || 0, owner, ...parts,
       stage: map.stage, deal: map.deal, disposition: map.disposition, archived: false, repeat: norm(status) === "regular customer" || Boolean(cur?.repeat), list: cur?.list || "",
       firstTouchAt: cur?.firstTouchAt ?? (msOf(f.first_attempted_call || f.first_call) ? new Date(msOf(f.first_attempted_call || f.first_call)).toISOString() : null),

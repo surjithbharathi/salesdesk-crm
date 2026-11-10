@@ -115,8 +115,13 @@ export function createSalesmaxImport({ db, get, put, tx, users }) {
         // someone already works this lead here: fill what is empty, never change who owns it or where it stands
         lead = { ...old };
         for (const [k, v] of [["company", str(r.BUSINESS, 200)], ["email", /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(r.EMAIL || "") ? str(r.EMAIL, 200) : ""], ["city", str(r.CITY, 200)]]) if (!lead[k] && v) lead[k] = v;
+        // leads that reached TeleCRM through an Excel upload carry the upload's day and "Excel" as source: Salesmax knows the real ones
+        if (istToIso(r.CREATED) && (!lead.createdAt || istToIso(r.CREATED) < lead.createdAt)) lead.createdAt = istToIso(r.CREATED);
+        if (str(r["LEAD SOURCE"]) && (!lead.source || /^(excel|telecrm)$/i.test(lead.source))) lead.source = sourceOf(r["LEAD SOURCE"]);
         lead.salesmax = info;
         if (JSON.stringify(old) === JSON.stringify(lead)) { counts.skipped++; continue; }
+        // workflows see this change as the import's, not a person's (see workflows.mjs)
+        lead.importTouch = lead.updatedAt = new Date().toISOString();
         counts.updated++;
       } else {
         lead = {

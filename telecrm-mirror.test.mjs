@@ -292,3 +292,15 @@ test("a copy made by an older version is read again once, so old notes become me
   const second = await w.mirror.sync();
   assert.equal(second.changed, 0, "after that, unchanged leads are skipped again");
 });
+
+test("a real source found here is not overwritten by TeleCRM's \"Excel\"; a real TeleCRM source still wins", async (t) => {
+  const w = world(t);
+  connect(w);
+  w.rawPut("leads", { id: "smx", name: "From Salesmax", phone: "+919876511111", phoneKey: "919876511111", countryCode: "91", mobileNumber: "9876511111", owner: "", stage: "New", deal: "", disposition: "", source: "IndiaMART", createdAt: "2025-08-01T05:00:00.000Z" });
+  w.rawPut("leads", { id: "two", name: "Other", phone: "+919876522222", phoneKey: "919876522222", countryCode: "91", mobileNumber: "9876522222", owner: "", stage: "New", deal: "", disposition: "", source: "IndiaMART" });
+  w.tele.leads = [lead("aaa", {}, { phone: "919876511111", lead_source: "Excel" }), lead("bbbb", {}, { phone: "919876522222", lead_source: "TradeIndia" })];
+  await w.mirror.sync();
+  assert.equal(w.get("leads", "smx").source, "IndiaMART");
+  assert.equal(w.get("leads", "smx").createdAt, "2025-08-01T05:00:00.000Z", "the earlier real date stays");
+  assert.equal(w.get("leads", "two").source, "TradeIndia");
+});

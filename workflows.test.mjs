@@ -309,3 +309,18 @@ test("a test run says what each box would do and changes nothing", async () => {
   assert.equal(s.all("activities").length, 0);
   assert.throws(() => s.wf.dryRun(input, "nope"), /lead to test/);
 });
+
+test("a field changed by an import a moment ago starts nothing; a later change by a person does", async () => {
+  const s = setup();
+  const l = s.lead({ source: "Excel" });
+  s.wf.create(rule("Source", { type: "field_changed", field: "source" }, [], [{ type: "note", text: "source now {source}" }]));
+  await s.wf.tick();
+  await s.wf.tick();
+  s.put("leads", { ...s.get("leads", l.id), source: "IndiaMART", importTouch: s.iso(), updatedAt: s.iso() });
+  await s.wf.tick();
+  assert.equal(s.all("activities").length, 0);
+  s.advance(3600000);
+  s.put("leads", { ...s.get("leads", l.id), source: "TradeIndia", updatedAt: s.iso() });
+  await s.wf.tick();
+  assert.equal(s.all("activities").filter((a) => a.text === "source now TradeIndia").length, 1);
+});

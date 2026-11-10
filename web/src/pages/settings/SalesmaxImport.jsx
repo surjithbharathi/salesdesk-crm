@@ -121,7 +121,7 @@ export default function SalesmaxImport() {
   const busy = run && !run.finished;
 
   return (
-    <Section title="Bring in Salesmax history" desc="Choose the export files from Salesmax: contacts, deals, tasks and activities (CSV, or XLSX for tasks). Leads are matched by mobile number. A lead already in Salesdesk keeps its owner and stage; only its empty details are filled. New leads come in with Salesmax's owner, stage and dates." status={run?.finished && !run.error ? "Imported" : busy ? "Importing" : files.length ? `${ready.length} file${ready.length === 1 ? "" : "s"} ready` : "No files yet"} tone={run?.finished && !run.error ? "ok" : "off"}>
+    <Section title="Bring in Salesmax history" desc="Choose the export files from Salesmax: contacts, deals, tasks and activities (CSV, or XLSX for tasks). Leads are matched by mobile number. A lead already in Salesdesk keeps its owner and stage; its empty details are filled, and a lead that reached TeleCRM through an Excel upload gets its real first date and source back. New leads come in with Salesmax's owner, stage and dates." status={run?.finished && !run.error ? "Imported" : busy ? "Importing" : files.length ? `${ready.length} file${ready.length === 1 ? "" : "s"} ready` : "No files yet"} tone={run?.finished && !run.error ? "ok" : "off"}>
       <label className="smx-pick">
         <span>Export files</span>
         <input type="file" multiple accept=".csv,.xlsx" disabled={reading || busy} onChange={pick} />
