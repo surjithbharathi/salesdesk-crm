@@ -24,7 +24,7 @@ import { isBlocked as numberBlocked } from "./blocked-numbers.mjs";
 import { readFile, mkdir } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
 import { randomUUID } from "node:crypto";
-import { gzipSync } from "node:zlib";
+import { gzipSync, gunzipSync } from "node:zlib";
 import { createExtensions } from "./extensions.mjs";
 import { encryptedAuth } from "./whatsapp-auth.mjs";
 import { createWhatsApp, phoneDigits } from "./whatsapp.mjs";
@@ -78,16 +78,36 @@ function refreshProbableStates() {
 refreshProbableStates();
 setInterval(refreshProbableStates, 6 * 3600000).unref();
 const kinds = ["leads", "activities", "tasks", "deals", "payments", "products", "users", "lists"];
+// Reading every record of a kind is slow on a real workspace (27k leads, 130k activities: seconds per page).
+// Parsed records are kept in memory per kind and reused until a write touches that kind. Triggers count the
+// writes, so every path that writes records (put, rawPut, imports, direct SQL) invalidates the copy.
+db.exec(`CREATE TABLE IF NOT EXISTS record_versions(kind TEXT PRIMARY KEY, v INTEGER NOT NULL);
+  CREATE TRIGGER IF NOT EXISTS records_v_insert AFTER INSERT ON records BEGIN INSERT INTO record_versions VALUES(NEW.kind,1) ON CONFLICT(kind) DO UPDATE SET v=v+1; END;
+  CREATE TRIGGER IF NOT EXISTS records_v_update AFTER UPDATE ON records BEGIN INSERT INTO record_versions VALUES(NEW.kind,1) ON CONFLICT(kind) DO UPDATE SET v=v+1; INSERT INTO record_versions VALUES(OLD.kind,1) ON CONFLICT(kind) DO UPDATE SET v=v+1; END;
+  CREATE TRIGGER IF NOT EXISTS records_v_delete AFTER DELETE ON records BEGIN INSERT INTO record_versions VALUES(OLD.kind,1) ON CONFLICT(kind) DO UPDATE SET v=v+1; END;`);
+const kindVersion = db.prepare("SELECT v FROM record_versions WHERE kind=?");
+const allVersions = db.prepare("SELECT group_concat(kind||':'||v) AS s FROM (SELECT kind,v FROM record_versions ORDER BY kind)");
+const recordCache = new Map();
+const stateCache = new Map(); // finished /api/state answers, per person (see the route)
+// returns fresh top-level objects each call, so a caller changing a record never changes the kept copy
+function cachedRows(key, kind, load) {
+  // inside an open transaction the rows may still be rolled back: read them fresh and keep nothing
+  if (db.isTransaction) return load();
+  const v = kindVersion.get(kind)?.v ?? 0;
+  let hit = recordCache.get(key);
+  if (!hit || hit.v !== v) { hit = { v, rows: load() }; recordCache.set(key, hit); }
+  return hit.rows.map((o) => ({ ...o }));
+}
 const all = (kind) =>
-  db
+  cachedRows(`all:${kind}`, kind, () => db
     .prepare("SELECT body FROM records WHERE kind=? ORDER BY rowid DESC")
     .all(kind)
-    .map((r) => {const value=JSON.parse(r.body);if(kind==="leads")try{return {...value,...phoneParts(value.phone)};}catch{}return value;});
+    .map((r) => {const value=JSON.parse(r.body);if(kind==="leads")try{return {...value,...phoneParts(value.phone)};}catch{}return value;}));
 // what the screens load at once: history brought in from another CRM (importedFrom) stays out, except open tasks, and is read
 // per lead when the lead is opened; otherwise a big import would make every page load download it all
 db.exec("CREATE INDEX IF NOT EXISTS activities_by_lead ON records(json_extract(body,'$.leadId')) WHERE kind='activities'");
 const stateAll = (kind) =>
-  kind === "activities" ? db.prepare("SELECT body FROM records WHERE kind='activities' AND json_extract(body,'$.importedFrom') IS NULL ORDER BY rowid DESC").all().map((r) => JSON.parse(r.body))
+  kind === "activities" ? cachedRows("state:activities", "activities", () => db.prepare("SELECT body FROM records WHERE kind='activities' AND json_extract(body,'$.importedFrom') IS NULL ORDER BY rowid DESC").all().map((r) => JSON.parse(r.body)))
   : kind === "tasks" ? db.prepare("SELECT body FROM records WHERE kind='tasks' AND (json_extract(body,'$.importedFrom') IS NULL OR json_extract(body,'$.status')<>'Done') ORDER BY rowid DESC").all().map((r) => JSON.parse(r.body))
   : kind === "leads" ? all("leads").map(({ salesmax, ...lead }) => lead)
   : all(kind);
@@ -1292,14 +1312,29 @@ const server = http.createServer(async (req, res) => {
       bad("Not found", 404);
     }
     if (url.pathname === "/api/state" && req.method === "GET") {
-      if (member) {
-        send(200, withBadges(permittedState(scopedState(stateAll, identity.user.id),identity.user.id)));
-        return;
+      // The whole state is many megabytes; build and gzip it once per person and keep it until a record,
+      // a login or that person's permissions change.
+      const id = identity?.user.id || "";
+      const key = [id, member ? "m" : "a", id ? `${workspaceAccess.can(id, "calls.read")}${workspaceAccess.can(id, "messages.read")}` : "", allVersions.get()?.s || "", userAuth.listAccounts().map((a) => a.id + a.username).join()].join("|");
+      const gzipOk = /\bgzip\b/.test(req.headers["accept-encoding"] || "");
+      let hit = stateCache.get(id);
+      if (!hit || hit.key !== key || db.isTransaction) {
+        const value = member
+          ? withBadges(permittedState(scopedState(stateAll, identity.user.id), identity.user.id))
+          : withBadges(permittedState({ ...Object.fromEntries(kinds.map((k) => [k, stateAll(k)])), mobileCalls: all("mobileCalls") }, identity?.user.id));
+        // only the gzipped copy is kept (a few MB); the plain JSON can be over 100 MB
+        hit = { key, gz: gzipSync(JSON.stringify(value), { level: 6 }) };
+        stateCache.delete(id);
+        if (!db.isTransaction) stateCache.set(id, hit);
+        while (stateCache.size > 6) stateCache.delete(stateCache.keys().next().value);
       }
-      send(200, withBadges(permittedState({
-        ...Object.fromEntries(kinds.map((k) => [k, stateAll(k)])),
-        mobileCalls: all("mobileCalls"),
-      },identity?.user.id)));
+      if (gzipOk) {
+        res.writeHead(200, { "Content-Type": "application/json", "Content-Encoding": "gzip", Vary: "Accept-Encoding", "Cache-Control": "no-store" });
+        res.end(hit.gz);
+      } else {
+        res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+        res.end(gunzipSync(hit.gz));
+      }
       return;
     }
     // the imported history of one lead (left out of /api/state)
