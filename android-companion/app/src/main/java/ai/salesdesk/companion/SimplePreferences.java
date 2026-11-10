@@ -31,6 +31,15 @@ final class SimplePreferences {
         a.syncStatus=a.text(sync,prefs().getString("status",""),12,false);
         LinearLayout prompts=a.card();a.text(prompts,"During & after calls",19,true);
         toggle(prompts,"Caller popup (who is calling)",prefs().getBoolean("screenPop",false),enabled->{if(enabled)setupCaller();else{prefs().edit().putBoolean("screenPop",false).commit();a.render();}});
+        if(prefs().getBoolean("screenPop",false)){
+            toggle(prompts,"Show it on the lock screen too",prefs().getBoolean("screenPopLocked",false),enabled->{
+                prefs().edit().putBoolean("screenPopLocked",enabled).commit();
+                // the call state lets the card close itself when the call ends
+                if(enabled&&a.checkSelfPermission(Manifest.permission.READ_PHONE_STATE)!=PackageManager.PERMISSION_GRANTED)a.requestPermissions(new String[]{Manifest.permission.READ_PHONE_STATE},311);
+                a.render();
+            });
+            a.caption(prompts,"On a locked phone the card shows over the ringing call screen, so anyone holding the phone can read the customer's name and last work. Some phones (Xiaomi, Vivo, Oppo) also need “Show on lock screen” allowed for Salesdesk in the phone's app settings.");
+        }
         toggle(prompts,"Ask for feedback after calls",prefs().getBoolean("postCallFeedback",false),enabled->{prefs().edit().putBoolean("postCallFeedback",enabled).commit();if(enabled&&android.os.Build.VERSION.SDK_INT>=33&&a.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)a.requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},308);});
         toggle(prompts,"Call from web CRM",prefs().getBoolean("clickToCall",false),enabled->{
             if(!enabled){prefs().edit().putBoolean("clickToCall",false).commit();a.stopService(new Intent(a,CallBridgeService.class));return;}

@@ -29,7 +29,8 @@ final class CallerCard {
     /** Shows the card for this number; a later call for the same number (the server's fuller answer) replaces it in place. */
     static void show(Context c, String number, JSONObject card) {
         if (!SecureConfig.loggedIn(c) || !android.provider.Settings.canDrawOverlays(c)) return;
-        if (((android.app.KeyguardManager) c.getSystemService(Context.KEYGUARD_SERVICE)).isKeyguardLocked()) return;
+        // on a locked phone only when the person chose it (the card then sits over the ringing call screen)
+        if (((android.app.KeyguardManager) c.getSystemService(Context.KEYGUARD_SERVICE)).isKeyguardLocked() && !SecureConfig.prefs(c).getBoolean("screenPopLocked", false)) return;
         new Handler(Looper.getMainLooper()).post(() -> {
             if (current != null && !number.equals(shownFor)) dismiss();
             Theme.load(c);
@@ -41,7 +42,7 @@ final class CallerCard {
                 } else {
                     manager = c.getSystemService(WindowManager.class);
                     params = new WindowManager.LayoutParams(-1, -2, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT);
+                        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS | showWhenLocked(c), PixelFormat.TRANSLUCENT);
                     params.gravity = Gravity.TOP;
                     params.y = dp(c, 90);
                     manager.addView(view, params);
@@ -123,6 +124,10 @@ final class CallerCard {
         drag(outer);
         return outer;
     }
+
+    // older Androids keep a window over the lock screen only with this flag; newer ones show it over the ringing call screen anyway
+    @SuppressWarnings("deprecation")
+    private static int showWhenLocked(Context c) { return SecureConfig.prefs(c).getBoolean("screenPopLocked", false) ? WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED : 0; }
 
     // ---- small builders ----
     private static int dp(Context c, int v) { return Math.round(v * c.getResources().getDisplayMetrics().density); }
