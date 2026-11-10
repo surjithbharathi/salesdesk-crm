@@ -14,24 +14,28 @@ public class LeadScreeningService extends CallScreeningService {
     @Override public void onScreenCall(Call.Details details){
         if(android.os.Build.VERSION.SDK_INT<29){respondToCall(details,new CallResponse.Builder().build());return;}
         if(details.getCallDirection()==Call.Details.DIRECTION_INCOMING)respondToCall(details,new CallResponse.Builder().setDisallowCall(false).setRejectCall(false).setSilenceCall(false).setSkipCallLog(false).setSkipNotification(false).build());
-        if(details.getCallDirection()!=Call.Details.DIRECTION_INCOMING)return;
+        boolean outgoing=details.getCallDirection()==Call.Details.DIRECTION_OUTGOING;
+        if(details.getCallDirection()!=Call.Details.DIRECTION_INCOMING&&!outgoing)return;
         if(!SecureConfig.loggedIn(this)||!SecureConfig.prefs(this).getBoolean("screenPop",false)||details.getHandle()==null)return;
         PhoneAccountHandle account=details.getAccountHandle();String key=account==null?"":SimTracking.key(account.getId());
         if(!SimTracking.allows(this,key,true))return;
-        lookup(getApplicationContext(),details.getHandle().getSchemeSpecificPart());
+        lookup(getApplicationContext(),details.getHandle().getSchemeSpecificPart(),outgoing);
     }
 
     private static String lastNumber="";
     private static long lastAt;
 
-    /** Shows the card for an incoming number: from the phone at once, then from the CRM. A repeat within 15 s is ignored. */
-    static synchronized void lookup(Context c,String raw){
+    static void lookup(Context c,String raw){lookup(c,raw,false);}
+
+    /** Shows the card for a number on a call (incoming or outgoing): from the phone at once, then from the CRM. A repeat within 15 s is ignored. */
+    static synchronized void lookup(Context c,String raw,boolean outgoing){
         String country=SecureConfig.prefs(c).getString("country","91");
         String number=SyncEngine.normalize(raw,country);
         if(number.length()<6)return;
         long now=System.currentTimeMillis();
         if(number.equals(lastNumber)&&now-lastAt<15000)return;
         lastNumber=number;lastAt=now;
+        CallerCard.outgoing(number,outgoing);
         JSONObject quick=fromPhone(c,number,country);
         if(quick!=null)CallerCard.show(c,number,quick);
         new Thread(()->{

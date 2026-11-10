@@ -58,8 +58,27 @@ final class CallerCard {
         } catch (Exception e) { current = null; manager = null; params = null; }
     }
 
-    private static String lastNumber = "", watching = "";
+    private static String lastNumber = "", watching = "", outgoingNumber = "";
     private static JSONObject lastCard = new JSONObject();
+
+    /** Notes whether the call on this number was placed from the phone (it is off-hook from dialling, not from answering). */
+    static synchronized void outgoing(String number, boolean out) { if (out) outgoingNumber = number; else if (number.equals(outgoingNumber)) outgoingNumber = ""; }
+    private static synchronized boolean isOutgoing(String number) { return number.equals(outgoingNumber); }
+
+    // an outgoing call's real talk time, from the call log once the call has ended (0 when it was not answered, -1 when unknown)
+    private static long loggedSeconds(Context c, String number) {
+        if (c.checkSelfPermission(android.Manifest.permission.READ_CALL_LOG) != android.content.pm.PackageManager.PERMISSION_GRANTED) return -1;
+        String tail = number.replaceAll("[^0-9]", ""); if (tail.length() > 10) tail = tail.substring(tail.length() - 10);
+        try (android.database.Cursor log = c.getContentResolver().query(android.provider.CallLog.Calls.CONTENT_URI,
+                new String[]{android.provider.CallLog.Calls.NUMBER, android.provider.CallLog.Calls.DURATION, android.provider.CallLog.Calls.TYPE},
+                android.provider.CallLog.Calls.DATE + ">?", new String[]{String.valueOf(System.currentTimeMillis() - 3600000)}, android.provider.CallLog.Calls.DATE + " DESC")) {
+            while (log != null && log.moveToNext()) {
+                String n = String.valueOf(log.getString(0)).replaceAll("[^0-9]", "");
+                if (log.getInt(2) == android.provider.CallLog.Calls.OUTGOING_TYPE && n.endsWith(tail)) return log.getLong(1);
+            }
+        } catch (Exception ignored) {}
+        return -1;
+    }
 
     /** After the call: how it went, and a button to send the customer a WhatsApp message (and open or add the lead). */
     private static void afterCall(Context c, String number, JSONObject d, boolean answered, long seconds) {
@@ -76,7 +95,8 @@ final class CallerCard {
         String name = found ? d.optString("name") : pretty(d.optString("number", number));
         TextView title = line(c, name, 17, MainActivity.INK); title.setTypeface(Typeface.DEFAULT_BOLD); title.setSingleLine(true); title.setEllipsize(TextUtils.TruncateAt.END);
         titles.addView(title);
-        titles.addView(line(c, answered ? "Call ended · talked " + talk(seconds) : "Missed call", 13, answered ? MainActivity.MUTED : MainActivity.RED));
+        boolean out = isOutgoing(number);
+        titles.addView(line(c, answered ? "Call ended · talked " + talk(seconds) : out ? "Not answered" : "Missed call", 13, answered ? MainActivity.MUTED : MainActivity.RED));
         head.addView(titles, new LinearLayout.LayoutParams(0, -2, 1));
         TextView close = new TextView(c); close.setText("✕"); close.setTextSize(18); close.setTextColor(MainActivity.MUTED); close.setPadding(dp(c, 10), dp(c, 4), dp(c, 4), dp(c, 4));
         close.setContentDescription("Close"); close.setOnClickListener(v -> dismiss());
@@ -85,7 +105,7 @@ final class CallerCard {
         LinearLayout actions = new LinearLayout(c); actions.setGravity(Gravity.END | Gravity.CENTER_VERTICAL); actions.setPadding(0, dp(c, 12), 0, 0);
         if (found && own) actions.addView(plain(c, "Open lead", () -> open(c, new Intent(c, MainActivity.class).putExtra("openLeadId", d.optString("id")))));
         else if (!found) actions.addView(plain(c, "Add as lead", () -> open(c, new Intent(c, MainActivity.class).putExtra("newLeadPhone", d.optString("number", number)))));
-        Button wa = action(c, "Send WhatsApp", () -> whatsApp(c, d.optString("number", number), found ? d.optString("name") : "", answered));
+        Button wa = action(c, "Send WhatsApp", () -> whatsApp(c, d.optString("number", number), found ? d.optString("name") : "", answered, out));
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-2, -2); p.setMarginStart(dp(c, 8));
         actions.addView(wa, p);
         box.addView(actions);
@@ -98,7 +118,7 @@ final class CallerCard {
     }
 
     // opens WhatsApp (or WhatsApp Business, the phone asks) on this number with a greeting the person can change before sending
-    private static void whatsApp(Context c, String number, String name, boolean answered) {
+    private static void whatsApp(Context c, String number, String name, boolean answered, boolean out) {
         String digits = number.replaceAll("[^0-9]", "");
         if (digits.length() == 10) digits = SecureConfig.prefs(c).getString("country", "91") + digits;
         String me = "", company = "";
@@ -106,7 +126,7 @@ final class CallerCard {
         try { Object co = new JSONObject(SecureConfig.prefs(c).getString("workspace", "{}")).opt("company"); company = co instanceof JSONObject ? ((JSONObject) co).optString("name") : co == null ? "" : String.valueOf(co); } catch (Exception ignored) {}
         String first = name.trim().isEmpty() ? "" : " " + name.trim().split("\\s+")[0];
         String from = me.isEmpty() ? "" : ", this is " + me.trim().split("\\s+")[0] + (company.isEmpty() ? "" : " from " + company);
-        String text = answered ? "Hi" + first + from + ". Thank you for speaking with us. " : "Hi" + first + from + ". Sorry I missed your call. ";
+        String text = answered ? "Hi" + first + from + ". Thank you for speaking with us. " : out ? "Hi" + first + from + ". I tried calling you just now. " : "Hi" + first + from + ". Sorry I missed your call. ";
         dismiss();
         try { c.startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://wa.me/" + digits + "?text=" + android.net.Uri.encode(text))).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); }
         catch (Exception e) { Toast.makeText(c, "WhatsApp is not installed on this phone.", Toast.LENGTH_SHORT).show(); }
@@ -149,6 +169,7 @@ final class CallerCard {
         title.setSingleLine(true); title.setEllipsize(TextUtils.TruncateAt.END);
         titles.addView(title);
         String sub = found && own ? join(" · ", d.optString("company"), place(d)) : found ? "Lead of " + d.optString("owner") : pretty(d.optString("number", number));
+        if (isOutgoing(number)) sub = join(" · ", "Calling", sub);
         if (!sub.isEmpty()) { TextView s = line(c, sub, 13, MainActivity.MUTED); s.setSingleLine(true); s.setEllipsize(TextUtils.TruncateAt.END); titles.addView(s); }
         head.addView(titles, new LinearLayout.LayoutParams(0, -2, 1));
         TextView close = new TextView(c); close.setText("✕"); close.setTextSize(18); close.setTextColor(MainActivity.MUTED); close.setPadding(dp(c, 10), dp(c, 4), dp(c, 4), dp(c, 4));
@@ -304,7 +325,14 @@ final class CallerCard {
                 watching = "";
                 boolean answered = answeredAt[0] > 0;
                 long seconds = answered ? Math.max(1, (System.currentTimeMillis() - answeredAt[0] - 3000) / 1000) : 0;
-                if (number.equals(lastNumber)) afterCall(c, number, lastCard, answered, seconds); else if (number.equals(shownFor)) dismiss();
+                if (!number.equals(lastNumber)) { if (number.equals(shownFor)) dismiss(); return; }
+                if (!isOutgoing(number)) { afterCall(c, number, lastCard, answered, seconds); return; }
+                // an outgoing call is off-hook from dialling: the call log says whether the customer picked up, and for how long
+                long timer = seconds;
+                h.postDelayed(() -> new Thread(() -> {
+                    long logged = loggedSeconds(c, number);
+                    h.post(() -> afterCall(c, number, lastCard, logged < 0 ? timer > 0 : logged > 0, logged < 0 ? timer : logged));
+                }).start(), 1500);
                 return;
             }
             h.postDelayed(this, 1500);

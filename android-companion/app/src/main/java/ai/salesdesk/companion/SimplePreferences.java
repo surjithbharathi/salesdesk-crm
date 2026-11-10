@@ -30,7 +30,7 @@ final class SimplePreferences {
         a.caption(sync,"A lead that has only a number takes the name saved on this phone. Only names of your leads leave the phone, and a name already in the CRM stays.");
         a.syncStatus=a.text(sync,prefs().getString("status",""),12,false);
         LinearLayout prompts=a.card();a.text(prompts,"During & after calls",19,true);
-        toggle(prompts,"Caller popup (who is calling)",prefs().getBoolean("screenPop",false),enabled->{if(enabled)setupCaller();else{prefs().edit().putBoolean("screenPop",false).commit();a.render();}});
+        toggle(prompts,"Caller popup (incoming and outgoing calls)",prefs().getBoolean("screenPop",false),enabled->{if(enabled)setupCaller();else{prefs().edit().putBoolean("screenPop",false).commit();a.render();}});
         if(prefs().getBoolean("screenPop",false)){
             toggle(prompts,"Show it on the lock screen too",prefs().getBoolean("screenPopLocked",false),enabled->{
                 prefs().edit().putBoolean("screenPopLocked",enabled).commit();
