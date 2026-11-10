@@ -22,11 +22,13 @@ export function Import({ access }) {
   const [rows, setRows] = useState(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [fileName, setFileName] = useState("");
   async function pick(event) {
     setError("");
     setRows(null);
     const file = event.target.files?.[0];
     if (!file) return;
+    setFileName(file.name);
     try {
       setRows(parseLeadCsv(await file.text()));
     } catch (e) {
@@ -39,7 +41,7 @@ export function Import({ access }) {
     const owner = new FormData(form).get("owner");
     setBusy(true);
     try {
-      const out = await crmSend("POST", "import", { leads: rows.map((l) => ({ ...l, owner })) });
+      const out = await crmSend("POST", "import", { fileName, leads: rows.map((l) => ({ ...l, owner })) });
       await crm.reload();
       notify(`${out.added} leads imported, ${out.skipped} skipped because the number already exists`);
       setRows(null);

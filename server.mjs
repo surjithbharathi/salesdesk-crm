@@ -1264,6 +1264,8 @@ const server = http.createServer(async (req, res) => {
         let added = 0,
           skipped = 0;
         const phones = new Set(all("leads").map(phoneKeyOf).filter(Boolean));
+        // which file the leads came from, so the leads list can be filtered by upload
+        const upload = { name: String(p.fileName || "").replace(/[\u0000-\u001f]/g, "").trim().slice(0, 120) || "File upload", at: now() };
         for (const row of p.leads) {
           if (!row || typeof row !== "object" || Array.isArray(row)) bad("Invalid row");
           const v = validate("leads", row),
@@ -1272,9 +1274,9 @@ const server = http.createServer(async (req, res) => {
             skipped++;
             continue;
           }
-          const l = stamp({ ...v, firstTouchAt: null });
+          const l = stamp({ ...v, firstTouchAt: null, upload });
           put("leads", l);
-          log(l.id, "System", "Lead imported");
+          log(l.id, "System", `Lead imported from ${upload.name}`);
           extensions.onEvent("Lead created", { leadId: l.id, eventId: l.id });
           if (phone) phones.add(phone);
           added++;
