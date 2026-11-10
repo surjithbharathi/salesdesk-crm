@@ -154,3 +154,4 @@
 .cwt .field.probable small { font-size: 11px; color: #6b7280; }
 .cwt .field.probable .use { display: flex; flex-wrap: wrap; gap: 6px; }
 .cwt .field.probable .use button { padding: 3px 10px; border: 1px solid #c4b5fd; border-radius: 6px; background: #f5f3ff; color: #4f38a2; font: inherit; font-size: 12px; cursor: pointer; }
+.cwt .field .heard { display: block; margin-top: 3px; font-size: 11px; color: #15803d; }

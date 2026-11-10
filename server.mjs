@@ -244,7 +244,7 @@ function validate(kind, p, old = {}) {
     s("language", 40);
     if (Object.hasOwn(p, "state")) v.state = cleanState(v.state);
     if (v.state) { delete v.probableState; delete v.probableStateFrom; } // a real state replaces the guess from the number
-    if (Object.hasOwn(p, "language")) { v.language = cleanLanguage(v.language); delete v.languageGuess; }
+    if (Object.hasOwn(p, "language")) { v.language = cleanLanguage(v.language); delete v.languageGuess; delete v.languageFrom; }
     else if (Object.hasOwn(p, "state") && (v.languageGuess || !v.language)) { delete v.language; delete v.languageGuess; Object.assign(v, withRegion(v) || {}); }
     if (!v.name) bad("Lead name required");
     if(["phone","countryCode","mobileNumber"].some(k=>Object.hasOwn(p,k)))Object.assign(v,phoneParts(p.mobileNumber ?? p.phone ?? v.mobileNumber ?? v.phone,p.countryCode ?? (Object.hasOwn(p,"mobileNumber")?v.countryCode||"91":"")));
@@ -459,11 +459,22 @@ function withBadges(state) {
   for (const idx of group()) idx.forEach((i, n) => { if (n) badges[i] = base[i].slice(0, 2) + (n + 1); });
   return { ...state, users: state.users.map((u, i) => ({ ...u, badge: badges[i] })) };
 }
+// Call AI heard the customer's language: it becomes the lead's language, replacing a guess or an earlier call's answer,
+// never a language someone chose by hand
+function languageFromCall(leadId, language, how) {
+  const lead = get("leads", leadId), lang = cleanLanguage(language);
+  if (!lead || !lang) return;
+  if (lead.language && !lead.languageGuess && lead.languageFrom !== "call") return;
+  if (lead.language === lang && lead.languageFrom === "call") return;
+  const next = { ...lead, language: lang, languageFrom: "call", updatedAt: now() };
+  delete next.languageGuess;
+  tx(() => { put("leads", next); log(leadId, "System", `Customer language from the call recording: ${lang} (${how})`); });
+}
 function permittedState(value,id){
   if(!id)return value;const calls=workspaceAccess.can(id,'calls.read'),messages=workspaceAccess.can(id,'messages.read');
   return {...value,mobileCalls:calls?value.mobileCalls:[],activities:(value.activities||[]).filter(a=>(calls||a.type!=='Call')&&(messages||a.type!=='Message')),messages:messages?value.messages:[],conversations:messages?value.conversations:[]};
 }
-const callAI = createCallAI({db,all,get,playback:mobile.playback,keyPath:(process.env.CRM_DB || new URL('./data/crm.sqlite',import.meta.url).pathname)+'.ai-key'});
+const callAI = createCallAI({db,all,get,playback:mobile.playback,onLanguage:languageFromCall,keyPath:(process.env.CRM_DB || new URL('./data/crm.sqlite',import.meta.url).pathname)+'.ai-key'});
 const smtpEmail=createSmtpEmail({db,keyPath:(process.env.CRM_DB||new URL('./data/crm.sqlite',import.meta.url).pathname)+'.smtp-key',origin:publicOrigin});
 // the one-way mirror of TeleCRM: it writes records directly (no per-lead uniqueness scan), the unique phone index still protects against duplicates
 const rawPut = (kind, v) => db.prepare("INSERT INTO records VALUES(?,?,?) ON CONFLICT(kind,id) DO UPDATE SET body=excluded.body").run(kind, v.id, JSON.stringify(v));

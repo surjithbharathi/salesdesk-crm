@@ -305,7 +305,7 @@ export default function Views({ params }) {
                           {cols.has("phone") && <td>{l.phone}</td>}
                           {cols.has("state") && <td>{l.state || ""}</td>}
                           {cols.has("probable") && <td>{l.state ? "" : l.probableState || ""}</td>}
-                          {cols.has("language") && <td>{l.language || ""}{l.languageGuess && l.language ? <small className="muted"> (guess)</small> : null}</td>}
+                          {cols.has("language") && <td>{l.language || ""}{l.languageGuess && l.language ? <small className="muted"> (guess)</small> : l.languageFrom === "call" ? <small className="muted"> (call)</small> : null}</td>}
                           {cols.has("assignee") && <td>{l.owner ? <span className="who"><span className="av">{initials(nameOf(l.owner))}</span>{nameOf(l.owner)}</span> : <span className="muted">—</span>}</td>}
                           {cols.has("source") && <td>{l.source}</td>}
                           {cols.has("value") && <td>{money(l.value)}</td>}

@@ -21,3 +21,13 @@ test("empty state and language are filled; a person's choice is kept; a guessed 
   assert.deepEqual(regionHints({ telecrm: { fields: { state: "Kerala", preferred_language: "Malayalam" } } }), { state: "Kerala", language: "Malayalam" });
   assert.deepEqual(regionHints({ salesmax: { state: "Goa" } }), { state: "Goa", language: "" });
 });
+
+test("a transcript's script and the summary's last line tell the language", async () => {
+  const { languageOfText, languageFromSummary } = await import("./lead-region.mjs");
+  assert.equal(languageOfText("வணக்கம் சார், நான் நாளைக்கு வருகிறேன், மெஷின் விலை எவ்வளவு?"), "Tamil");
+  assert.equal(languageOfText("नमस्ते सर, मुझे मशीन चाहिए, क्या कीमत है?"), "Hindi");
+  assert.equal(languageOfText("नमस्कार, मला मशीन पाहिजे, काय किंमत आहे?"), "Marathi");
+  assert.equal(languageOfText("hello sir machine price"), "");
+  assert.equal(languageFromSummary("Summary\nCustomer language: kannada."), "Kannada");
+  assert.equal(languageFromSummary("Summary\nCustomer language: unknown"), "");
+});

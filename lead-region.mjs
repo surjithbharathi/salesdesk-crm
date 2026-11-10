@@ -38,3 +38,23 @@ export function regionHints(lead) {
   const lang = Object.entries(f).find(([k, v]) => /lang/i.test(k) && v && typeof v !== "object")?.[1] || "";
   return { state: f.state || lead.salesmax?.state || "", language: lang };
 }
+
+// The main language of a transcript from the script it is written in (when no AI said it). Speech-to-text writes Indian
+// languages in their own script; Devanagari is told apart as Marathi or Hindi by common words. "" when unclear
+// (for example English, or Tamil written in English letters).
+const SCRIPTS = [[/[\u0B80-\u0BFF]/g, "Tamil"], [/[\u0C00-\u0C7F]/g, "Telugu"], [/[\u0C80-\u0CFF]/g, "Kannada"], [/[\u0D00-\u0D7F]/g, "Malayalam"], [/[\u0900-\u097F]/g, "Devanagari"], [/[\u0A80-\u0AFF]/g, "Gujarati"], [/[\u0980-\u09FF]/g, "Bengali"], [/[\u0A00-\u0A7F]/g, "Punjabi"], [/[\u0B00-\u0B7F]/g, "Odia"], [/[\u0600-\u06FF]/g, "Urdu"]];
+export function languageOfText(text) {
+  const t = String(text || "");
+  const counts = SCRIPTS.map(([re, name]) => [name, (t.match(re) || []).length]).sort((a, b) => b[1] - a[1]);
+  const total = counts.reduce((n, [, c]) => n + c, 0), [name, top] = counts[0];
+  if (top < 20 || top / total < 0.6) return "";
+  if (name !== "Devanagari") return name;
+  const marathi = (t.match(/आहे|नाही|काय|आणि|आहेत|तुम्ही|मला|पाहिजे/g) || []).length, hindi = (t.match(/है|नहीं|क्या|और|हैं|आप|मुझे|चाहिए/g) || []).length;
+  return marathi > hindi ? "Marathi" : "Hindi";
+}
+// "Customer language: Tamil" written by the AI at the end of a call summary
+export function languageFromSummary(summary) {
+  const m = String(summary || "").match(/customer language\s*[:\-]\s*([A-Za-z][A-Za-z ]{1,29})\s*\.?\s*$/im);
+  const v = m ? m[1].trim() : "";
+  return /^(unknown|unclear|not clear|none|n\/?a)$/i.test(v) ? "" : cleanLanguage(v);
+}

@@ -154,6 +154,7 @@ export function LeadDetail({ id }) {
                 {key === "phone" ? <div className="phone"><span className="flag" aria-hidden="true" /><input defaultValue={value(key)} key={`${id}-${value(key)}`} placeholder="Enter Phone Number" onBlur={(e) => e.target.value.trim() && setField(key, e.target.value)} /></div>
                   : <input defaultValue={value(key)} key={`${id}-${key}-${value(key)}`} placeholder={key === "state" ? "Choose or type a state" : key === "language" ? "Choose or type a language" : "Empty"} list={key === "state" ? "sd-states" : key === "language" ? "sd-languages" : undefined} readOnly={key === "id"} onBlur={(e) => key !== "id" && e.target.value !== value(key) && setField(key, e.target.value)} />}
                 {key === "language" && raw.languageGuess && <small className="guess">Guessed from the state. Change it if the customer speaks another language.</small>}
+                {key === "language" && raw.languageFrom === "call" && <small className="heard">Heard in a call recording (Call AI).</small>}
               </div>
             ))}
             {!fields.length && <p className="no-fields">No fields match.</p>}

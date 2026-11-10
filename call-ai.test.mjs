@@ -110,3 +110,25 @@ test('encrypted settings, scoped result access, idempotent queue and IQ retry pr
     api.enqueue('r',user);await api.tick();assert.equal(summaryRequests,2);
   }finally{api.close();db.close();rmSync(dir,{recursive:true});}
 });
+test('the customer language is taken from the summary, the audio model, or the transcript script, and passed to the lead',async()=>{
+  const run=async(settings,reply)=>{
+    const dir=mkdtempSync(join(tmpdir(),'call-ai-lang-')),db=new DatabaseSync(':memory:'),heard=[];
+    const call={id:'c',leadId:'l',recordingId:'r'},lead={id:'l',owner:'u'};
+    const api=createCallAI({db,keyPath:join(dir,'key'),all:k=>k==='mobileCalls'?[call]:[],get:()=>lead,playback:()=>({bytes:Buffer.from('audio'),mime:'audio/wav'}),fetcher:async(url,init)=>reply(url,init),onLanguage:(leadId,language,how)=>heard.push([leadId,language,how])});
+    try{api.save({acknowledged:true,...settings});const user={user:{id:'u',role:'member'}};api.enqueue('r',user);await api.tick();return {heard,job:api.result('r',user)};}
+    finally{api.close();db.close();rmSync(dir,{recursive:true});}
+  };
+  let asked='';
+  const a=await run({enabled:true,iqEnabled:true,stt:{provider:'openai',model:'t',key:'k'},iq:{provider:'openai',model:'t',key:'k'}},(url,init)=>{
+    if(url.includes('transcriptions'))return json({text:'naan naalaikku varen, machine vilai enna'});
+    asked=JSON.parse(init.body).messages[0].content;return json({choices:[{message:{content:'Wants a quote.\nCustomer language: Tamil'}}]});
+  });
+  assert.match(asked,/Customer language: <language>/);
+  assert.deepEqual(a.heard,[['l','Tamil','AI']]);assert.equal(a.job.customerLanguage,'Tamil');
+  const b=await run({enabled:true,stt:{provider:'openai-audio',model:'gpt-audio',key:'k'},iq:{provider:'openai',model:''}},()=>json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({transcript:'Namaste',summary:'Price asked',customerLanguage:'hindi'})}}]}));
+  assert.deepEqual(b.heard,[['l','Hindi','AI']]);
+  const c=await run({enabled:true,iqEnabled:false,stt:{provider:'openai',model:'t',key:'k'},iq:{provider:'openai',model:''}},()=>json({text:'నమస్కారం సార్, మెషిన్ ధర ఎంత? రేపు వస్తాను, కొటేషన్ పంపండి'}));
+  assert.deepEqual(c.heard,[['l','Telugu','transcript script']]);
+  const d=await run({enabled:true,iqEnabled:false,stt:{provider:'openai',model:'t',key:'k'},iq:{provider:'openai',model:''}},()=>json({text:'Hello sir, send the quotation please'}));
+  assert.deepEqual(d.heard,[],'nothing guessed from plain English text');
+});
