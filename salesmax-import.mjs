@@ -134,9 +134,9 @@ export function createSalesmaxImport({ db, get, put, tx, users }) {
       }
       put("leads", lead);
       // the export has only the last remark of each lead ("LAST NOTE" is just when it was written); it goes on the timeline once
-      const note = str(r["LAST USER REMARK"], 4000);
+      const raw = str(r["LAST USER REMARK"], 4000), note = raw.replace(/<br\s*\/?>/gi, "\n");
       if (note) {
-        const id = "smx-n-" + hash(p.phoneKey, note);
+        const id = "smx-n-" + hash(p.phoneKey, raw); // from the text as exported, so an import made before this cleaning is not repeated
         if (!get("activities", id)) {
           const at = istToIso(r["LAST NOTE"]) || istToIso(r["LAST WORKED"]) || updated;
           put("activities", { id, leadId: lead.id, type: "Note", text: note, userId: personOf(r["LAST NOTE BY"]), occurredAt: at, createdAt: at, updatedAt: at, source: "Salesmax", importedFrom: FROM });

@@ -86,3 +86,13 @@ test("a lead uploaded to TeleCRM from Excel gets Salesmax's real date and source
   assert.deepEqual([kumar.source, kumar.createdAt], ["TradeIndia", "2025-01-01T00:00:00.000Z"], "a real source and an earlier date stay");
   assert.equal(c.updated, 2);
 });
+
+test("line breaks written as <br> in a remark become new lines, and a second import does not repeat the note", () => {
+  const s = setup();
+  const row = contact({ "LAST USER REMARK": "Cold Press<br>Operation Type : Automatic<br/>Call Duration: 0", "LAST NOTE": "2026-10-30 17:52:06" });
+  s.imp.importBatch("contacts", [row]);
+  s.imp.importBatch("contacts", [row]);
+  const notes = s.all("activities").filter((a) => a.type === "Note");
+  assert.equal(notes.length, 1);
+  assert.equal(notes[0].text, "Cold Press\nOperation Type : Automatic\nCall Duration: 0");
+});

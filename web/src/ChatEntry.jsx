@@ -17,8 +17,12 @@ const norm = (s) => String(s || "").replace(/\s+/g, " ").trim().toLowerCase();
 export const saidInChat = (activities) => new Set((activities || []).filter((a) => a.type === "Message").map((a) => norm(a.text)).filter(Boolean));
 const unrepeated = (lead, said) => (lead && said?.has(norm(lead.intro)) ? { ...lead, intro: "" } : lead);
 
+// Salesmax and some TeleCRM notes carry HTML line breaks ("Cold Press<br>Operation Type"): shown as real new lines
+const lines = (t) => (typeof t === "string" ? t.replace(/<br\s*\/?>/gi, "\n") : t);
+
 export function fromActivity(a, { by = "", at = "", recordingId = "", customer = "", badge = "", recordingPending = false, said = null } = {}) {
   const type = a.type;
+  a = a.text && /<br/i.test(a.text) ? { ...a, text: lines(a.text) } : a;
   if (type === "Call") {
     const secs = Number(a.duration) || 0, dir = a.direction || "Outgoing";
     return { id: a.id, kind: "call", customer, badge, out: dir === "Outgoing", dir, secs, text: a.text, outcome: a.outcome, by, at, recordingPending, recordingId: recordingId || a.recordingId || "" };
@@ -174,8 +178,30 @@ function callTitle(e) {
   return e.secs > 0 ? `${e.dir} call` : "Missed call";
 }
 
+// The Excel upload into TeleCRM packed a lead's whole Salesmax record into one note: "Salesmax Lead Owner: Bala Salesmax Closed Reason: …".
+// The Salesmax import now brings the same history in properly, so this note is folded to one line and opens as a list.
+export function salesmaxSummaryOf(text) {
+  const t = String(text || "").trim();
+  if (!/^Salesmax [A-Z]/.test(t) || (t.match(/\bSalesmax [A-Z][\w ]{1,40}?: /g) || []).length < 4) return null;
+  return t.split(/\s(?=Salesmax [A-Z][\w ]{1,40}?: )/).map((part) => {
+    const m = /^Salesmax ([A-Z][\w ]{1,40}?): ([\s\S]*)$/.exec(part.trim());
+    return m ? [m[1], m[2].trim()] : ["", part.trim()];
+  }).filter(([, v]) => v);
+}
+
 export default function ChatEntry({ e }) {
-  if (e.kind === "system") return <div className="wa-sys"><span>{e.text}{e.at ? ` · ${e.at}` : ""}</span></div>;
+  if (e.kind === "system") {
+    const fields = salesmaxSummaryOf(e.text);
+    if (fields) return (
+      <div className="wa-sys wa-fold">
+        <details>
+          <summary>Salesmax details from the Excel upload{e.at ? ` · ${e.at}` : ""}</summary>
+          <dl>{fields.map(([k, v], i) => <div key={i}>{k && <dt>{k}</dt>}<dd>{v}</dd></div>)}</dl>
+        </details>
+      </div>
+    );
+    return <div className="wa-sys"><span>{e.text}{e.at ? ` · ${e.at}` : ""}</span></div>;
+  }
   const out = Boolean(e.out);
   let body;
   if (e.kind === "message") {
