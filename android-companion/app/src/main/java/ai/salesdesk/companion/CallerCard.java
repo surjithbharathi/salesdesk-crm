@@ -51,7 +51,7 @@ final class CallerCard {
                 params = new WindowManager.LayoutParams(-1, -2, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
                     WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS | showWhenLocked(c), PixelFormat.TRANSLUCENT);
                 params.gravity = Gravity.TOP;
-                params.y = dp(c, 90);
+                params.y = savedY(c);
                 manager.addView(view, params);
             }
             current = view; shownFor = number;
@@ -256,14 +256,32 @@ final class CallerCard {
     }
 
     // drag the card up or down by its empty parts
+    // drag the card up or down by its empty parts; where it is let go is remembered for the next call
     private static void drag(View view) {
         final float[] start = new float[2];
         view.setOnTouchListener((v, e) -> {
             if (params == null || manager == null) return false;
             if (e.getAction() == MotionEvent.ACTION_DOWN) { start[0] = e.getRawY(); start[1] = params.y; return true; }
-            if (e.getAction() == MotionEvent.ACTION_MOVE) { params.y = Math.max(0, (int) (start[1] + e.getRawY() - start[0])); try { manager.updateViewLayout(v, params); } catch (Exception ignored) {} return true; }
+            if (e.getAction() == MotionEvent.ACTION_MOVE) {
+                int screen = v.getResources().getDisplayMetrics().heightPixels;
+                params.y = Math.max(0, Math.min(screen - Math.max(v.getHeight(), 1), (int) (start[1] + e.getRawY() - start[0])));
+                try { manager.updateViewLayout(v, params); } catch (Exception ignored) {}
+                return true;
+            }
+            if (e.getAction() == MotionEvent.ACTION_UP) { saveY(v.getContext(), params.y); return true; }
             return false;
         });
+    }
+    // kept as a share of the screen height, so it lands in the same place after turning the phone or changing font size
+    private static void saveY(Context c, int y) {
+        float screen = c.getResources().getDisplayMetrics().heightPixels;
+        if (screen > 0) SecureConfig.prefs(c).edit().putFloat("cardY", y / screen).apply();
+    }
+    private static int savedY(Context c) {
+        float share = SecureConfig.prefs(c).getFloat("cardY", -1f);
+        int screen = c.getResources().getDisplayMetrics().heightPixels;
+        if (share < 0 || screen <= 0) return dp(c, 90);
+        return Math.max(0, Math.min(screen - dp(c, 160), Math.round(share * screen)));
     }
 
     // closes with the call: watches the call state while shown (at most 10 minutes); without that permission, after 60 seconds
