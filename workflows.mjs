@@ -4,18 +4,56 @@
 // TeleCRM, IndiaMART, Meta, WhatsApp), so a lead from anywhere is covered. It remembers how far it has read (rowid cursors) and each
 // lead's last stage, so a restart neither misses nor repeats events. The first run only takes that snapshot: flows never fire for
 // history from before the engine was switched on. A wait is saved as a job and the flow carries on from there when it is due.
+// Field, owner and rating changes are found the same way: the engine keeps the last value it saw of each watched field, for the
+// fields some switched-on flow listens to, and fires when it differs.
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
 import { PIPELINE } from "./pipeline.mjs";
+import { privateAddress } from "./wa-gateway.mjs";
 
 const fail = (message, status = 400) => { throw Object.assign(new Error(message), { status }); };
 export const TRIGGERS = {
   lead_created: "A new lead comes in",
+  owner_changed: "A lead is assigned to someone",
   stage_changed: "A lead's stage changes",
+  field_changed: "A lead field changes",
+  rating_changed: "A lead's rating changes",
   call_missed: "A call from a lead is missed",
   no_activity: "A lead has no activity for some days",
 };
-export const FIELDS = { source: "Source", city: "City", owner: "Owner", stage: "Stage", company: "Company", name: "Name" };
-export const OPS = { is: "is", is_not: "is not", contains: "contains", is_empty: "is empty", not_empty: "is not empty" };
-export const ACTIONS = { assign: "Assign the lead", stage: "Change the stage", task: "Create a follow-up task", whatsapp: "Send a WhatsApp message", note: "Add a note" };
+// fields of every lead; TeleCRM's own fields (State, Requirement…) are added as "tc:<name>"
+export const FIELDS = { source: "Source", city: "City", owner: "Owner", stage: "Stage", company: "Company", name: "Name", email: "Email", value: "Expected value", rating: "Rating" };
+export const OPS = { is: "is", is_not: "is not", contains: "contains", is_empty: "is empty", not_empty: "is not empty", more: "is more than", less: "is less than" };
+export const ACTIONS = { assign: "Assign the lead", stage: "Change the stage", field: "Update a lead field", task: "Create a follow-up task", whatsapp: "Send a WhatsApp message", notify: "Notify a team member", note: "Add a note", cancel_tasks: "Cancel open tasks", webhook: "Call an API (webhook)" };
+// what the "Update a lead field" box may write; owner and stage have their own boxes, TeleCRM fields belong to TeleCRM
+export const EDITABLE = { company: "Company", city: "City", source: "Source", email: "Email", value: "Expected value" };
+const CUSTOM = /^tc:[^:\s][^:]{0,59}$/;
+const fieldOk = (k) => Boolean(FIELDS[k]) || CUSTOM.test(k);
+const fieldLabel = (k) => FIELDS[k] || String(k).slice(3).replace(/_/g, " ");
+const shown = (v) => (v === null || v === undefined ? "" : typeof v === "object" ? JSON.stringify(v) : String(v)).trim().slice(0, 300);
+// the value a flow sees for a field of a lead, always as text
+export function valueOf(lead, key) {
+  if (key === "stage") return stageOf(lead);
+  if (key === "rating") return shown(lead.telecrm?.rating ?? lead.rating ?? "");
+  if (key.startsWith("tc:")) return shown(lead.telecrm?.fields?.[key.slice(3)]);
+  return shown(lead[key]);
+}
+// webhook addresses: https on the public internet only, so a flow cannot reach anything inside the server
+function webhookUrl(value) {
+  let u;
+  try { u = new URL(String(value || "").trim()); } catch { fail("Enter the API address in full, like https://n8n.example.com/webhook/new-lead"); }
+  if (u.protocol !== "https:" || u.username || u.password) fail("The API address must start with https:// and have no login in it");
+  const host = u.hostname.replace(/^\[|\]$/g, "");
+  if (/^localhost$|\.local(host)?$|\.internal$/i.test(host) || (isIP(host) && privateAddress(host))) fail("The API address must be a public website");
+  return u.href;
+}
+async function postJson(url, body) {
+  const u = new URL(webhookUrl(url)), host = u.hostname.replace(/^\[|\]$/g, "");
+  const found = isIP(host) ? [{ address: host }] : await lookup(host, { all: true }).catch(() => fail("The API address could not be found"));
+  if (!found.length || found.some((f) => privateAddress(f.address))) fail("The API address must be a public website");
+  const res = await fetch(u, { method: "POST", redirect: "manual", signal: AbortSignal.timeout(10000), headers: { "Content-Type": "application/json", "User-Agent": "Salesdesk-Workflows" }, body: JSON.stringify(body) });
+  if (!res.ok) fail(`the API answered ${res.status}`);
+}
 const STAGES = ["New", "Prospecting", "Opportunity", "Quotation given", "Closed", ...PIPELINE.map((p) => p.name)];
 const FRESH_MS = 2 * 86400000; // events older than this (history arriving late, e.g. a TeleCRM full read) never fire
 const QUIET_WINDOW_DAYS = 3; // "no activity for N days" fires for leads that went quiet N to N+3 days ago, not for years-old leads
@@ -29,7 +67,7 @@ const str = (v, max) => (typeof v === "string" ? v.trim().slice(0, max) : "");
 const stageOf = (l) => l.deal || l.stage || "New";
 const coord = (v) => Math.max(0, Math.min(4000, Math.round(Number(v) || 0)));
 
-export function createWorkflows({ db, get, put, stamp, tx, log, users, sendWhatsApp = async () => fail("WhatsApp gateway is not connected"), now = () => Date.now(), report = () => {} }) {
+export function createWorkflows({ db, get, put, stamp, tx, log, users, sendWhatsApp = async () => fail("WhatsApp gateway is not connected"), post = postJson, now = () => Date.now(), report = () => {} }) {
   const rules = () => db.prepare("SELECT body FROM records WHERE kind='workflows' ORDER BY rowid").all().map((r) => JSON.parse(r.body));
   const userIds = () => new Set(users().map((u) => u.id));
   const userName = (id) => users().find((u) => u.id === id)?.name || "";
@@ -47,14 +85,29 @@ export function createWorkflows({ db, get, put, stamp, tx, log, users, sendWhats
       trigger.days = Number(t.days);
       if (!Number.isInteger(trigger.days) || trigger.days < 1 || trigger.days > 365) fail("Days without activity must be 1 to 365");
     }
+    if (t.type === "owner_changed") {
+      trigger.to = str(t.to, 64);
+      if (trigger.to && !userIds().has(trigger.to)) fail("Unknown person in the trigger");
+    }
+    if (t.type === "field_changed") {
+      trigger.field = str(t.field, 63);
+      if (!fieldOk(trigger.field)) fail("Choose the field to watch");
+      if (["stage", "owner", "rating"].includes(trigger.field)) fail(`Use the "${TRIGGERS[trigger.field === "stage" ? "stage_changed" : trigger.field === "owner" ? "owner_changed" : "rating_changed"]}" trigger for ${FIELDS[trigger.field]}`);
+      trigger.to = str(t.to, 200);
+    }
+    if (t.type === "rating_changed") {
+      trigger.to = t.to === "" || t.to === undefined || t.to === null ? "" : String(Number(t.to));
+      if (trigger.to && !/^[0-5]$/.test(trigger.to)) fail("A rating is 0 to 5");
+    }
     return trigger;
   }
   function cleanConditions(c = {}) {
     const ids = userIds();
     const list = (Array.isArray(c.conditions) ? c.conditions : []).slice(0, 10).map((x) => {
-      if (!FIELDS[x.field] || !OPS[x.op]) fail("Each condition needs a field and a test");
+      if (!fieldOk(x.field) || !OPS[x.op]) fail("Each condition needs a field and a test");
       const blank = ["is_empty", "not_empty"].includes(x.op), value = blank ? "" : str(x.value, 200);
-      if (!blank && !value) fail(`Fill in the value for "${FIELDS[x.field]}"`);
+      if (!blank && !value) fail(`Fill in the value for "${fieldLabel(x.field)}"`);
+      if (["more", "less"].includes(x.op) && !Number.isFinite(Number(value))) fail(`"${fieldLabel(x.field)} ${OPS[x.op]}" needs a number`);
       if (x.field === "owner" && value && !ids.has(value)) fail("Unknown person in a condition");
       return { field: x.field, op: x.op, value };
     });
@@ -97,6 +150,21 @@ export function createWorkflows({ db, get, put, stamp, tx, log, users, sendWhats
       if (!text) fail("Write the note");
       return { type: "note", text };
     }
+    if (a.type === "field") {
+      const field = str(a.field, 20), value = str(a.value, 200);
+      if (!EDITABLE[field]) fail("Choose the field to update");
+      if (field === "email" && value && !/\{\w+\}/.test(value) && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) fail("Enter a valid email");
+      if (field === "value" && value && !Number.isFinite(Number(value.replace(/[,\s₹]/g, "")))) fail("Expected value is a number");
+      return { type: "field", field, value };
+    }
+    if (a.type === "notify") {
+      const to = a.to === "lead_owner" || !a.to ? "lead_owner" : str(a.to, 64), text = str(a.text, 500);
+      if (to !== "lead_owner" && !ids.has(to)) fail("Choose who gets the notification");
+      if (!text) fail("Write the notification");
+      return { type: "notify", to, text };
+    }
+    if (a.type === "cancel_tasks") return { type: "cancel_tasks", which: a.which === "all" ? "all" : "workflow" };
+    if (a.type === "webhook") return { type: "webhook", url: webhookUrl(a.url) };
     fail("Unknown action");
   }
   function cleanFlow(flow) {
@@ -182,9 +250,13 @@ export function createWorkflows({ db, get, put, stamp, tx, log, users, sendWhats
   // ---- running a flow ----
   function matches(config, lead) {
     const test = (c) => {
-      const actual = String(c.field === "stage" ? stageOf(lead) : lead[c.field] ?? "").trim(), a = actual.toLowerCase(), v = c.value.toLowerCase();
+      const actual = c.field === "owner" ? String(lead.owner || "") : valueOf(lead, c.field), a = actual.toLowerCase(), v = c.value.toLowerCase();
       if (c.op === "is_empty") return !actual;
       if (c.op === "not_empty") return Boolean(actual);
+      if (c.op === "more" || c.op === "less") {
+        const n = Number(actual.replace(/[,\s₹]/g, ""));
+        return actual !== "" && Number.isFinite(n) && (c.op === "more" ? n > Number(c.value) : n < Number(c.value));
+      }
       if (c.op === "contains") return a.includes(v);
       // a basic stage also matches its pipeline steps, so "Stage is Closed" covers Won and Lost
       const same = a === v || (c.field === "stage" && String(lead.stage || "").toLowerCase() === v);
@@ -192,7 +264,7 @@ export function createWorkflows({ db, get, put, stamp, tx, log, users, sendWhats
     };
     return config.match === "any" ? config.conditions.some(test) : config.conditions.every(test);
   }
-  const fill = (text, lead) => text.replace(/\{(name|company|city|source|owner)\}/g, (_, k) => (k === "owner" ? userName(lead.owner) : lead[k]) || "");
+  const fill = (text, lead) => text.replace(/\{(name|company|city|source|owner|phone)\}/g, (_, k) => (k === "owner" ? userName(lead.owner) : lead[k]) || "");
 
   // one action on the lead; returns what it did (or "" for nothing to change)
   function doAction(rule, lead, a) {
@@ -224,8 +296,33 @@ export function createWorkflows({ db, get, put, stamp, tx, log, users, sendWhats
       log(lead.id, "Note", fill(a.text, lead), { userId: "", workflowId: rule.id });
       return "note added";
     }
+    if (a.type === "field") {
+      let value = fill(a.value, lead).trim();
+      if (a.field === "value") value = Number(value.replace(/[,\s₹]/g, "")) || 0;
+      if (a.field === "email" && value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) fail(`"${value}" is not an email`);
+      if (String(lead[a.field] ?? "") === String(value)) return "";
+      put("leads", { ...lead, [a.field]: value, updatedAt: at });
+      return `${EDITABLE[a.field]} set to ${value === "" ? "empty" : value}`;
+    }
+    if (a.type === "notify") {
+      const to = a.to === "lead_owner" ? lead.owner : a.to;
+      if (!to || !userIds().has(to)) return "nobody to notify (the lead has no owner)";
+      put("notifications", stamp({ userId: to, leadId: lead.id, text: fill(a.text, lead), workflowId: rule.id, read: false }));
+      return "notified " + (userName(to) || "someone");
+    }
+    if (a.type === "cancel_tasks") {
+      const open = db.prepare("SELECT body FROM records WHERE kind='tasks' AND json_extract(body,'$.leadId')=? AND COALESCE(json_extract(body,'$.status'),'Open')<>'Done'").all(lead.id).map((r) => JSON.parse(r.body))
+        .filter((t) => a.which === "all" || t.origin === "Workflow");
+      for (const t of open) put("tasks", { ...t, status: "Done", cancelled: true, cancelledBy: rule.id, updatedAt: at });
+      return open.length ? `${open.length} open task${open.length === 1 ? "" : "s"} cancelled` : "";
+    }
     return "";
   }
+  // what the API (webhook) box sends
+  const payload = (rule, lead, why) => ({
+    event: rule.trigger.type, why, at: new Date(now()).toISOString(), workflow: { id: rule.id, name: rule.name },
+    lead: { id: lead.id, name: lead.name || "", phone: lead.phone || "", email: lead.email || "", company: lead.company || "", city: lead.city || "", source: lead.source || "", stage: stageOf(lead), owner: userName(lead.owner), value: lead.value || 0, createdAt: lead.createdAt || "" },
+  });
   const next = (rule, id, port) => rule.flow.edges.filter((e) => e.from === id && e.port === port).map((e) => e.to);
   function addToRun(runId, items, ok = true) {
     const run = get("workflowRuns", runId);
@@ -258,6 +355,11 @@ export function createWorkflows({ db, get, put, stamp, tx, log, users, sendWhats
         try { await sendWhatsApp(leadId, a.template ? { template: a.template, language: a.language } : { text: fill(a.text, lead) }); }
         catch (e) { note = "WhatsApp not sent: " + String(e.message).slice(0, 160); ok = false; log(leadId, "System", `Workflow "${rule.name}": ${note}`, { workflowId: rule.id }); }
         did.push(note);
+      } else if (a.type === "webhook") {
+        let note = "API called";
+        try { await post(a.url, payload(rule, lead, why)); }
+        catch (e) { note = "API call failed: " + String(e.name === "TimeoutError" ? "no answer in 10 seconds" : e.message).slice(0, 160); ok = false; log(leadId, "System", `Workflow "${rule.name}": ${note}`, { workflowId: rule.id }); }
+        did.push(note);
       } else {
         try {
           const done = tx(() => doAction(rule, lead, a));
@@ -285,6 +387,9 @@ export function createWorkflows({ db, get, put, stamp, tx, log, users, sendWhats
       const t = rule.trigger;
       if (type === "stage_changed" && ((t.to && t.to !== extra.to && t.to !== extra.toStage) || (t.from && t.from !== extra.from && t.from !== extra.fromStage))) continue;
       if (type === "no_activity" && t.days !== extra.days) continue;
+      if (type === "owner_changed" && (!extra.to || (t.to && t.to !== extra.to))) continue;
+      if (type === "rating_changed" && t.to && t.to !== String(Number(extra.to) || 0)) continue;
+      if (type === "field_changed" && (t.field !== extra.field || (t.to && t.to.toLowerCase() !== String(extra.to).toLowerCase()))) continue;
       const runId = rule.id + ":" + key;
       if (get("workflowRuns", runId)) continue;
       const fresh = get("leads", lead.id);
@@ -330,8 +435,25 @@ export function createWorkflows({ db, get, put, stamp, tx, log, users, sendWhats
     const active = rules().filter((r) => r.enabled);
     const events = [], t = now(), recent = (iso) => t - Date.parse(iso || 0) <= FRESH_MS;
     const stages = { ...state.stages };
+    // fields some switched-on flow listens to; only these are remembered, so a field nobody watches costs nothing and a flow
+    // switched on later starts from what the lead holds then, never from an old remembered value
+    const watch = new Set(active.map((r) => (r.trigger.type === "owner_changed" ? "owner" : r.trigger.type === "rating_changed" ? "rating" : r.trigger.type === "field_changed" ? r.trigger.field : "")).filter(Boolean));
+    const seen = state.vals || {}, vals = {};
     let leadRow = state.leadRow;
     for (const l of leads) {
+      if (watch.size && !l.archived && !l.mergedInto) {
+        const was = seen[l.id] || {}, cur = {};
+        for (const k of watch) {
+          const v = k === "owner" ? String(l.owner || "") : valueOf(l, k);
+          cur[k] = v;
+          if (l.r > state.leadRow || !Object.hasOwn(was, k) || was[k] === v) continue;
+          const tag = `${l.id}:${was[k].slice(0, 40)}>${v.slice(0, 40)}:${l.updatedAt || ""}`;
+          if (k === "owner") events.push(["owner_changed", l, "owner:" + tag, `assigned to ${userName(v) || "nobody"}`, { to: v }]);
+          else if (k === "rating") events.push(["rating_changed", l, "rating:" + tag, `rating ${was[k] || 0} → ${v || 0}`, { to: v }]);
+          else events.push(["field_changed", l, `field:${k}:${tag}`, `${fieldLabel(k)}: ${was[k] || "empty"} → ${v || "empty"}`, { field: k, to: v }]);
+        }
+        vals[l.id] = cur;
+      }
       const stage = stageOf(l), before = stages[l.id];
       if (l.r > state.leadRow) {
         leadRow = Math.max(leadRow, l.r);
@@ -365,7 +487,7 @@ export function createWorkflows({ db, get, put, stamp, tx, log, users, sendWhats
         }
       }
     }
-    put("workflowState", { ...state, leadRow, activityRow, stages, quietAt });
+    put("workflowState", { ...state, leadRow, activityRow, stages, quietAt, vals });
     await resume();
     if (!active.length) return { events: 0 };
     const wanted = events.filter(([type]) => active.some((r) => r.trigger.type === type));
@@ -377,8 +499,19 @@ export function createWorkflows({ db, get, put, stamp, tx, log, users, sendWhats
     }
     // runs older than 60 days are only history
     db.prepare("DELETE FROM records WHERE kind='workflowRuns' AND json_extract(body,'$.at')<?").run(new Date(t - 60 * 86400000).toISOString());
+    db.prepare("DELETE FROM records WHERE kind='notifications' AND json_extract(body,'$.createdAt')<?").run(new Date(t - 30 * 86400000).toISOString());
     return { events: fired };
   }
 
-  return { list, create, update, remove, tick, meta: () => ({ triggers: TRIGGERS, fields: FIELDS, ops: OPS, actions: ACTIONS, stages: STAGES, pipeline: PIPELINE.map((p) => p.name) }) };
+  // TeleCRM's own fields (State, Requirement…) as found on the newest synced leads, most used first
+  function customFields() {
+    const count = new Map();
+    for (const r of db.prepare("SELECT json_extract(body,'$.telecrm.fields') f FROM records WHERE kind='leads' AND json_extract(body,'$.telecrm.fields') IS NOT NULL ORDER BY rowid DESC LIMIT 500").all()) {
+      let f; try { f = JSON.parse(r.f); } catch { continue; }
+      for (const [k, v] of Object.entries(f || {})) if (k.length <= 60 && !k.includes(":") && (typeof v !== "object" || v === null)) count.set(k, (count.get(k) || 0) + 1);
+    }
+    return Object.fromEntries([...count].sort((a, b) => b[1] - a[1]).slice(0, 60).map(([k]) => ["tc:" + k, k.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase())]));
+  }
+  const meta = () => ({ triggers: TRIGGERS, fields: FIELDS, custom: customFields(), ops: OPS, actions: ACTIONS, editable: EDITABLE, stages: STAGES, pipeline: PIPELINE.map((p) => p.name) });
+  return { list, create, update, remove, tick, meta };
 }

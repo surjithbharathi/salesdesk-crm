@@ -1,5 +1,6 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useCrm } from "../crm.jsx";
+import { crmGet, crmSend } from "../api.js";
 import { hashFor, initials } from "../format.js";
 import { TIcon } from "./icons.jsx";
 
@@ -33,6 +34,15 @@ export default function Shell({ path, owner, session, onLogout, children }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [panel, setPanel] = useState("");
   const [bellSeen, setBellSeen] = useState(false);
+  // notifications workflows send to this person, checked every minute
+  const [notes, setNotes] = useState({ notifications: [], unread: 0 });
+  useEffect(() => {
+    let live = true;
+    const load = () => crmGet("notifications").then((r) => live && setNotes(r)).catch(() => {});
+    load();
+    const t = setInterval(load, 60000);
+    return () => { live = false; clearInterval(t); };
+  }, []);
   const company = session.company || "Devi Industries";
 
   const due = useMemo(() => {
@@ -46,7 +56,12 @@ export default function Shell({ path, owner, session, onLogout, children }) {
   const toggle = () => { setExpanded(!expanded); setPop(""); try { localStorage.setItem("salesdesk-cwt-side", !expanded ? "open" : "closed"); } catch { /* the choice then lasts for this visit only */ } };
   const go = (to) => { setPop(""); setMenuOpen(false); setPanel(""); location.hash = to.startsWith("/") ? "#" + to : hashFor(to); };
   const group = (n) => (expanded && !menuOpen ? setOpen({ ...open, [n.key]: !open[n.key] }) : setPop(pop === n.key ? "" : n.key));
-  const openPanel = (name) => { setPanel(panel === name ? "" : name); if (name === "bell") setBellSeen(true); };
+  const openPanel = (name) => {
+    setPanel(panel === name ? "" : name);
+    if (name !== "bell") return;
+    setBellSeen(true);
+    if (notes.unread) crmSend("POST", "notifications/read").then(() => setNotes((n) => ({ ...n, unread: 0, notifications: n.notifications.map((x) => ({ ...x, read: true })) }))).catch(() => {});
+  };
   const popItem = nav.find((n) => n.key === pop);
 
   return (
@@ -121,9 +136,17 @@ export default function Shell({ path, owner, session, onLogout, children }) {
                 )}
               </div>
               <div className="anchor">
-                <button type="button" className="round bell" onClick={() => openPanel("bell")} aria-label="Notifications"><TIcon name="bell" />{!bellSeen && recent.length > 0 && <i className="dot" />}</button>
+                <button type="button" className="round bell" onClick={() => openPanel("bell")} aria-label="Notifications"><TIcon name="bell" />{notes.unread > 0 ? <em className="count">{notes.unread > 99 ? "99+" : notes.unread}</em> : !bellSeen && recent.length > 0 && <i className="dot" />}</button>
                 {panel === "bell" && (
                   <div className="pop list-pop" onMouseLeave={() => setPanel("")}>
+                    {notes.notifications.length > 0 && <>
+                      <div className="pop-title">For you</div>
+                      {notes.notifications.slice(0, 6).map((n) => (
+                        <button key={n.id} type="button" className="pop-row" onClick={() => { setPanel(""); location.hash = hashFor("/leads", { lead: n.leadId }); }}>
+                          <span className="grow">{n.read ? n.text : <b>{n.text}</b>}<small>{crm.leadById.get(n.leadId)?.name || "Lead"} · {when(n.createdAt)}</small></span>
+                        </button>
+                      ))}
+                    </>}
                     <div className="pop-title">Recent activity</div>
                     {recent.map((a) => (
                       <button key={a.id} type="button" className="pop-row" onClick={() => { setPanel(""); location.hash = hashFor("/leads", { lead: a.leadId }); }}>

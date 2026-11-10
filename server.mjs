@@ -1285,6 +1285,18 @@ const server = http.createServer(async (req, res) => {
       if (req.method === "DELETE" && one) return send(200, workflows.remove(one));
       bad("Method not allowed", 405);
     }
+    // Notifications a workflow sent to this person (the bell in the top bar)
+    if (url.pathname === "/api/notifications" || url.pathname === "/api/notifications/read") {
+      const me = identity?.user.id || "";
+      const mine = () => me ? db.prepare("SELECT body FROM records WHERE kind='notifications' AND json_extract(body,'$.userId')=? ORDER BY rowid DESC LIMIT 30").all(me).map((r) => JSON.parse(r.body)) : [];
+      if (req.method === "GET" && url.pathname === "/api/notifications") { const list = mine(); return send(200, { notifications: list, unread: list.filter((n) => !n.read).length }); }
+      if (req.method === "POST" && url.pathname === "/api/notifications/read") {
+        sameOrigin();
+        tx(() => { for (const n of mine()) if (!n.read) put("notifications", { ...n, read: true }); });
+        return send(200, { unread: 0 });
+      }
+      bad("Method not allowed", 405);
+    }
     if (url.pathname === "/api/deleted-leads" && req.method === "GET") {
       if (identity && !["owner", "admin"].includes(workspaceAccess.profile(identity.user.id).role)) bad("Only an admin can see deleted leads", 403);
       return send(200, blocked.deleted());

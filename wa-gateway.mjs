@@ -16,7 +16,7 @@ const fail = (message, status = 400) => {
 const DEFAULTS = { enabled: false, baseUrl: "", apiKey: "", webhookSecret: "", createLeads: true, defaultOwner: "", numberOwners: {}, defaultFromPhoneId: "", seenNumbers: {} };
 const MAX_TEXT = 4000;
 
-function privateAddress(address) {
+export function privateAddress(address) {
   if (isIP(address) === 4) {
     const [a, b] = address.split(".").map(Number);
     return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127);

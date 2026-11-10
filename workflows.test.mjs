@@ -27,9 +27,11 @@ function setup() {
   const log = (leadId, type, text, extra = {}) => { const a = stamp({ leadId, type, text, ...extra }); put("activities", a); return a; };
   const sent = [];
   const people = [{ id: "u1", name: "Priya" }, { id: "u2", name: "Arjun" }, { id: "u3", name: "Meera" }];
-  const wf = createWorkflows({ db, get, put, stamp, tx, log, users: () => people, sendWhatsApp: async (leadId, m) => { sent.push({ leadId, ...m }); }, now: () => clock });
+  const posted = [];
+  const post = async (url, body) => { posted.push({ url, body }); if (url.includes("broken")) throw new Error("the API answered 500"); };
+  const wf = createWorkflows({ db, get, put, stamp, tx, log, users: () => people, sendWhatsApp: async (leadId, m) => { sent.push({ leadId, ...m }); }, post, now: () => clock });
   const lead = (v) => { const l = stamp({ name: "Lead", phone: "", stage: "New", owner: "", source: "IndiaMART", city: "Coimbatore", ...v }); put("leads", l); return l; };
-  return { db, get, all, put, wf, lead, log, sent, advance: (ms) => { clock += ms; }, iso };
+  return { db, get, all, put, wf, lead, log, sent, posted, advance: (ms) => { clock += ms; }, iso };
 }
 
 test("rules are checked: name, trigger, conditions and actions", () => {
@@ -195,4 +197,89 @@ test("loops, a second trigger and lines into the trigger are refused", () => {
   assert.throws(() => wf.create({ name: "x", flow: { nodes: base, edges: [{ from: "t", to: "a" }, { from: "a", to: "t" }] } }), /back into the trigger/);
   assert.throws(() => wf.create({ name: "x", flow: { nodes: base, edges: [] } }), /at least one action/);
   assert.throws(() => wf.create({ name: "x", flow: { nodes: base, edges: [{ from: "t", port: "yes", to: "a" }] } }), /wrong side/);
+});
+
+test("new boxes are checked: field trigger, field update, notify, webhook address", () => {
+  const { wf } = setup();
+  const note = [{ type: "note", text: "x" }];
+  assert.throws(() => wf.create(rule("a", { type: "field_changed", field: "" }, [], note)), /field to watch/);
+  assert.throws(() => wf.create(rule("a", { type: "field_changed", field: "stage" }, [], note)), /stage changes/);
+  assert.throws(() => wf.create(rule("a", { type: "owner_changed", to: "ghost" }, [], note)), /Unknown person/);
+  assert.throws(() => wf.create(rule("a", { type: "rating_changed", to: 9 }, [], note)), /0 to 5/);
+  assert.throws(() => wf.create(rule("a", { type: "lead_created" }, [{ field: "value", op: "more", value: "lots" }], note)), /number/);
+  assert.throws(() => wf.create(rule("a", { type: "lead_created" }, [], [{ type: "field", field: "owner", value: "x" }])), /field to update/);
+  assert.throws(() => wf.create(rule("a", { type: "lead_created" }, [], [{ type: "field", field: "email", value: "not-mail" }])), /valid email/);
+  assert.throws(() => wf.create(rule("a", { type: "lead_created" }, [], [{ type: "notify", to: "lead_owner", text: "" }])), /Write the notification/);
+  for (const url of ["http://n8n.example.com/hook", "https://localhost/hook", "https://10.0.0.5/hook", "https://user:pw@n8n.example.com/x", "not a url"])
+    assert.throws(() => wf.create(rule("a", { type: "lead_created" }, [], [{ type: "webhook", url }])), /API address/, url);
+  const ok = wf.create(rule("a", { type: "field_changed", field: "tc:state", to: "Kerala" }, [{ field: "tc:requirement", op: "contains", value: "lathe" }], [{ type: "webhook", url: "https://n8n.example.com/webhook/lead" }]));
+  assert.equal(ok.trigger.field, "tc:state");
+});
+
+test("owner, rating and field changes fire once, only after the flow was on, and only for the chosen value", async () => {
+  const s = setup();
+  const l = s.lead({ name: "Ravi", owner: "u1", telecrm: { rating: 2, fields: { state: "Tamil Nadu" } } });
+  s.wf.create(rule("To Arjun", { type: "owner_changed", to: "u2" }, [], [{ type: "note", text: "now with {owner}" }]));
+  s.wf.create(rule("Hot", { type: "rating_changed", to: "5" }, [], [{ type: "task", title: "Hot lead {name}", hours: 0 }]));
+  s.wf.create(rule("Kerala", { type: "field_changed", field: "tc:state", to: "kerala" }, [], [{ type: "notify", to: "lead_owner", text: "{name} is from Kerala" }]));
+  s.wf.create(rule("City", { type: "field_changed", field: "city" }, [], [{ type: "note", text: "city is {city}" }]));
+  await s.wf.tick(); // snapshot of positions
+  await s.wf.tick(); // first sight of the watched fields: remembered, nothing fires
+  assert.equal(s.all("activities").length, 0);
+  s.put("leads", { ...s.get("leads", l.id), owner: "u3", updatedAt: "a" });
+  await s.wf.tick();
+  assert.equal(s.all("activities").filter((a) => a.text.includes("now with")).length, 0, "u3 is not the chosen person");
+  s.put("leads", { ...s.get("leads", l.id), owner: "u2", city: "Madurai", telecrm: { rating: 3, fields: { state: "Kerala" } }, updatedAt: "b" });
+  await s.wf.tick();
+  await s.wf.tick();
+  const texts = s.all("activities").map((a) => a.text);
+  assert.equal(texts.filter((t) => t.includes("now with Arjun")).length, 1);
+  assert.equal(texts.filter((t) => t.includes("city is Madurai")).length, 1);
+  assert.equal(s.all("tasks").length, 0, "rating 3 is not 5");
+  const n = s.all("notifications");
+  assert.equal(n.length, 1);
+  assert.equal(n[0].userId, "u2");
+  assert.equal(n[0].text, "Ravi is from Kerala");
+  s.put("leads", { ...s.get("leads", l.id), telecrm: { rating: 5, fields: { state: "Kerala" } }, updatedAt: "c" });
+  await s.wf.tick();
+  assert.equal(s.all("tasks").length, 1);
+});
+
+test("a field watched only after it changed does not fire for the old change", async () => {
+  const s = setup();
+  const l = s.lead({ city: "Salem" });
+  await s.wf.tick();
+  s.put("leads", { ...s.get("leads", l.id), city: "Erode", updatedAt: "x" });
+  s.wf.create(rule("City", { type: "field_changed", field: "city" }, [], [{ type: "note", text: "moved" }]));
+  await s.wf.tick();
+  assert.equal(s.all("activities").length, 0);
+});
+
+test("update a field, cancel tasks, call an API, numbers in conditions", async () => {
+  const s = setup();
+  await s.wf.tick();
+  s.put("tasks", { id: "t1", leadId: "x", title: "manual", status: "Open" });
+  s.wf.create(rule("Big", { type: "lead_created" }, [{ field: "value", op: "more", value: "100000" }], [
+    { type: "field", field: "source", value: "Big order ({city})" },
+    { type: "task", title: "Call {name}", hours: 1 },
+    { type: "cancel_tasks", which: "workflow" },
+    { type: "webhook", url: "https://n8n.example.com/webhook/big" },
+    { type: "webhook", url: "https://broken.example.com/hook" },
+  ]));
+  const big = s.lead({ name: "Big", value: 250000, phone: "+919800000001" }), small = s.lead({ name: "Small", value: 5000 });
+  s.put("tasks", { id: "t2", leadId: big.id, title: "manual", status: "Open" });
+  await s.wf.tick();
+  assert.equal(s.get("leads", big.id).source, "Big order (Coimbatore)");
+  assert.equal(s.get("leads", small.id).source, "IndiaMART");
+  const tasks = s.all("tasks").filter((t) => t.leadId === big.id);
+  assert.equal(tasks.find((t) => t.origin === "Workflow").status, "Done", "the workflow's own task is cancelled");
+  assert.equal(tasks.find((t) => t.id === "t2").status, "Open", "a person's task is kept");
+  assert.equal(s.posted.length, 2);
+  assert.equal(s.posted[0].body.lead.name, "Big");
+  assert.equal(s.posted[0].body.lead.phone, "+919800000001");
+  assert.equal(s.posted[0].body.event, "lead_created");
+  const run = s.wf.list().runs.find((r) => r.leadId === big.id);
+  assert.equal(run.ok, false);
+  assert.ok(run.done.includes("API called"));
+  assert.ok(run.done.some((d) => d.startsWith("API call failed: the API answered 500")));
 });
