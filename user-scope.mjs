@@ -19,7 +19,9 @@ export function scopedState(all, userId) {
       (t) => t.owner === userId && (!t.leadId || leadIds.has(t.leadId)),
     ),
     documents: all("documents").filter((d) => leadIds.has(d.leadId)),
-    mobileCalls: all("mobileCalls").filter((c) => leadIds.has(c.leadId) || (c.owner === userId && all("leads").some(l => l.id === c.leadId && l.owner === "" && l.createdBy === userId))),
+    // calls of the person's leads, and of unassigned leads they created (read once: checking every lead for every call
+    // took minutes once the TeleCRM copy brought tens of thousands of calls)
+    mobileCalls: (() => { const mine = new Set(all("leads").filter((l) => l.owner === "" && l.createdBy === userId).map((l) => l.id)); return all("mobileCalls").filter((c) => leadIds.has(c.leadId) || (c.owner === userId && mine.has(c.leadId))); })(),
     lists: [],
     campaigns: [],
     automationRules: [],

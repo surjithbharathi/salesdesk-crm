@@ -17,6 +17,7 @@ import { phoneParts, phoneKeyOf, assertUniqueLead, initializeLeadPhoneIndex } fr
 import { cleanState, cleanLanguage, withRegion, regionHints } from "./lead-region.mjs";
 import { probableStates } from "./probable-state.mjs";
 import { callerCard } from "./caller-card.mjs";
+import { phoneWorkspace } from "./phone-workspace.mjs";
 import { isBlocked as numberBlocked } from "./blocked-numbers.mjs";
 import { readFile, mkdir } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
@@ -646,11 +647,7 @@ const mobileServer = http.createServer(async (req, res) => {
     }
     if (url.pathname === "/v1/workspace" && req.method === "GET") {
       if (!identity) bad("Shared user login required", 401);
-      reply(200, {
-        ...permittedState(scopedState(all, identity.user.id),identity.user.id),
-        user: identity.user,
-        company: identity.company,
-      });
+      reply(200, { ...phoneWorkspace(permittedState(scopedState(stateAll, identity.user.id), identity.user.id)), user: identity.user, company: identity.company });
       return;
     }
     if (

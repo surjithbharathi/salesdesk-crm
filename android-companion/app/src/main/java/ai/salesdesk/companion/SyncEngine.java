@@ -35,7 +35,7 @@ final class SyncEngine {
         try {
             if (bytes != null) { connection.setDoOutput(true); connection.setFixedLengthStreamingMode(bytes.length); try (OutputStream out = connection.getOutputStream()) { out.write(bytes); } }
             int code = connection.getResponseCode(); if (code < 200 || code >= 300) throw new HttpError(code);
-            try (InputStream in = connection.getInputStream(); ByteArrayOutputStream out = new ByteArrayOutputStream()) { byte[] buffer = new byte[4096]; int n; while ((n=in.read(buffer)) != -1) { if (out.size() + n > 1048576) throw new Exception("Response too large"); out.write(buffer,0,n); } return out.toString("UTF-8"); }
+            try (InputStream in = connection.getInputStream(); ByteArrayOutputStream out = new ByteArrayOutputStream()) { byte[] buffer = new byte[4096]; int n; while ((n=in.read(buffer)) != -1) { if (out.size() + n > (path.equals("/v1/workspace") ? 6291456 : 1048576)) throw new Exception("Response too large"); out.write(buffer,0,n); } return out.toString("UTF-8"); }
         } finally { connection.disconnect(); }
     }
     static String normalize(String value, String country) { String number = value.replaceAll("[^0-9]", ""); if (value.trim().startsWith("+")) return number; if (number.startsWith("00")) return number.substring(2); if (number.startsWith("0")) number = number.substring(1); return number.length() == 10 ? country + number : number; }
