@@ -15,9 +15,11 @@ import org.json.*;
  * its initials, company and place (or a late follow-up in red), its stage and a call button. "New lead" floats at the bottom.
  */
 final class LeadsView {
-    static String stage = "All";
+    static String stage = "All", sort = "active";
+    private static int limit = 100;
     private static final String[][] STAGES = {{"All", "All"}, {"New", "New"}, {"Prospecting", "Discussion"}, {"Opportunity", "Interested"}, {"Quotation given", "Quotation"}, {"Closed", "Closed"}};
-    private static final int LIMIT = 150;
+    private static final String[][] SORTS = {{"active", "Recently active"}, {"newest", "Newest first"}, {"oldest", "Oldest first"}, {"name", "Name A–Z"}};
+    private static final int PAGE = 100;
 
     private LeadsView() {}
 
@@ -40,19 +42,33 @@ final class LeadsView {
         for (String[] s : STAGES) {
             int n = s[0].equals("All") ? all.length() : counts.getOrDefault(s[0], 0);
             if (n == 0 && !s[0].equals("All") && !s[0].equals(stage)) continue;
-            chips.addView(Ui.choice(a, s[0].equals("All") ? "All " + n : s[1] + " " + n, stage.equals(s[0]), () -> { stage = s[0]; a.render(); }));
+            chips.addView(Ui.choice(a, s[0].equals("All") ? "All " + n : s[1] + " " + n, stage.equals(s[0]), () -> { stage = s[0]; limit = PAGE; a.render(); }));
         }
-        chips.addView(Ui.choice(a, "New today " + a.todayLeads(), a.leadsToday, () -> { a.leadsToday = !a.leadsToday; a.render(); }));
+        chips.addView(Ui.choice(a, "New today " + a.todayLeads(), a.leadsToday, () -> { a.leadsToday = !a.leadsToday; limit = PAGE; a.render(); }));
+
+        // how many match, and the order
+        LinearLayout meta = a.horizontal(); meta.setPadding(a.dp(4), a.dp(2), 0, a.dp(6));
+        TextView count = Ui.text(a, "", 13, false, MainActivity.MUTED); meta.addView(count, new LinearLayout.LayoutParams(0, -2, 1));
+        TextView order = Ui.text(a, "Sort: " + sortLabel() + "  ▾", 13, true, MainActivity.ACCENT); order.setPadding(a.dp(8), a.dp(10), a.dp(4), a.dp(10));
+        order.setFocusable(true); order.setContentDescription("Sort leads, now " + sortLabel());
+        order.setOnClickListener(v -> {
+            PopupMenu m = new PopupMenu(a, order);
+            for (int i = 0; i < SORTS.length; i++) m.getMenu().add(0, i, i, (SORTS[i][0].equals(sort) ? "✓  " : "     ") + SORTS[i][1]);
+            m.setOnMenuItemClickListener(item -> { sort = SORTS[item.getItemId()][0]; limit = PAGE; a.render(); return true; });
+            m.show();
+        });
+        meta.addView(order);
+        a.content.addView(meta);
 
         LinearLayout list = a.column();
         a.content.addView(list, new LinearLayout.LayoutParams(-1, -2));
         a.content.setPadding(a.content.getPaddingLeft(), a.content.getPaddingTop(), a.content.getPaddingRight(), a.dp(96));
-        Runnable fill = () -> fill(a, list, all);
+        Runnable fill = () -> count.setText(fill(a, list, all));
         fill.run();
         q.addTextChangedListener(new TextWatcher() {
             public void beforeTextChanged(CharSequence s, int st, int c, int af) {}
             public void onTextChanged(CharSequence s, int st, int b, int c) {}
-            public void afterTextChanged(Editable e) { a.search = e.toString().trim(); fill.run(); }
+            public void afterTextChanged(Editable e) { a.search = e.toString().trim(); limit = PAGE; fill.run(); }
         });
 
         // the floating "New lead" button
@@ -68,7 +84,20 @@ final class LeadsView {
         String s = l.optString("stage", "New"); return s.isEmpty() ? "New" : s;
     }
 
-    private static void fill(MainActivity a, LinearLayout list, JSONArray all) {
+    private static String sortLabel() { for (String[] s : SORTS) if (s[0].equals(sort)) return s[1]; return SORTS[0][1]; }
+
+    // when the lead was last worked on: its newest call, note or change, else when it came in
+    private static Map<String, Long> lastActive(MainActivity a) {
+        Map<String, Long> m = new HashMap<>();
+        JSONArray acts = a.rows("activities");
+        for (int i = 0; i < acts.length(); i++) { JSONObject x = acts.optJSONObject(i); if (x != null) m.merge(x.optString("leadId"), a.activityTime(x), Math::max); }
+        JSONArray calls = a.rows("mobileCalls");
+        for (int i = 0; i < calls.length(); i++) { JSONObject c = calls.optJSONObject(i); if (c == null) continue; long t = c.optLong("startedAt", 0); if (t == 0) t = Ui.ms(c.optString("startedAt")); m.merge(c.optString("leadId"), t, Math::max); }
+        return m;
+    }
+
+    /** Fills the list and returns the count line. */
+    private static String fill(MainActivity a, LinearLayout list, JSONArray all) {
         list.removeAllViews();
         String q = a.search.toLowerCase(Locale.ROOT), digits = a.search.replaceAll("[^0-9]", "");
         Map<String, Long> late = lateByLead(a);
@@ -84,18 +113,25 @@ final class LeadsView {
             }
             shown.add(l);
         }
-        // late follow-ups first, then the most recently touched
+        // late follow-ups first, then the chosen order
+        Map<String, Long> active = sort.equals("active") ? lastActive(a) : Collections.emptyMap();
         shown.sort((x, y) -> {
             boolean lx = late.containsKey(x.optString("id")), ly = late.containsKey(y.optString("id"));
             if (lx != ly) return lx ? -1 : 1;
-            return Long.compare(Ui.ms(y.optString("updatedAt", y.optString("createdAt"))), Ui.ms(x.optString("updatedAt", x.optString("createdAt"))));
+            long cx = Ui.ms(x.optString("createdAt")), cy = Ui.ms(y.optString("createdAt"));
+            switch (sort) {
+                case "newest": return Long.compare(cy, cx);
+                case "oldest": return Long.compare(cx, cy);
+                case "name": return x.optString("name").compareToIgnoreCase(y.optString("name"));
+                default: return Long.compare(active.getOrDefault(y.optString("id"), cy), active.getOrDefault(x.optString("id"), cx));
+            }
         });
         if (shown.isEmpty()) {
             TextView t = Ui.text(a, q.isEmpty() ? "No leads here yet." : "No lead matches \"" + a.search + "\". Try a name, number or city.", 14, false, MainActivity.MUTED);
-            t.setPadding(a.dp(4), a.dp(20), a.dp(4), 0); list.addView(t); return;
+            t.setPadding(a.dp(4), a.dp(20), a.dp(4), 0); list.addView(t); return "0 leads";
         }
         LinearLayout g = Ui.group(a, list);
-        for (int i = 0; i < Math.min(LIMIT, shown.size()); i++) {
+        for (int i = 0; i < Math.min(limit, shown.size()); i++) {
             JSONObject l = shown.get(i);
             if (i > 0) Ui.hairline(a, g, 72);
             Long lateAt = late.get(l.optString("id"));
@@ -109,7 +145,12 @@ final class LeadsView {
             row.setFocusable(true); row.setContentDescription("Open lead " + l.optString("name"));
             row.setOnClickListener(v -> LeadScreen.open(a, l.optString("id"), l));
         }
-        if (shown.size() > LIMIT) { TextView more = Ui.text(a, "Showing " + LIMIT + " of " + shown.size() + ". Search to find the rest.", 12, false, MainActivity.MUTED); more.setPadding(a.dp(4), a.dp(4), 0, 0); list.addView(more); }
+        int left = shown.size() - limit;
+        if (left > 0) {
+            TextView more = Ui.pill(a, "Show " + Math.min(PAGE, left) + " more  ·  " + left + " left", false, MainActivity.ACCENT, () -> { limit += PAGE; a.render(); });
+            LinearLayout.LayoutParams mp = new LinearLayout.LayoutParams(-1, a.dp(48)); mp.setMargins(0, a.dp(4), 0, 0); list.addView(more, mp);
+        }
+        return shown.size() + (shown.size() == 1 ? " lead" : " leads") + (left > 0 ? " · showing " + limit : "");
     }
 
     // each lead's oldest late follow-up
