@@ -86,7 +86,9 @@ db.exec(`CREATE TABLE IF NOT EXISTS record_versions(kind TEXT PRIMARY KEY, v INT
   CREATE TRIGGER IF NOT EXISTS records_v_update AFTER UPDATE ON records BEGIN INSERT INTO record_versions VALUES(NEW.kind,1) ON CONFLICT(kind) DO UPDATE SET v=v+1; INSERT INTO record_versions VALUES(OLD.kind,1) ON CONFLICT(kind) DO UPDATE SET v=v+1; END;
   CREATE TRIGGER IF NOT EXISTS records_v_delete AFTER DELETE ON records BEGIN INSERT INTO record_versions VALUES(OLD.kind,1) ON CONFLICT(kind) DO UPDATE SET v=v+1; END;`);
 const kindVersion = db.prepare("SELECT v FROM record_versions WHERE kind=?");
-const allVersions = db.prepare("SELECT group_concat(kind||':'||v) AS s FROM (SELECT kind,v FROM record_versions ORDER BY kind)");
+// versions of only the record kinds the screens' state is built from (background bookkeeping such as
+// workflowState is written every 30 seconds and must not throw the state away)
+const stateVersions = () => [...new Set([...kinds, "mobileCalls", "conversations", "messages", "documents", "tickets"])].map((k) => `${k}:${kindVersion.get(k)?.v ?? 0}`).join();
 const recordCache = new Map();
 const stateCache = new Map(); // finished /api/state answers, per person (see the route)
 // returns fresh top-level objects each call, so a caller changing a record never changes the kept copy
@@ -1315,7 +1317,7 @@ const server = http.createServer(async (req, res) => {
       // The whole state is many megabytes; build and gzip it once per person and keep it until a record,
       // a login or that person's permissions change.
       const id = identity?.user.id || "";
-      const key = [id, member ? "m" : "a", id ? `${workspaceAccess.can(id, "calls.read")}${workspaceAccess.can(id, "messages.read")}` : "", allVersions.get()?.s || "", userAuth.listAccounts().map((a) => a.id + a.username).join()].join("|");
+      const key = [id, member ? "m" : "a", id ? `${workspaceAccess.can(id, "calls.read")}${workspaceAccess.can(id, "messages.read")}` : "", stateVersions(), userAuth.listAccounts().map((a) => a.id + a.username).join()].join("|");
       const gzipOk = /\bgzip\b/.test(req.headers["accept-encoding"] || "");
       let hit = stateCache.get(id);
       if (!hit || hit.key !== key || db.isTransaction) {
