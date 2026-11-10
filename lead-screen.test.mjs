@@ -28,6 +28,19 @@ test("the phone gets one lead with its full history and open follow-ups", () => 
   assert.equal(r.activities[0].by, "Surjith");
   assert.deepEqual(r.tasks.map((t) => t.id), ["t1"]);
   assert.equal(r.canEdit, true);
+  assert.equal(r.canArchive, true, "the owner may archive");
+  assert.equal(r.canDelete, false, "only an administrator may delete");
+});
+
+test("an administrator may delete or archive any lead; a message keeps its sender", () => {
+  const w = world();
+  w.db.prepare("INSERT INTO records VALUES(?,?,?)").run("activities", "m1", JSON.stringify({ id: "m1", leadId: "mine", type: "Message", direction: "Outgoing", text: "Hi", sender: "Priya", via: "WhatsApp", createdAt: "2026-11-06T10:00:00Z" }));
+  const r = leadScreen(w, "theirs", { id: "u1", admin: true });
+  assert.equal(r.canDelete, true);
+  assert.equal(r.canArchive, true);
+  const m = leadScreen(w, "mine", { id: "u1", admin: false }).activities.find((a) => a.id === "m1");
+  assert.equal(m.sender, "Priya");
+  assert.equal(m.via, "WhatsApp");
 });
 
 test("unassigned leads open for everyone, a colleague's lead only for an administrator", () => {

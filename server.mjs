@@ -655,6 +655,25 @@ const mobileServer = http.createServer(async (req, res) => {
       reply(200, leadScreen({ db, get, users: () => all("users") }, phoneLead[1], { id: identity.user.id, admin }));
       return;
     }
+    // the phone's lead menu, as on the web: the owner archives a lead (kept, out of the lists); an administrator deletes it for
+    // good, or deletes it and blocks the number so calls and WhatsApp from it do not bring it back
+    const phoneLeadAction = /^\/v1\/leads\/([A-Za-z0-9_-]{1,80})\/(archive|delete|delete-and-block)$/.exec(url.pathname);
+    if (phoneLeadAction && req.method === "POST") {
+      if (!identity) bad("Shared user login required", 401);
+      const [, leadId, action] = phoneLeadAction, userId = identity.user.id;
+      const admin = identity.user.role === "admin" || ["owner", "admin"].includes(workspaceAccess.profile(userId).role);
+      const lead = get("leads", leadId);
+      if (!lead || lead.archived) bad("Lead not found", 404);
+      if (action === "archive") {
+        if (lead.owner !== userId && !admin) bad("Only the lead's owner can archive it", 403);
+        reply(200, tx(() => { put("leads", { ...lead, archived: true, updatedAt: now() }); log(leadId, "System", "Lead archived from mobile", { userId }); return { archived: true }; }));
+        return;
+      }
+      if (!admin) bad("Only an admin can delete a lead", 403);
+      if (action === "delete-and-block" && !(lead.phoneKey || lead.phone)) bad("This lead has no number to block");
+      reply(200, deleteLead(leadId, { block: action === "delete-and-block", by: userId }));
+      return;
+    }
     if (url.pathname === "/v1/workspace" && req.method === "GET") {
       if (!identity) bad("Shared user login required", 401);
       reply(200, { ...phoneWorkspace(permittedState(scopedState(stateAll, identity.user.id), identity.user.id)), user: identity.user, company: identity.company });

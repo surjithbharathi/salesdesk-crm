@@ -143,6 +143,18 @@ final class LeadScreen {
         back.setOnClickListener(v -> dialog.dismiss());
         back.setContentDescription("Close the lead");
         top.addView(back);
+        if (data != null && (data.optBoolean("canArchive") || data.optBoolean("canDelete"))) {
+            top.addView(new View(a), new LinearLayout.LayoutParams(0, 1, 1));
+            TextView more = new TextView(a);
+            more.setText("⋮");
+            more.setTextSize(22);
+            more.setTypeface(Typeface.DEFAULT_BOLD);
+            more.setTextColor(MainActivity.ONBAR);
+            more.setGravity(Gravity.CENTER);
+            more.setContentDescription("More: archive, delete, block number");
+            more.setOnClickListener(v -> moreMenu(more));
+            top.addView(more, new LinearLayout.LayoutParams(dp(44), dp(40)));
+        }
         header.addView(top);
         TextView name = new TextView(a);
         name.setText(lead.optString("name", "Lead"));
@@ -311,27 +323,14 @@ final class LeadScreen {
 
     private void history() {
         JSONArray acts = data.optJSONArray("activities");
-        if (acts == null || acts.length() == 0) { TextView t = text(body, "No activity yet. Call, add a note or plan a follow-up.", 13, false); t.setTextColor(MainActivity.MUTED); return; }
-        for (int i = 0; i < acts.length(); i++) {
-            JSONObject item = acts.optJSONObject(i);
-            if (item == null) continue;
-            LinearLayout c = box();
-            String type = item.optString("type", "Activity");
-            boolean missed = type.equals("Call") && ("No answer".equals(item.optString("outcome")) || "Missed".equals(item.optString("direction")) || "Rejected".equals(item.optString("direction")));
-            String title = type.equals("Call") ? (missed ? "Missed call" : (item.optString("direction").isEmpty() ? "" : item.optString("direction") + " ") + "call") : type.equals("System") ? "Update" : type;
-            int secs = item.optInt("duration", 0);
-            if (type.equals("Call") && secs > 0) title += " · " + (secs >= 60 ? secs / 60 + "m " : "") + secs % 60 + "s";
-            TextView head = text(c, title, 14, true);
-            head.setTextColor(missed ? MainActivity.RED : type.equals("Call") ? MainActivity.LEAF : MainActivity.INK);
-            String when = item.optString("occurredAt", item.optString("createdAt"));
-            String meta = a.joined(item.optString("by"), when.isEmpty() ? "" : a.dateLabel(when));
-            if (!item.optString("importedFrom").isEmpty()) meta = a.joined(meta, "from " + item.optString("importedFrom"));
-            if (!meta.isEmpty()) { TextView m = text(c, meta, 12, false); m.setTextColor(MainActivity.MUTED); }
-            String words = item.optString("text").replace("<br>", "\n").replace("<br/>", "\n").trim();
-            if (!words.isEmpty() && !words.startsWith("Phone sync ·")) text(c, words, 14, false);
-            if (!item.optString("recordingId").isEmpty()) small(c, "▶  Play recording", () -> a.remotePlay(item.optString("recordingId")));
-            if (!item.optString("voiceNoteId").isEmpty()) small(c, "▶  Play voice note", () -> a.playVoiceFeedback(item.optString("voiceNoteId")));
-        }
+        if (acts == null || acts.length() == 0) { TextView t = text(body, "Nothing has been recorded for this lead yet. Call, add a note or plan a follow-up.", 13, false); t.setTextColor(MainActivity.MUTED); return; }
+        // the conversation sits on a soft chat background, like the web lead page
+        LinearLayout chat = a.column();
+        chat.setPadding(dp(8), dp(2), dp(8), dp(12));
+        chat.setBackground(a.surface(0xFFF0EEE9, MainActivity.RADIUS));
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, -2); p.setMargins(0, dp(4), 0, dp(8));
+        body.addView(chat, p);
+        HistoryView.draw(a, chat, acts, lead.optString("name"));
     }
 
     private void tasks() {
@@ -418,6 +417,42 @@ final class LeadScreen {
         hint.setTextColor(MainActivity.MUTED);
         new AlertDialog.Builder(a).setTitle("Plan a follow-up").setView(b).setNegativeButton("Cancel", null)
             .setPositiveButton("Save", (d, w) -> { String t = title.getText().toString().trim(); save("POST", "/v1/tasks", put("leadId", id, "title", t.isEmpty() ? "Follow up" : t, "due", due.toInstant().toString()), "Follow-up saved"); }).show();
+    }
+
+    // the lead menu, as on the web: archive (kept, out of the lists), delete for good, or delete and block the number
+    private void moreMenu(View anchor) {
+        android.widget.PopupMenu menu = new android.widget.PopupMenu(a, anchor);
+        String name = lead.optString("name", "this lead");
+        if (data.optBoolean("canArchive")) menu.getMenu().add(0, 1, 1, "Archive lead");
+        if (data.optBoolean("canDelete")) menu.getMenu().add(0, 2, 2, "Delete lead");
+        if (data.optBoolean("canDelete") && !digits().isEmpty()) menu.getMenu().add(0, 3, 3, "Delete and block number");
+        menu.setOnMenuItemClickListener(item -> {
+            int which = item.getItemId();
+            String title = which == 1 ? "Archive " + name + "?" : which == 2 ? "Delete " + name + " for good?" : "Delete " + name + " and block " + phoneLabel() + "?";
+            String message = which == 1 ? "The lead leaves the lists but is kept. An admin can restore it on the web."
+                : which == 2 ? "The lead, its calls, recordings, notes, messages and follow-ups are removed. This cannot be undone. If the number calls again or TeleCRM syncs it, the lead comes back; use \"Delete and block number\" to stop that."
+                : "The lead, its calls, recordings, notes, messages and follow-ups are removed. Calls and WhatsApp from this number will not create a lead again. Unblock it on the web in Settings, Blocked numbers.";
+            String button = which == 1 ? "Archive" : which == 2 ? "Delete" : "Delete and block";
+            String path = "/v1/leads/" + id + (which == 1 ? "/archive" : which == 2 ? "/delete" : "/delete-and-block");
+            String done = which == 1 ? "Lead archived" : which == 2 ? "Lead deleted" : "Lead deleted and number blocked";
+            new AlertDialog.Builder(a).setTitle(title).setMessage(message).setNegativeButton("Cancel", null)
+                .setPositiveButton(button, (d, w) -> leave(path, done)).show();
+            return true;
+        });
+        menu.show();
+    }
+
+    // runs an action that removes the lead from view, then closes the screen and refreshes the lists
+    private void leave(String path, String done) {
+        new Thread(() -> {
+            try {
+                SyncEngine.requestApi(a, path, "POST", new JSONObject());
+                a.runOnUiThread(() -> { android.widget.Toast.makeText(a, done, android.widget.Toast.LENGTH_SHORT).show(); dialog.dismiss(); });
+                try { a.loadWorkspace(); a.runOnUiThread(a::render); } catch (Exception ignored) { /* the next refresh drops it */ }
+            } catch (Exception e) {
+                a.runOnUiThread(() -> note(e instanceof SyncEngine.HttpError && ((SyncEngine.HttpError) e).code == 403 ? "Only an admin can delete a lead, and only its owner can archive it." : problem(e)));
+            }
+        }).start();
     }
 
     private void chooseStage() {
