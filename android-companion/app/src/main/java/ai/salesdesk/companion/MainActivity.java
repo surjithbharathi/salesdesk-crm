@@ -97,8 +97,17 @@ public class MainActivity extends Activity {
     // Android itself asks the person to allow the caller ID role and showing over other apps; the app cannot grant them.
     boolean callerOffered;
     void offerCaller(){
-        if(callerOffered||isFinishing()||android.os.Build.VERSION.SDK_INT<29||!SecureConfig.loggedIn(this))return;
+        if(callerOffered||isFinishing()||!SecureConfig.loggedIn(this))return;
         android.content.SharedPreferences p=SecureConfig.prefs(this);
+        // call sync first: after sign-in it is off until SIMs are chosen, and nothing reaches the CRM until then
+        if(!p.getBoolean("enabled",false)&&!p.getBoolean("syncDeclined",false)){
+            callerOffered=true;
+            new AlertDialog.Builder(this).setTitle("Send your calls to Salesdesk?").setMessage("Calls on the SIMs you choose are added to the lead in Salesdesk, with recordings if you allow the recording folder. Calls from before you signed in are not sent.\n\nNext, choose which SIM is for business calls and allow call-log access.")
+                .setNegativeButton("Not now",(d,w)->p.edit().putBoolean("syncDeclined",true).commit())
+                .setPositiveButton("Turn on",(d,w)->new SimplePreferences(this).chooseSims()).show();
+            return;
+        }
+        if(android.os.Build.VERSION.SDK_INT<29)return;
         boolean working=p.getBoolean("screenPop",false)&&android.provider.Settings.canDrawOverlays(this)&&getSystemService(android.app.role.RoleManager.class).isRoleHeld(android.app.role.RoleManager.ROLE_CALL_SCREENING);
         if(working||p.getBoolean("callerDeclined",false))return;
         callerOffered=true;
