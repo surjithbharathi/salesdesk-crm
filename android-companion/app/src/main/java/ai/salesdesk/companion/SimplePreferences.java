@@ -30,7 +30,7 @@ final class SimplePreferences {
         a.caption(sync,"A lead that has only a number takes the name saved on this phone. Only names of your leads leave the phone, and a name already in the CRM stays.");
         a.syncStatus=a.text(sync,prefs().getString("status",""),12,false);
         LinearLayout prompts=a.card();a.text(prompts,"During & after calls",19,true);
-        toggle(prompts,"Show caller’s lead details",prefs().getBoolean("screenPop",false),enabled->{if(enabled)setupCaller();else{prefs().edit().putBoolean("screenPop",false).commit();a.render();}});
+        toggle(prompts,"Caller popup (who is calling)",prefs().getBoolean("screenPop",false),enabled->{if(enabled)setupCaller();else{prefs().edit().putBoolean("screenPop",false).commit();a.render();}});
         toggle(prompts,"Ask for feedback after calls",prefs().getBoolean("postCallFeedback",false),enabled->{prefs().edit().putBoolean("postCallFeedback",enabled).commit();if(enabled&&android.os.Build.VERSION.SDK_INT>=33&&a.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)a.requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},308);});
         toggle(prompts,"Call from web CRM",prefs().getBoolean("clickToCall",false),enabled->{
             if(!enabled){prefs().edit().putBoolean("clickToCall",false).commit();a.stopService(new Intent(a,CallBridgeService.class));return;}

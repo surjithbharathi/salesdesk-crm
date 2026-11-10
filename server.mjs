@@ -16,6 +16,8 @@ import { mergeLeads } from "./lead-merge.mjs";
 import { phoneParts, phoneKeyOf, assertUniqueLead, initializeLeadPhoneIndex } from "./lead-phone.mjs";
 import { cleanState, cleanLanguage, withRegion, regionHints } from "./lead-region.mjs";
 import { probableStates } from "./probable-state.mjs";
+import { callerCard } from "./caller-card.mjs";
+import { isBlocked as numberBlocked } from "./blocked-numbers.mjs";
 import { readFile, mkdir } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
 import { randomUUID } from "node:crypto";
@@ -632,6 +634,14 @@ const mobileServer = http.createServer(async (req, res) => {
       if (!identity) bad("Shared user login required", 401);
       const [, tz, dayStart, dayEnd] = phoneDay;
       reply(200, kpi.myDay({ userId: identity.user.id, tz: tz === undefined ? 330 : Number(tz), dayStart: dayStart === undefined ? undefined : Number(dayStart), dayEnd: dayEnd === undefined ? undefined : Number(dayEnd) }));
+      return;
+    }
+    // who is calling: the phone app's caller popup asks this while the phone rings (the number is in the path: the app sends no query strings)
+    const callerOf = /^\/v1\/caller\/(\d{6,15})$/.exec(url.pathname);
+    if (callerOf && req.method === "GET") {
+      if (!identity) bad("Shared user login required", 401);
+      const admin = identity.user.role === "admin" || ["owner", "admin"].includes(workspaceAccess.profile(identity.user.id).role);
+      reply(200, callerCard({ db, get, users: () => all("users"), isBlocked: (key) => numberBlocked(db, key) }, callerOf[1], { id: identity.user.id, admin }));
       return;
     }
     if (url.pathname === "/v1/workspace" && req.method === "GET") {
