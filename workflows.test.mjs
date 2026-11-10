@@ -283,3 +283,29 @@ test("update a field, cancel tasks, call an API, numbers in conditions", async (
   assert.ok(run.done.includes("API called"));
   assert.ok(run.done.some((d) => d.startsWith("API call failed: the API answered 500")));
 });
+
+test("a test run says what each box would do and changes nothing", async () => {
+  const s = setup();
+  const l = s.lead({ name: "Ravi", owner: "u1", value: 500000, phone: "+919800000002" });
+  const input = { flow: {
+    nodes: [
+      { id: "t", type: "trigger", x: 0, y: 0, config: { type: "lead_created" } },
+      { id: "c", type: "condition", x: 0, y: 0, config: { conditions: [{ field: "value", op: "more", value: "100000" }] } },
+      { id: "a", type: "action", x: 0, y: 0, config: { type: "assign", to: "u2" } },
+      { id: "n", type: "action", x: 0, y: 0, config: { type: "note", text: "small one" } },
+      { id: "w", type: "wait", x: 0, y: 0, config: { hours: 24 } },
+      { id: "h", type: "action", x: 0, y: 0, config: { type: "webhook", url: "https://n8n.example.com/x" } },
+    ],
+    edges: [{ from: "t", port: "out", to: "c" }, { from: "c", port: "yes", to: "a" }, { from: "c", port: "no", to: "n" }, { from: "a", port: "out", to: "w" }, { from: "w", port: "out", to: "h" }],
+  } };
+  const r = s.wf.dryRun(input, l.id);
+  assert.equal(r.steps.c.text, "Yes: the lead passes");
+  assert.equal(r.steps.a.text, "Would assign to Arjun");
+  assert.equal(r.steps.n, undefined, "the no branch is not taken");
+  assert.match(r.steps.h.text, /n8n\.example\.com/);
+  assert.ok(r.lines.includes("c:yes:a"));
+  assert.equal(s.get("leads", l.id).owner, "u1", "nothing changed");
+  assert.equal(s.posted.length, 0, "no API call in a test");
+  assert.equal(s.all("activities").length, 0);
+  assert.throws(() => s.wf.dryRun(input, "nope"), /lead to test/);
+});

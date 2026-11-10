@@ -434,7 +434,7 @@ const telecrm = createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecor
 const waGateway = createWaGateway({ db, all, get, put, stamp, tx, log, systemUser: process.env.CRM_OWNER_USER_ID || "", keyPath: (process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname) + ".wagw-key" });
 const blocked = createBlockedNumbers(db);
 // Workflows: admins' "when this happens, do that" rules, checked every 30 seconds; WhatsApp goes out through the gateway
-const workflows = createWorkflows({ db, get, put, stamp, tx, log, users: () => all("users").filter((u) => u.active !== false), sendWhatsApp: (leadId, message) => waGateway.send(leadId, message, ""), report: (m) => console.error(m) });
+const workflows = createWorkflows({ db, get, put, stamp, tx, log, users: () => all("users").filter((u) => u.active !== false), sendWhatsApp: (leadId, message) => waGateway.send(leadId, message, ""), gatewayOn: () => waGateway.settings().enabled, report: (m) => console.error(m) });
 // Removes a lead and everything recorded against it (calls and their recordings, notes, messages, chats, follow-ups, deals).
 // With block, its number is blocked first so no sync brings it back.
 function deleteLead(id, { block = false, by = "" } = {}) {
@@ -1281,6 +1281,7 @@ const server = http.createServer(async (req, res) => {
       if (req.method === "GET" && url.pathname === "/api/workflows") return send(200, { ...workflows.list(), meta: workflows.meta(), gateway: waGateway.settings().enabled });
       sameOrigin();
       if (req.method === "POST" && url.pathname === "/api/workflows") return send(200, workflows.create(await body(req), identity?.user.id || ""));
+      if (req.method === "POST" && url.pathname === "/api/workflows/test") { const p = await body(req); return send(200, workflows.dryRun(p, p.leadId)); }
       if (req.method === "PUT" && one) return send(200, workflows.update(one, await body(req)));
       if (req.method === "DELETE" && one) return send(200, workflows.remove(one));
       bad("Method not allowed", 405);

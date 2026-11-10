@@ -3,44 +3,50 @@ import { crmGet, crmSend } from "../../api.js";
 import { useLoad } from "../../hooks.js";
 import { useToast } from "../../toast.jsx";
 import { hashFor } from "../../format.js";
-import { TIcon } from "../../cwt/icons.jsx";
+import { TIcon, ICONS } from "../../cwt/icons.jsx";
+import { useCrm } from "../../crm.jsx";
 import { Section, Note, Loading, Failed } from "./Parts.jsx";
 
-// Workflows are drawn as flows: a trigger box, then condition (yes / no), wait and action boxes joined by lines.
-// The canvas is plain SVG (no inline styles: the CSP allows only stylesheets), so boxes move by their x / y attributes.
-// The editor is laid out like TeleCRM's: what can be added on the left (events, actions, conditions), the canvas in the middle,
-// the selected box's settings on the right; a flow is a draft until it is published.
-const W = 216, H = 76, CANVAS_W = 1800, CANVAS_H = 1100;
-const PORT_Y = { out: H / 2, yes: H * 0.32, no: H * 0.72 };
+// Workflows are drawn as flows, n8n style: a trigger node, then If (yes / no), Wait and action nodes joined by lines.
+// Every free output has a + that opens a searchable list of steps; a line has a + to put a step in between.
+// The canvas has no edges: drag the background to move around, Ctrl + scroll (or the buttons) to zoom, Fit to see it all.
+// It is plain SVG with no inline styles (the CSP allows only stylesheets): nodes move by their x / y attributes.
+const S = 92; // a node is a square this big; its name is written under it
+const PORT_Y = { out: S / 2, yes: S * 0.3, no: S * 0.7 };
 const PORTS = { trigger: ["out"], condition: ["yes", "no"], wait: ["out"], action: ["out"] };
+const GAP = 150; // from one node to the next, left to right
 const PLACEHOLDERS = "Use {name}, {phone}, {company}, {city}, {source} or {owner} to fill in the lead's details.";
 const newId = () => "n" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const when = (iso) => new Date(iso).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
 
-// the left palette: [trigger type, label, icon, starting settings]
+// triggers: [type, name, icon, starting settings, what it means]
 const EVENTS = [
-  ["lead_created", "New lead", "addUser", {}],
-  ["owner_changed", "Lead assignee change", "user", { to: "" }],
-  ["stage_changed", "Lead stage change", "flow", { to: "", from: "" }],
-  ["field_changed", "Lead field change", "gear", { field: "city", to: "" }],
-  ["rating_changed", "Lead rating change", "star", { to: "" }],
-  ["call_missed", "Missed call", "phone", {}],
-  ["no_activity", "No activity", "clock", { days: 3 }],
+  ["lead_created", "New lead", "addUser", {}, "A lead comes in from any source: IndiaMART, TeleCRM, the website, a person"],
+  ["owner_changed", "Lead assigned", "user", { to: "" }, "The lead gets a new owner"],
+  ["stage_changed", "Stage changed", "flow", { to: "", from: "" }, "The lead moves to another pipeline stage"],
+  ["field_changed", "Field changed", "gear", { field: "city", to: "" }, "City, source, email or a TeleCRM field like State changes"],
+  ["rating_changed", "Rating changed", "star", { to: "" }, "The lead's TeleCRM rating changes"],
+  ["call_missed", "Missed call", "phone", {}, "A call from the lead is missed or rejected"],
+  ["no_activity", "No activity", "clock", { days: 3 }, "No call, message or note for some days"],
 ];
-// [box type, label, icon, starting settings]
+// steps: [node type, name, icon, starting settings, what it does]
 const ADD = [
-  ["action", "Update lead assignee", "addUser", { type: "assign", to: "" }],
-  ["action", "Update lead stage", "flow", { type: "stage", stage: "" }],
-  ["action", "Update lead field", "gear", { type: "field", field: "city", value: "" }],
-  ["action", "Add call follow-up", "alarm", { type: "task", title: "Call {name}", hours: 1, owner: "lead_owner" }],
-  ["action", "Send WhatsApp", "whatsapp", { type: "whatsapp", text: "" }],
-  ["action", "Notify team member", "bell", { type: "notify", to: "lead_owner", text: "{name} needs your attention" }],
-  ["action", "Add a note", "notePlus", { type: "note", text: "" }],
-  ["action", "Cancel tasks", "x", { type: "cancel_tasks", which: "workflow" }],
-  ["action", "Call API", "webhook", { type: "webhook", url: "" }],
-  ["wait", "Time delay", "clock", { hours: 24 }],
+  ["action", "Assign lead", "addUser", { type: "assign", to: "" }, "Give the lead to a person, or share leads out in turn"],
+  ["action", "Change stage", "flow", { type: "stage", stage: "" }, "Move the lead to a pipeline stage"],
+  ["action", "Update field", "gear", { type: "field", field: "city", value: "" }, "Set the company, city, source, email or value"],
+  ["action", "Follow-up task", "alarm", { type: "task", title: "Call {name}", hours: 1, owner: "lead_owner" }, "Add a call or follow-up to someone's list"],
+  ["action", "Send WhatsApp", "whatsapp", { type: "whatsapp", text: "" }, "Message the customer through the WhatsApp gateway"],
+  ["action", "Notify team member", "bell", { type: "notify", to: "lead_owner", text: "{name} needs your attention" }, "A message under the bell in Salesdesk"],
+  ["action", "Add note", "notePlus", { type: "note", text: "" }, "Write a note on the lead's timeline"],
+  ["action", "Cancel tasks", "x", { type: "cancel_tasks", which: "workflow" }, "Close the lead's open follow-ups"],
+  ["action", "Call API", "webhook", { type: "webhook", url: "" }, "Send the lead to n8n or any https webhook"],
 ];
-const CHECKS = [["condition", "If / else", "filter", { match: "all", conditions: [{ field: "source", op: "contains", value: "" }] }]];
+const FLOW = [
+  ["condition", "If", "filter", { match: "all", conditions: [{ field: "source", op: "contains", value: "" }] }, "Split into yes and no by the lead's details"],
+  ["wait", "Wait", "clock", { hours: 24 }, "Hold the lead for a while, then carry on"],
+];
+const ICON = Object.fromEntries(ADD.map(([, , icon, cfg]) => [cfg.type, icon]));
+const iconOf = (n) => (n.type === "trigger" ? EVENTS.find(([t]) => t === n.config.type)?.[2] || "flow" : n.type === "condition" ? "filter" : n.type === "wait" ? "clock" : ICON[n.config.type] || "gear");
 
 // examples, laid out left to right
 const node = (id, type, x, y, config) => ({ id, type, x, y, config });
@@ -194,105 +200,238 @@ export default function Workflows({ users }) {
   );
 }
 
-function Palette({ title, hint, items, onPick, active }) {
+// the searchable list of steps (n8n's node creator); for the trigger it lists events instead
+function Picker({ mode, onPick, onClose }) {
+  const [q, setQ] = useState("");
+  const input = useRef(null);
+  useEffect(() => { input.current?.focus(); }, [mode]);
+  const groups = mode.kind === "trigger" ? [["When this happens", EVENTS.map(([t, name, icon, cfg, desc]) => ["trigger", name, icon, { type: t, ...cfg }, desc])]] : [["Actions", ADD], ["Flow", FLOW]];
+  const want = q.trim().toLowerCase();
+  const shown = groups.map(([title, items]) => [title, items.filter(([, name, , , desc]) => !want || `${name} ${desc}`.toLowerCase().includes(want))]).filter(([, items]) => items.length);
   return (
-    <details className="wfp-group" open>
-      <summary><b>{title}</b><span className="muted">{hint}</span></summary>
-      <div className="wfp-grid">
-        {items.map(([type, text, icon, config]) => (
-          <button key={text} type="button" className={`wfp-item ${type === "action" ? `wfn-action wfn-${config.type}` : `wfn-${type}`}${active === text ? " wfp-on" : ""}`} onClick={() => onPick(type, config, text)}>
-            <TIcon name={icon} size={20} /><span>{text}</span>
-          </button>
-        ))}
+    <div className="wfd-inner">
+      <div className="wfd-head">
+        <h3>{mode.kind === "trigger" ? "Choose what starts the workflow" : mode.kind === "insert" ? "Put a step in between" : "What happens next?"}</h3>
+        <button type="button" className="wfd-close" aria-label="Close" onClick={onClose}><TIcon name="x" size={18} /></button>
       </div>
-    </details>
+      <input ref={input} className="field-input wfd-search" type="search" placeholder="Search steps…" aria-label="Search steps" value={q} onChange={(e) => setQ(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter" && shown[0]) { const [type, , , cfg] = shown[0][1][0]; onPick(type, cfg); } }} />
+      {shown.map(([title, items]) => (
+        <div key={title} className="wfd-group">
+          <div className="wfd-group-title">{title}</div>
+          {items.map(([type, name, icon, cfg, desc]) => (
+            <button key={name} type="button" className={`wfd-item ${type === "action" ? `wfn-action wfn-${cfg.type}` : `wfn-${type}`}`} onClick={() => onPick(type, cfg)}>
+              <span className="wfd-icon"><TIcon name={icon} size={22} /></span>
+              <span className="wfd-text"><b>{name}</b><small>{desc}</small></span>
+            </button>
+          ))}
+        </div>
+      ))}
+      {!shown.length && <p className="muted">No step matches “{q}”.</p>}
+    </div>
+  );
+}
+
+// "Test workflow": pick a lead, the server walks the flow for it without doing anything
+function TestPanel({ leads, result, busy, onRun, onClose, onClear }) {
+  const [q, setQ] = useState("");
+  const want = q.trim().toLowerCase(), digits = want.replace(/\D/g, "");
+  const found = want ? leads.filter((l) => !l.archived && (String(l.name || "").toLowerCase().includes(want) || (digits.length >= 3 && String(l.phone || "").includes(digits)))).slice(0, 8) : [];
+  return (
+    <div className="wfd-inner">
+      <div className="wfd-head">
+        <h3>Test workflow</h3>
+        <button type="button" className="wfd-close" aria-label="Close" onClick={onClose}><TIcon name="x" size={18} /></button>
+      </div>
+      <p className="muted">Runs the workflow as drawn for one lead and shows what each step would do. Nothing is changed, sent or called.</p>
+      <input className="field-input wfd-search" type="search" placeholder="Search a lead by name or phone" aria-label="Lead to test with" value={q} onChange={(e) => setQ(e.target.value)} />
+      {found.map((l) => (
+        <button key={l.id} type="button" className="wfd-lead" disabled={busy} onClick={() => onRun(l.id)}>
+          <b>{l.name}</b><small>{[l.phone, l.city, l.source].filter(Boolean).join(" · ")}</small>
+        </button>
+      ))}
+      {want && !found.length && <p className="muted">No lead matches.</p>}
+      {result && <div className="wfd-result">
+        <div className="wfd-group-title">Tested with {result.lead.name}</div>
+        <p className="muted">Green steps would run, red ones would fail, grey ones are not reached. Click a step to see it.</p>
+        <button type="button" className="btn btn-quiet" onClick={onClear}>Clear the test</button>
+      </div>}
+    </div>
   );
 }
 
 function Builder({ start, meta, users, nameOf, gateway, busy, runs, onSave, onCancel }) {
+  const crm = useCrm();
+  const notify = useToast();
   const [name, setName] = useState(start.name);
   const [nodes, setNodes] = useState(start.flow.nodes);
   const [edges, setEdges] = useState(start.flow.edges);
-  const [selected, setSelected] = useState("t"); // a node id, or "edge:<index>"
+  const [selected, setSelected] = useState(""); // a node id, or "edge:<index>"
+  const [drawer, setDrawer] = useState(null); // { kind: "settings" } | { kind: "add", from, port } | { kind: "insert", edge } | { kind: "trigger" } | { kind: "test" }
   const [tab, setTab] = useState("editor");
-  const [zoom, setZoom] = useState(1);
   const [full, setFull] = useState(false);
-  const [palette, setPalette] = useState(true);
-  const [drag, setDrag] = useState(null); // { kind: "move", id, dx, dy } or { kind: "link", from, port, x, y }
-  const svg = useRef(null), pane = useRef(null);
-  const [focus, setFocus] = useState("");
+  const [view, setView] = useState({ x: 40, y: 40, k: 1 });
+  const [drag, setDrag] = useState(null); // { kind: "pan" | "move" | "link", … }
+  const [test, setTest] = useState(null);
+  const [testing, setTesting] = useState(false);
+  const box = useRef(null);
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const sel = byId.get(selected);
   const trigger = nodes.find((n) => n.type === "trigger");
   const live = Boolean(start.id && start.enabled);
 
-  const point = (e) => { const p = svg.current.createSVGPoint(); p.x = e.clientX; p.y = e.clientY; return p.matrixTransform(svg.current.getScreenCTM().inverse()); };
-  const hit = (x, y) => nodes.find((n) => x >= n.x && x <= n.x + W && y >= n.y && y <= n.y + H);
+  // a test result belongs to the flow it was run on; changing a step or a line drops it (moving nodes does not)
+  const shape = JSON.stringify([nodes.map((n) => [n.id, n.config]), edges]);
+  const tested = useRef("");
+  useEffect(() => { if (test && tested.current !== shape) setTest(null); }, [shape]);
+
+  const world = (e) => { const r = box.current.getBoundingClientRect(); return { x: (e.clientX - r.left - view.x) / view.k, y: (e.clientY - r.top - view.y) / view.k }; };
+  const hit = (p) => nodes.find((n) => p.x >= n.x - 8 && p.x <= n.x + S + 8 && p.y >= n.y - 8 && p.y <= n.y + S + 8);
   const setConfig = (id, patch) => setNodes((all) => all.map((n) => (n.id === id ? { ...n, config: { ...n.config, ...patch } } : n)));
-  const connect = (from, port, to) => {
-    if (!to || to === from || byId.get(to)?.type === "trigger") return;
-    setEdges((all) => (all.some((e) => e.from === from && e.port === port && e.to === to) ? all : [...all, { from, port, to }]));
-  };
-  function remove() {
-    if (selected.startsWith("edge:")) { const i = Number(selected.slice(5)); setEdges((all) => all.filter((_, j) => j !== i)); setSelected(""); return; }
-    if (!sel || sel.type === "trigger") return;
-    setNodes((all) => all.filter((n) => n.id !== selected));
-    setEdges((all) => all.filter((e) => e.from !== selected && e.to !== selected));
-    setSelected("");
+  const free = (x, y, skip = "") => { while (nodes.some((n) => n.id !== skip && Math.abs(n.x - x) < S + 40 && Math.abs(n.y - y) < S + 60)) y += S + 80; return y; };
+
+  // ---- view ----
+  const zoomAt = (k, cx, cy) => setView((v) => { const nk = Math.max(0.25, Math.min(1.6, k)); return { k: nk, x: cx - ((cx - v.x) / v.k) * nk, y: cy - ((cy - v.y) / v.k) * nk }; });
+  const zoomBy = (f) => { const r = box.current.getBoundingClientRect(); zoomAt(view.k * f, r.width / 2, r.height / 2); };
+  function fit() {
+    const el = box.current;
+    if (!el || !nodes.length) return;
+    const r = el.getBoundingClientRect();
+    const x0 = Math.min(...nodes.map((n) => n.x)) - 30, y0 = Math.min(...nodes.map((n) => n.y)) - 30;
+    const x1 = Math.max(...nodes.map((n) => n.x)) + S + 90, y1 = Math.max(...nodes.map((n) => n.y)) + S + 60;
+    const k = Math.max(0.25, Math.min(1.1, Math.min(r.width / (x1 - x0), r.height / (y1 - y0))));
+    setView({ k, x: (r.width - (x1 - x0) * k) / 2 - x0 * k, y: (r.height - (y1 - y0) * k) / 2 - y0 * k });
   }
-  // a new box goes to the right of the selected one and is joined to it, like adding the next step
-  function add(type, config) {
-    const id = newId(), from = sel || nodes[nodes.length - 1];
-    const port = from ? PORTS[from.type].find((p) => !edges.some((e) => e.from === from.id && e.port === p)) || PORTS[from.type][0] : null;
-    const x = from ? Math.min(CANVAS_W - W - 20, from.x + W + 44) : 40;
-    let y = from ? Math.min(CANVAS_H - H - 20, from.y + (port === "no" ? 110 : 0)) : 160;
-    // never on top of another box: step down until the spot is free
-    while (y < CANVAS_H - H - 20 && nodes.some((n) => Math.abs(n.x - x) < W + 20 && Math.abs(n.y - y) < H + 20)) y += H + 34;
+  // fit the flow on screen when the editor opens and while the page around it is still settling its size
+  const fitRef = useRef(fit);
+  fitRef.current = fit;
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const t0 = Date.now();
+    const ro = new ResizeObserver(() => { if (Date.now() - t0 < 1200 && el.clientWidth > 50) fitRef.current(); });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [full, tab]);
+  // scroll moves the canvas; Ctrl (or ⌘) + scroll, or a pinch on a touchpad, zooms where the pointer is
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const wheel = (e) => {
+      e.preventDefault();
+      if (e.ctrlKey || e.metaKey) { const r = el.getBoundingClientRect(); setView((v) => { const nk = Math.max(0.25, Math.min(1.6, v.k * Math.exp(-e.deltaY / 300))), cx = e.clientX - r.left, cy = e.clientY - r.top; return { k: nk, x: cx - ((cx - v.x) / v.k) * nk, y: cy - ((cy - v.y) / v.k) * nk }; }); }
+      else setView((v) => ({ ...v, x: v.x - e.deltaX, y: v.y - e.deltaY }));
+    };
+    el.addEventListener("wheel", wheel, { passive: false });
+    return () => el.removeEventListener("wheel", wheel);
+  }, [tab]);
+
+  // ---- editing ----
+  function place(type, config, from, port) {
+    const id = newId();
+    const x = from ? from.x + S + GAP : 60;
+    const y = free(x, from ? from.y + (PORT_Y[port] - S / 2) * 2.2 : 200);
     setNodes((all) => [...all, { id, type, x, y, config: structuredClone(config) }]);
     if (from) setEdges((all) => [...all, { from: from.id, port, to: id }]);
-    setSelected(id);
-    setFocus(id);
+    return id;
   }
-  // a workflow has one event: picking another changes it
-  function setEvent(type, config) {
-    setNodes((all) => all.map((n) => (n.type === "trigger" ? { ...n, config: { type, ...structuredClone(config) } } : n)));
-    setSelected(trigger.id);
-    setFocus(trigger.id);
+  function pick(type, config) {
+    const m = drawer;
+    if (m.kind === "trigger") {
+      const { type: t, ...rest } = config;
+      setNodes((all) => all.map((n) => (n.type === "trigger" ? { ...n, config: { type: t, ...structuredClone(rest) } } : n)));
+      setSelected(trigger.id); setDrawer({ kind: "settings" });
+      return;
+    }
+    let id;
+    if (m.kind === "insert") {
+      const e = edges[m.edge], a = byId.get(e.from), b = byId.get(e.to);
+      id = newId();
+      // make room: the later part of the flow moves right
+      const later = new Set([b.id]);
+      for (let grew = true; grew;) { grew = false; for (const x of edges) if (later.has(x.from) && !later.has(x.to)) { later.add(x.to); grew = true; } }
+      const x = a.x + S + GAP, y = a.y + (PORT_Y[e.port] - S / 2) * 2.2;
+      const shift = Math.max(0, x + S + GAP - b.x);
+      setNodes((all) => [...all.map((n) => (later.has(n.id) ? { ...n, x: n.x + shift } : n)), { id, type, x, y, config: structuredClone(config) }]);
+      setEdges((all) => [...all.filter((_, i) => i !== m.edge), { from: e.from, port: e.port, to: id }, { from: id, port: PORTS[type][0], to: e.to }]);
+    } else {
+      const from = m.from ? byId.get(m.from) : sel && sel.type !== undefined ? sel : nodes[nodes.length - 1];
+      const port = m.port || (from ? PORTS[from.type].find((p) => !edges.some((x) => x.from === from.id && x.port === p)) || PORTS[from.type][0] : "out");
+      id = place(type, config, from, port);
+    }
+    setSelected(id); setDrawer({ kind: "settings" });
   }
-  // bring a box into view
-  useEffect(() => {
-    const n = nodes.find((x) => x.id === focus), el = pane.current;
-    if (!n || !el) return;
-    el.scrollTo({ left: Math.max(0, (n.x + W / 2) * zoom - el.clientWidth / 2), top: Math.max(0, (n.y + H / 2) * zoom - el.clientHeight / 2), behavior: "auto" });
-    setFocus("");
-  }, [focus]);
+  function remove(which = selected) {
+    if (which.startsWith("edge:")) { const i = Number(which.slice(5)); setEdges((all) => all.filter((_, j) => j !== i)); setSelected(""); return; }
+    const n = byId.get(which);
+    if (!n || n.type === "trigger") return;
+    // like n8n: the step before is joined straight to the step after when there is only one of each
+    const ins = edges.filter((e) => e.to === which), outs = edges.filter((e) => e.from === which);
+    setEdges((all) => [...all.filter((e) => e.from !== which && e.to !== which), ...(ins.length === 1 && outs.length === 1 ? [{ from: ins[0].from, port: ins[0].port, to: outs[0].to }] : [])]);
+    setNodes((all) => all.filter((x) => x.id !== which));
+    setSelected(""); setDrawer(null);
+  }
   useEffect(() => {
     const key = (e) => {
-      if (e.key === "Escape") { setFull(false); return; }
-      if (!["Delete", "Backspace"].includes(e.key) || /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || "")) return;
-      e.preventDefault(); remove();
+      if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || "")) return;
+      if (e.key === "Escape") { if (drawer) setDrawer(null); else setFull(false); return; }
+      if (["Delete", "Backspace"].includes(e.key) && selected) { e.preventDefault(); remove(); }
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
   });
 
-  function onMove(e) {
-    if (!drag) return;
-    const p = point(e);
-    if (drag.kind === "move") setNodes((all) => all.map((n) => (n.id === drag.id ? { ...n, x: Math.max(0, Math.min(CANVAS_W - W, Math.round(p.x - drag.dx))), y: Math.max(0, Math.min(CANVAS_H - H, Math.round(p.y - drag.dy))) } : n)));
-    else setDrag({ ...drag, x: p.x, y: p.y });
+  // ---- pointer: pan the background, move a node, or pull a line out of an output ----
+  function down(e, kind, extra = {}) {
+    e.stopPropagation();
+    if (e.button !== undefined && e.button !== 0) return;
+    box.current.setPointerCapture?.(e.pointerId);
+    const p = world(e);
+    setDrag({ kind, sx: e.clientX, sy: e.clientY, moved: false, vx: view.x, vy: view.y, ...p, ...extra });
   }
-  function onUp(e) {
-    if (drag?.kind === "link") { const p = point(e); connect(drag.from, drag.port, hit(p.x, p.y)?.id); }
+  function move(e) {
+    if (!drag) return;
+    const moved = drag.moved || Math.abs(e.clientX - drag.sx) + Math.abs(e.clientY - drag.sy) > 4;
+    if (drag.kind === "pan") { setView((v) => ({ ...v, x: drag.vx + e.clientX - drag.sx, y: drag.vy + e.clientY - drag.sy })); setDrag({ ...drag, moved }); return; }
+    const p = world(e);
+    if (drag.kind === "move" && moved) setNodes((all) => all.map((n) => (n.id === drag.id ? { ...n, x: Math.round(p.x - drag.dx), y: Math.round(p.y - drag.dy) } : n)));
+    setDrag({ ...drag, moved, px: p.x, py: p.y });
+  }
+  function up(e) {
+    if (!drag) return;
+    if (drag.kind === "pan" && !drag.moved) { setSelected(""); if (drawer?.kind === "settings") setDrawer(null); }
+    if (drag.kind === "move" && !drag.moved) { setSelected(drag.id); setDrawer({ kind: "settings" }); }
+    if (drag.kind === "link") {
+      const target = drag.moved && hit(world(e));
+      if (target && target.id !== drag.id && target.type !== "trigger") setEdges((all) => (all.some((x) => x.from === drag.id && x.port === drag.port && x.to === target.id) ? all : [...all, { from: drag.id, port: drag.port, to: target.id }]));
+      else if (!drag.moved || !target) { setSelected(drag.id); setDrawer({ kind: "add", from: drag.id, port: drag.port }); }
+    }
     setDrag(null);
   }
-  const curve = (x1, y1, x2, y2) => { const d = Math.max(40, Math.abs(x2 - x1) / 2); return `M${x1},${y1} C${x1 + d},${y1} ${x2 - d},${y2} ${x2},${y2}`; };
+
+  async function runTest(leadId) {
+    setTesting(true);
+    try {
+      const r = await crmSend("POST", "workflows/test", { ...(start.id ? { id: start.id } : {}), name, flow: { nodes, edges }, leadId });
+      tested.current = shape;
+      setTest(r);
+      const bad = Object.values(r.steps).filter((s) => s.status === "error").length;
+      notify(bad ? `Test: ${bad} step${bad === 1 ? "" : "s"} would fail` : "Test: every reached step would run");
+    } catch (err) { notify(err.message); } finally { setTesting(false); }
+  }
+
+  const curve = (x1, y1, x2, y2) => {
+    const d = Math.max(50, Math.abs(x2 - x1) / 2);
+    return x2 > x1 + 20 ? `M${x1},${y1} C${x1 + d},${y1} ${x2 - d},${y2} ${x2},${y2}` : `M${x1},${y1} C${x1 + 90},${y1} ${x1 + 90},${y1 + 120} ${(x1 + x2) / 2},${Math.max(y1, y2) + 120} S${x2 - 90},${y2} ${x2},${y2}`;
+  };
+  const mid = (x1, y1, x2, y2) => (x2 > x1 + 20 ? [(x1 + x2) / 2, (y1 + y2) / 2] : [(x1 + x2) / 2, Math.max(y1, y2) + 120]);
 
   const save = (enabled) => onSave({ ...(start.id ? { id: start.id } : {}), name, enabled, flow: { nodes, edges } },
     enabled ? (live ? `"${name}" saved; it stays live` : `"${name}" is live`) : live ? `"${name}" is a draft again` : `Draft "${name}" saved`);
   const people = users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>);
   const stageOptions = meta.stages.map((s) => <option key={s} value={s}>{s}</option>);
-  const eventLabel = EVENTS.find(([type]) => type === trigger?.config.type)?.[1];
+  const used = new Set(edges.map((e) => `${e.from}:${e.port}`));
+  const ran = new Set(test?.lines || []);
 
   return (
     <div className={full ? "wfb wfb-full" : "wfb"}>
@@ -309,80 +448,113 @@ function Builder({ start, meta, users, nameOf, gateway, busy, runs, onSave, onCa
       <div className="wfb-tabs" role="tablist">
         <button type="button" role="tab" aria-selected={tab === "editor"} className={tab === "editor" ? "wfb-tab wfb-tab-on" : "wfb-tab"} onClick={() => setTab("editor")}>Editor</button>
         <button type="button" role="tab" aria-selected={tab === "runs"} className={tab === "runs" ? "wfb-tab wfb-tab-on" : "wfb-tab"} onClick={() => setTab("runs")}>Executions{runs.length ? ` (${runs.length})` : ""}</button>
-        {tab === "editor" && <span className="wfb-view" role="group" aria-label="View">
-          <button type="button" className="btn btn-quiet" aria-pressed={palette} onClick={() => setPalette((p) => !p)}>{palette ? "Hide box list" : "Show box list"}</button>
-          <button type="button" className="btn btn-quiet" aria-label="Zoom out" disabled={zoom <= 0.5} onClick={() => setZoom((z) => Math.max(0.5, +(z - 0.15).toFixed(2)))}>−</button>
-          <span className="muted">{Math.round(zoom * 100)}%</span>
-          <button type="button" className="btn btn-quiet" aria-label="Zoom in" disabled={zoom >= 1.3} onClick={() => setZoom((z) => Math.min(1.3, +(z + 0.15).toFixed(2)))}>+</button>
+        {tab === "editor" && <span className="wfb-view">
           <button type="button" className="btn" onClick={() => setFull((f) => !f)}>{full ? "Exit full screen" : "Full screen"}</button>
         </span>}
       </div>
       {tab === "runs" ? (
-        <div className="wfb-runs">
-          {start.id ? <RunsTable runs={runs} showRule={false} /> : <p className="muted">This workflow has not been saved yet.</p>}
-        </div>
+        <div className="wfb-runs">{start.id ? <RunsTable runs={runs} showRule={false} /> : <p className="muted">This workflow has not been saved yet.</p>}</div>
       ) : (
-      <div className={palette ? "wfb-body" : "wfb-body wfb-body-nopal"}>
-        {palette && <nav className="wfb-palette" aria-label="Add to the workflow">
-          <Palette title="Events" hint="When this happens" items={EVENTS.map(([t, text, icon, cfg]) => ["trigger", text, icon, { type: t, ...cfg }])} active={eventLabel} onPick={(_, cfg) => { const { type, ...rest } = cfg; setEvent(type, rest); }} />
-          <Palette title="Actions" hint="Do this… (joins after the selected box)" items={ADD} onPick={(type, cfg) => add(type, cfg)} />
-          <Palette title="Lead condition" hint="If…" items={CHECKS} onPick={(type, cfg) => add(type, cfg)} />
-        </nav>}
-        <div className="wfb-canvas" tabIndex={-1} ref={pane}>
-          <svg ref={svg} width={Math.round(CANVAS_W * zoom)} height={Math.round(CANVAS_H * zoom)} viewBox={`0 0 ${CANVAS_W} ${CANVAS_H}`} className={drag ? "wfb-svg wfb-dragging" : "wfb-svg"}
-            onPointerMove={onMove} onPointerUp={onUp} onPointerLeave={onUp} onPointerDown={(e) => { if (e.target === svg.current || e.target.classList.contains("wfb-grid")) setSelected(""); }}>
-            <defs>
-              <pattern id="wfb-dots" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.2" className="wfb-dot" /></pattern>
-              <marker id="wfb-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" className="wfb-arrowhead" /></marker>
-            </defs>
-            <rect className="wfb-grid" width={CANVAS_W} height={CANVAS_H} fill="url(#wfb-dots)" />
-            {edges.map((e, i) => {
-              const a = byId.get(e.from), b = byId.get(e.to);
-              if (!a || !b) return null;
-              const d = curve(a.x + W, a.y + PORT_Y[e.port], b.x, b.y + H / 2), on = selected === "edge:" + i;
-              return (
-                <g key={i} className={on ? "wfb-edge wfb-edge-on" : "wfb-edge"} onPointerDown={(ev) => { ev.stopPropagation(); setSelected("edge:" + i); }}>
-                  <path d={d} className="wfb-edge-hit" />
-                  <path d={d} className={`wfb-edge-line wfb-edge-${e.port}`} markerEnd="url(#wfb-arrow)" />
-                </g>
-              );
-            })}
-            {drag?.kind === "link" && (() => { const a = byId.get(drag.from); return <path d={curve(a.x + W, a.y + PORT_Y[drag.port], drag.x, drag.y)} className="wfb-edge-line wfb-edge-draft" />; })()}
-            {nodes.map((n) => {
-              const [kind, text] = label(n, meta, nameOf);
-              return (
-                <g key={n.id} transform={`translate(${n.x},${n.y})`} className={`wfb-node ${kindClass(n)}${selected === n.id ? " wfb-node-on" : ""}`}
-                  onPointerDown={(e) => { e.stopPropagation(); const p = point(e); setSelected(n.id); setDrag({ kind: "move", id: n.id, dx: p.x - n.x, dy: p.y - n.y }); }}>
-                  <title>{`${kind}: ${text}`}</title>
-                  <rect className="wfb-box" width={W} height={H} rx="10" />
-                  <rect className="wfb-band" width="8" height={H} rx="4" />
-                  <text className="wfb-kind" x="22" y="28">{kind}</text>
-                  <text className="wfb-text" x="22" y="52">{cut(text, 27)}</text>
-                  {n.type !== "trigger" && <circle className="wfb-port wfb-in" cx="0" cy={H / 2} r="7" />}
-                  {PORTS[n.type].map((port) => (
-                    <g key={port} className="wfb-out" onPointerDown={(e) => { e.stopPropagation(); const p = point(e); setSelected(n.id); setDrag({ kind: "link", from: n.id, port, x: p.x, y: p.y }); }}>
-                      <circle className={`wfb-port wfb-port-${port}`} cx={W} cy={PORT_Y[port]} r="8" />
-                      {port !== "out" && <text className="wfb-port-label" x={W + 12} y={PORT_Y[port] + 4}>{port}</text>}
+        <div className={drawer ? "wfc wfc-drawer" : "wfc"}>
+          <div className="wfc-stage" ref={box} onPointerDown={(e) => down(e, "pan")} onPointerMove={move} onPointerUp={up} onPointerCancel={() => setDrag(null)}>
+            <svg className={drag?.kind === "pan" && drag.moved ? "wfc-svg wfc-panning" : "wfc-svg"} width="100%" height="100%">
+              <defs>
+                <pattern id="wfc-dots" width={26 * view.k} height={26 * view.k} x={view.x} y={view.y} patternUnits="userSpaceOnUse"><circle cx={1} cy={1} r={Math.max(0.7, 1.1 * view.k)} className="wfc-dot" /></pattern>
+                <marker id="wfc-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" className="wfc-arrowhead" /></marker>
+              </defs>
+              <rect width="100%" height="100%" fill="url(#wfc-dots)" />
+              <g transform={`translate(${view.x},${view.y}) scale(${view.k})`}>
+                {edges.map((e, i) => {
+                  const a = byId.get(e.from), b = byId.get(e.to);
+                  if (!a || !b) return null;
+                  const x1 = a.x + S, y1 = a.y + PORT_Y[e.port], x2 = b.x, y2 = b.y + S / 2, [mx, my] = mid(x1, y1, x2, y2), d = curve(x1, y1, x2, y2);
+                  const on = selected === "edge:" + i, hot = ran.has(`${e.from}:${e.port}:${e.to}`);
+                  return (
+                    <g key={`${e.from}:${e.port}:${e.to}`} className={`wfc-edge${on ? " wfc-edge-on" : ""}${hot ? " wfc-edge-ran" : ""}${test && !hot ? " wfc-idle" : ""}`}
+                      onPointerDown={(ev) => { ev.stopPropagation(); setSelected("edge:" + i); }}>
+                      <path d={d} className="wfc-edge-hit" />
+                      <path d={d} className={`wfc-edge-line wfc-edge-${e.port}`} markerEnd="url(#wfc-arrow)" />
+                      <g className="wfc-edge-tools" transform={`translate(${mx},${my})`}>
+                        <g className="wfc-tool" onPointerDown={(ev) => { ev.stopPropagation(); setSelected("edge:" + i); setDrawer({ kind: "insert", edge: i }); }}>
+                          <title>Put a step in between</title>
+                          <rect x={-30} y={-13} width={26} height={26} rx={6} /><path d="M-17,-6 V6 M-23,0 H-11" />
+                        </g>
+                        <g className="wfc-tool wfc-tool-del" onPointerDown={(ev) => { ev.stopPropagation(); remove("edge:" + i); }}>
+                          <title>Remove this line</title>
+                          <rect x={4} y={-13} width={26} height={26} rx={6} /><svg x={8} y={-9} width={18} height={18} viewBox="0 0 24 24"><path d={ICONS.trash} /></svg>
+                        </g>
+                      </g>
                     </g>
-                  ))}
-                </g>
-              );
-            })}
-          </svg>
+                  );
+                })}
+                {drag?.kind === "link" && drag.moved && (() => { const a = byId.get(drag.id); return <path d={curve(a.x + S, a.y + PORT_Y[drag.port], drag.px, drag.py)} className="wfc-edge-line wfc-edge-draft" />; })()}
+                {nodes.map((n) => {
+                  const [kind, text] = label(n, meta, nameOf), step = test?.steps[n.id];
+                  const cls = `wfc-node ${kindClass(n)}${selected === n.id ? " wfc-node-on" : ""}${step ? ` wfc-${step.status}` : test ? " wfc-idle" : ""}`;
+                  return (
+                    <g key={n.id} transform={`translate(${n.x},${n.y})`} className={cls} onPointerDown={(e) => down(e, "move", { id: n.id, dx: world(e).x - n.x, dy: world(e).y - n.y })}>
+                      <title>{`${kind}: ${text}${step ? `\nTest: ${step.text}` : ""}`}</title>
+                      {n.type === "trigger"
+                        ? <path className="wfc-box" d={`M${S / 2},0 H${S - 12} Q${S},0 ${S},12 V${S - 12} Q${S},${S} ${S - 12},${S} H${S / 2} A${S / 2},${S / 2} 0 0 1 ${S / 2},0 Z`} />
+                        : <rect className="wfc-box" width={S} height={S} rx={n.type === "condition" ? 18 : 12} />}
+                      <svg className="wfc-icon" x={S / 2 - 20} y={S / 2 - 20} width={40} height={40} viewBox="0 0 24 24"><path d={ICONS[iconOf(n)]} /></svg>
+                      {n.type === "trigger" && <svg className="wfc-bolt" x={-8} y={S / 2 - 10} width={20} height={20} viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z" /></svg>}
+                      {step && <g className="wfc-badge" transform={`translate(${S - 8},8)`}><circle r={11} /><path d={step.status === "error" ? "M-4,-4 L4,4 M4,-4 L-4,4" : "M-5,0 L-1.5,4 L5,-4"} /></g>}
+                      <text className="wfc-name" x={S / 2} y={S + 20}>{cut(kind, 22)}</text>
+                      <text className="wfc-sub" x={S / 2} y={S + 37}>{cut(step ? step.text : text, 30)}</text>
+                      {n.type !== "trigger" && <circle className="wfc-port wfc-in" cx={0} cy={S / 2} r={6} />}
+                      {PORTS[n.type].map((port) => (
+                        <g key={port}>
+                          {!used.has(`${n.id}:${port}`) && (
+                            <g className="wfc-stub" onPointerDown={(e) => { e.stopPropagation(); setSelected(n.id); setDrawer({ kind: "add", from: n.id, port }); }}>
+                              <title>Add the next step</title>
+                              <line x1={S + 6} y1={PORT_Y[port]} x2={S + 44} y2={PORT_Y[port]} />
+                              <rect x={S + 44} y={PORT_Y[port] - 13} width={26} height={26} rx={6} />
+                              <path d={`M${S + 57},${PORT_Y[port] - 6} V${PORT_Y[port] + 6} M${S + 51},${PORT_Y[port]} H${S + 63}`} />
+                            </g>
+                          )}
+                          <circle className={`wfc-port wfc-out wfc-port-${port}`} cx={S} cy={PORT_Y[port]} r={7} onPointerDown={(e) => down(e, "link", { id: n.id, port })}><title>Drag to another step to join them</title></circle>
+                          {port !== "out" && <text className="wfc-port-label" x={S + 10} y={PORT_Y[port] - 8}>{port}</text>}
+                        </g>
+                      ))}
+                    </g>
+                  );
+                })}
+              </g>
+            </svg>
+            <div className="wfc-tools-tr">
+              <button type="button" className="wfc-btn wfc-btn-plus" aria-label="Add a step" title="Add a step" onPointerDown={(e) => e.stopPropagation()} onClick={() => setDrawer({ kind: "add", from: sel && sel.type ? sel.id : "", port: "" })}><TIcon name="plus" size={22} /></button>
+            </div>
+            <div className="wfc-tools-bl" onPointerDown={(e) => e.stopPropagation()}>
+              <button type="button" className="wfc-btn" aria-label="Fit the workflow on screen" title="Fit to view" onClick={fit}><TIcon name="columns" size={18} /></button>
+              <button type="button" className="wfc-btn" aria-label="Zoom in" title="Zoom in" onClick={() => zoomBy(1.2)}><TIcon name="plus" size={18} /></button>
+              <button type="button" className="wfc-btn" aria-label="Zoom out" title="Zoom out" onClick={() => zoomBy(1 / 1.2)}><svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><path d="M5 12h14" /></svg></button>
+              <button type="button" className="wfc-btn wfc-btn-text" aria-label="Zoom to 100%" title="Actual size" onClick={() => zoomBy(1 / view.k)}>{Math.round(view.k * 100)}%</button>
+            </div>
+            <div className="wfc-tools-bc" onPointerDown={(e) => e.stopPropagation()}>
+              <button type="button" className="btn btn-primary wfc-test" onClick={() => setDrawer({ kind: "test" })}><TIcon name="sparkle" size={16} /> Test workflow</button>
+            </div>
+            <p className="wfc-hint muted">Drag the background to move · Ctrl + scroll to zoom · Click a step to set it up</p>
+          </div>
+          {drawer && (
+            <aside className="wfd" aria-label="Step panel" onPointerDown={(e) => e.stopPropagation()}>
+              {drawer.kind === "settings" && sel && <>
+                <div className="wfd-head">
+                  <span className={`wfd-icon ${kindClass(sel)}`}><TIcon name={iconOf(sel)} size={22} /></span>
+                  <h3>{label(sel, meta, nameOf)[0]}</h3>
+                  <button type="button" className="wfd-close" aria-label="Close" onClick={() => setDrawer(null)}><TIcon name="x" size={18} /></button>
+                </div>
+                {test?.steps[sel.id] && <p className={`wfd-test wfd-test-${test.steps[sel.id].status}`}>Test with {test.lead.name}: {test.steps[sel.id].text}</p>}
+                {test && !test.steps[sel.id] && <p className="wfd-test">Test with {test.lead.name}: not reached</p>}
+                {sel.type === "trigger" && <button type="button" className="btn wfd-change" onClick={() => setDrawer({ kind: "trigger" })}>Change what starts it</button>}
+                <BoxForm n={sel} meta={meta} users={users} people={people} stageOptions={stageOptions} gateway={gateway} set={(patch) => setConfig(sel.id, patch)} replace={(config) => setNodes((all) => all.map((x) => (x.id === sel.id ? { ...x, config } : x)))} onRemove={() => remove(sel.id)} />
+              </>}
+              {drawer.kind === "settings" && !sel && <div className="wfd-inner"><p className="muted">Click a step to set it up.</p></div>}
+              {["add", "insert", "trigger"].includes(drawer.kind) && <Picker mode={drawer} onPick={pick} onClose={() => setDrawer(null)} />}
+              {drawer.kind === "test" && <TestPanel leads={crm?.leads || []} result={test} busy={testing} onRun={runTest} onClose={() => setDrawer(null)} onClear={() => setTest(null)} />}
+            </aside>
+          )}
         </div>
-        <aside className="wfb-side" aria-label="Selected box">
-          {!sel && !selected.startsWith("edge:") && <><h3>How to draw</h3><ul className="wfb-help">
-            <li>Pick an event on the left to choose when the workflow starts.</li>
-            <li>Click an action or condition on the left to add it after the selected box.</li>
-            <li>Click a box to set it up here. Drag a box to move it.</li>
-            <li>Drag from the dot on a box's right edge onto another box to join them. An If box has a <b>yes</b> and a <b>no</b> dot.</li>
-            <li>Click a line, then Delete, to remove it.</li>
-            <li>Save draft keeps it switched off. Publish makes it run.</li>
-          </ul></>}
-          {selected.startsWith("edge:") && <><h3>Line</h3><p className="muted">Joins two boxes.</p><button className="btn btn-quiet" onClick={remove}>Remove line</button></>}
-          {sel && <BoxForm n={sel} meta={meta} users={users} people={people} stageOptions={stageOptions} gateway={gateway} set={(patch) => setConfig(sel.id, patch)} replace={(config) => setNodes((all) => all.map((x) => (x.id === sel.id ? { ...x, config } : x)))} onRemove={remove} />}
-        </aside>
-      </div>
       )}
     </div>
   );

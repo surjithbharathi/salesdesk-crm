@@ -65,9 +65,9 @@ const PORTS = { trigger: ["out"], condition: ["yes", "no"], wait: ["out"], actio
 
 const str = (v, max) => (typeof v === "string" ? v.trim().slice(0, max) : "");
 const stageOf = (l) => l.deal || l.stage || "New";
-const coord = (v) => Math.max(0, Math.min(4000, Math.round(Number(v) || 0)));
+const coord = (v) => Math.max(-20000, Math.min(20000, Math.round(Number(v) || 0))); // the canvas has no edges
 
-export function createWorkflows({ db, get, put, stamp, tx, log, users, sendWhatsApp = async () => fail("WhatsApp gateway is not connected"), post = postJson, now = () => Date.now(), report = () => {} }) {
+export function createWorkflows({ db, get, put, stamp, tx, log, users, sendWhatsApp = async () => fail("WhatsApp gateway is not connected"), post = postJson, gatewayOn = () => true, now = () => Date.now(), report = () => {} }) {
   const rules = () => db.prepare("SELECT body FROM records WHERE kind='workflows' ORDER BY rowid").all().map((r) => JSON.parse(r.body));
   const userIds = () => new Set(users().map((u) => u.id));
   const userName = (id) => users().find((u) => u.id === id)?.name || "";
@@ -503,6 +503,63 @@ export function createWorkflows({ db, get, put, stamp, tx, log, users, sendWhats
     return { events: fired };
   }
 
+  // "Test workflow": walks the drawn flow (saved or not) for one lead and says what each box would do, without doing it.
+  // Waits are passed straight through; what the next boxes see is the lead as it is now.
+  function dryRun(input, leadId) {
+    const flow = cleanFlow(input?.flow);
+    const lead = get("leads", String(leadId || ""));
+    if (!lead || lead.archived || lead.mergedInto) fail("Choose a lead to test with");
+    const rule = { id: input.id || "test", name: str(input.name, 120) || "Test", trigger: flow.nodes.find((n) => n.type === "trigger").config, flow };
+    const steps = {}, lines = [];
+    const queue = [flow.nodes.find((n) => n.type === "trigger").id];
+    let count = 0, turn = (get("workflows", rule.id)?.rr) || 0;
+    while (queue.length && count++ < MAX_STEPS) {
+      const id = queue.shift(), n = flow.nodes.find((x) => x.id === id);
+      if (!n || steps[id]) continue;
+      let ports = ["out"], status = "ok", text = "";
+      if (n.type === "trigger") text = `Starts for ${lead.name || "this lead"} (${triggerWhy(n.config)})`;
+      else if (n.type === "condition") { const yes = matches(n.config, lead); ports = [yes ? "yes" : "no"]; text = yes ? "Yes: the lead passes" : "No: the lead does not pass"; }
+      else if (n.type === "wait") text = `Would wait ${n.config.hours >= 24 && n.config.hours % 24 === 0 ? n.config.hours / 24 + " day(s)" : n.config.hours + " hour(s)"}, then carry on`;
+      else {
+        const a = n.config;
+        if (a.type === "assign") {
+          let to = a.to;
+          if (to === "round_robin") { const pool = a.users.filter((u) => userIds().has(u)); to = pool.length ? pool[turn++ % pool.length] : ""; }
+          text = !to ? "Nobody to assign to" : lead.owner === to ? `Already with ${userName(to)}: nothing to change` : `Would assign to ${userName(to)}`;
+          if (!to) status = "error";
+        } else if (a.type === "stage") text = lead.deal === a.stage ? `Already at ${a.stage}: nothing to change` : `Would move to ${a.stage}`;
+        else if (a.type === "field") {
+          const v = fill(a.value, lead).trim();
+          text = `Would set ${EDITABLE[a.field]} to ${v || "empty"}`;
+          if (a.field === "email" && v && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) { status = "error"; text = `"${v}" is not an email`; }
+        } else if (a.type === "task") text = `Would add the task "${fill(a.title, lead)}" for ${a.owner === "lead_owner" ? userName(lead.owner) || "nobody (no owner)" : userName(a.owner)}`;
+        else if (a.type === "whatsapp") {
+          if (!gatewayOn()) { status = "error"; text = "Would not send: the WhatsApp gateway is not turned on"; }
+          else if (!lead.phone) { status = "error"; text = "Would not send: the lead has no phone number"; }
+          else text = a.template ? `Would send the template ${a.template} to ${lead.phone}` : `Would send to ${lead.phone}: ${fill(a.text, lead)}`;
+        } else if (a.type === "notify") {
+          const to = a.to === "lead_owner" ? lead.owner : a.to;
+          if (!to || !userIds().has(to)) { status = "error"; text = "Nobody to notify: the lead has no owner"; }
+          else text = `Would tell ${userName(to)}: ${fill(a.text, lead)}`;
+        } else if (a.type === "cancel_tasks") {
+          const open = db.prepare("SELECT body FROM records WHERE kind='tasks' AND json_extract(body,'$.leadId')=? AND COALESCE(json_extract(body,'$.status'),'Open')<>'Done'").all(lead.id).map((r) => JSON.parse(r.body)).filter((t) => a.which === "all" || t.origin === "Workflow");
+          text = open.length ? `Would cancel ${open.length} open task(s)` : "No open tasks to cancel";
+        } else if (a.type === "webhook") text = `Would send the lead to ${new URL(a.url).host} (not sent in a test)`;
+        else if (a.type === "note") text = `Would add the note: ${fill(a.text, lead)}`;
+      }
+      steps[id] = { status, text };
+      for (const p of ports) for (const e of flow.edges.filter((x) => x.from === id && x.port === p)) { lines.push(`${e.from}:${e.port}:${e.to}`); queue.push(e.to); }
+    }
+    return { lead: { id: lead.id, name: lead.name || "" }, steps, lines };
+  }
+  function triggerWhy(t) {
+    if (t.type === "stage_changed") return `when it moves${t.from ? " from " + t.from : ""} to ${t.to || "any stage"}`;
+    if (t.type === "field_changed") return `when ${fieldLabel(t.field)} changes${t.to ? " to " + t.to : ""}`;
+    if (t.type === "owner_changed") return t.to ? `when assigned to ${userName(t.to)}` : "when assigned";
+    if (t.type === "rating_changed") return t.to ? `when the rating becomes ${t.to}` : "when the rating changes";
+    if (t.type === "no_activity") return `after ${t.days} quiet days`;
+    return TRIGGERS[t.type].toLowerCase();
+  }
   // TeleCRM's own fields (State, Requirement…) as found on the newest synced leads, most used first
   function customFields() {
     const count = new Map();
@@ -513,5 +570,5 @@ export function createWorkflows({ db, get, put, stamp, tx, log, users, sendWhats
     return Object.fromEntries([...count].sort((a, b) => b[1] - a[1]).slice(0, 60).map(([k]) => ["tc:" + k, k.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase())]));
   }
   const meta = () => ({ triggers: TRIGGERS, fields: FIELDS, custom: customFields(), ops: OPS, actions: ACTIONS, editable: EDITABLE, stages: STAGES, pipeline: PIPELINE.map((p) => p.name) });
-  return { list, create, update, remove, tick, meta };
+  return { list, create, update, remove, tick, meta, dryRun };
 }

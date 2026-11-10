@@ -196,3 +196,96 @@ td.right .btn + .btn, td.right .quick-actions + .btn { margin-left: 6px; }
 .wfb-full { position: fixed; inset: 0; z-index: 60; background: var(--bg); padding: 14px 16px; overflow: auto; align-content: start; }
 .wfb-full .wfb-canvas, .wfb-full .wfb-side, .wfb-full .wfb-palette { max-height: calc(100vh - 150px); }
 .wfb-full .wfb-body { min-height: calc(100vh - 150px); }
+
+/* Workflow canvas, n8n style: square steps on an endless dotted canvas, a drawer on the right */
+.wfc { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--sunken); height: 72vh; min-height: 460px; }
+.wfc-drawer { grid-template-columns: minmax(0, 1fr) 340px; }
+.wfb-full .wfc { height: calc(100vh - 130px); }
+.wfc-stage { position: relative; overflow: hidden; touch-action: none; cursor: grab; min-width: 0; user-select: none; }
+.wfc-panning { cursor: grabbing; }
+.wfc-svg { display: block; }
+.wfc-dot { fill: var(--line-strong); opacity: .55; }
+.wfc-node { cursor: pointer; }
+.wfc-box { fill: var(--surface); stroke: var(--line-strong); stroke-width: 2; transition: stroke .12s; }
+.wfc-node:hover .wfc-box { stroke: var(--wf-c); }
+.wfc-node-on .wfc-box { stroke: var(--wf-c); stroke-width: 3.5; }
+.wfc-icon path { fill: none; stroke: var(--wf-c); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.wfc-bolt path { fill: var(--oil); stroke: var(--surface); stroke-width: 1.5; stroke-linejoin: round; }
+.wfc-name { font-size: 14px; font-weight: 700; fill: var(--ink); text-anchor: middle; }
+.wfc-sub { font-size: 12px; fill: var(--ink-2); text-anchor: middle; }
+.wfc-port { fill: var(--line-strong); stroke: var(--surface); stroke-width: 2; }
+.wfc-out { cursor: crosshair; }
+.wfc-out:hover { fill: var(--wf-c); }
+.wfc-port-yes { fill: var(--leaf); }
+.wfc-port-no { fill: var(--kumkum); }
+.wfc-port-label { font-size: 11px; font-weight: 700; fill: var(--ink-2); }
+.wfc-stub { cursor: pointer; }
+.wfc-stub line { stroke: var(--line-strong); stroke-width: 2; }
+.wfc-stub rect { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1.5; }
+.wfc-stub path { stroke: var(--ink-2); stroke-width: 2; stroke-linecap: round; }
+.wfc-stub:hover rect { stroke: var(--oil); fill: var(--bg); }
+.wfc-stub:hover path { stroke: var(--oil); }
+.wfc-edge { cursor: pointer; }
+.wfc-edge-hit { fill: none; stroke: transparent; stroke-width: 18; }
+.wfc-edge-line { fill: none; stroke: var(--line-strong); stroke-width: 2.2; }
+.wfc-edge-yes { stroke: var(--leaf); }
+.wfc-edge-no { stroke: var(--kumkum); }
+.wfc-edge-on .wfc-edge-line { stroke: var(--oil); stroke-width: 3.2; }
+.wfc-edge-draft { stroke: var(--oil); stroke-dasharray: 6 5; pointer-events: none; }
+.wfc-arrowhead { fill: var(--line-strong); }
+.wfc-edge-tools { opacity: 0; transition: opacity .12s; }
+.wfc-edge:hover .wfc-edge-tools, .wfc-edge-on .wfc-edge-tools { opacity: 1; }
+.wfc-tool rect { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1.5; }
+.wfc-tool path { fill: none; stroke: var(--ink-2); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.wfc-tool:hover rect { stroke: var(--oil); }
+.wfc-tool-del:hover rect { stroke: var(--kumkum); }
+.wfc-tool-del:hover path { stroke: var(--kumkum); }
+.wfc-edge-ran .wfc-edge-line { stroke: var(--leaf); stroke-width: 3; }
+.wfc-idle { opacity: .35; }
+.wfc-ok .wfc-box { stroke: var(--leaf); stroke-width: 3; }
+.wfc-error .wfc-box { stroke: var(--kumkum); stroke-width: 3; }
+.wfc-badge circle { stroke: var(--surface); stroke-width: 2; }
+.wfc-ok .wfc-badge circle { fill: var(--leaf); }
+.wfc-error .wfc-badge circle { fill: var(--kumkum); }
+.wfc-badge path { fill: none; stroke: #fff; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.wfc-error .wfc-sub { fill: var(--kumkum); }
+.wfc-tools-tr { position: absolute; top: 12px; right: 12px; }
+.wfc-tools-bl { position: absolute; left: 12px; bottom: 12px; display: flex; gap: 6px; }
+.wfc-tools-bc { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); }
+.wfc-btn { display: grid; place-items: center; min-width: 36px; height: 36px; padding: 0 8px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); color: var(--ink); cursor: pointer; font: inherit; font-size: 13px; }
+.wfc-btn:hover, .wfc-btn:focus-visible { border-color: var(--oil); color: var(--oil); outline: none; }
+.wfc-btn-plus { width: 44px; height: 44px; }
+.wfc-btn-text { min-width: 52px; }
+.wfc-test { display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 10px rgba(0, 0, 0, .18); }
+.wfc-hint { position: absolute; top: 14px; left: 14px; margin: 0; font-size: 12px; pointer-events: none; }
+.wfd { border-left: 1px solid var(--line); background: var(--surface); overflow: auto; padding: 14px; min-width: 0; }
+.wfd-inner { display: grid; gap: 10px; }
+.wfd-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.wfd-head h3 { margin: 0; font-size: 16px; flex: 1; }
+.wfd-close { display: grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 6px; background: none; color: var(--ink-2); cursor: pointer; }
+.wfd-close:hover, .wfd-close:focus-visible { background: var(--sunken); color: var(--ink); outline: none; }
+.wfd-search { width: 100%; }
+.wfd-group { display: grid; gap: 2px; }
+.wfd-group-title { font-size: 12px; font-weight: 700; color: var(--ink-2); margin: 8px 0 4px; }
+.wfd-item { display: flex; gap: 12px; align-items: center; padding: 10px; border: 1px solid transparent; border-radius: 8px; background: none; text-align: left; font: inherit; color: var(--ink); cursor: pointer; }
+.wfd-item:hover, .wfd-item:focus-visible { background: var(--sunken); border-color: var(--line); outline: none; }
+.wfd-icon { display: grid; place-items: center; flex: 0 0 40px; width: 40px; height: 40px; border: 1.5px solid var(--line-strong); border-radius: 9px; color: var(--wf-c, var(--ink-2)); background: var(--bg); }
+.wfd-text { display: grid; gap: 2px; min-width: 0; }
+.wfd-text b { font-size: 14px; }
+.wfd-text small { font-size: 12px; color: var(--ink-2); line-height: 1.35; }
+.wfd-lead { display: grid; gap: 2px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); text-align: left; font: inherit; color: var(--ink); cursor: pointer; }
+.wfd-lead:hover, .wfd-lead:focus-visible { border-color: var(--oil); outline: none; }
+.wfd-lead small { color: var(--ink-2); font-size: 12px; }
+.wfd-result { display: grid; gap: 8px; padding-top: 6px; border-top: 1px solid var(--line); }
+.wfd-result p { margin: 0; font-size: 13px; }
+.wfd-test { margin: 0 0 12px; padding: 8px 10px; border-radius: 8px; background: var(--sunken); font-size: 13px; }
+.wfd-test-ok { border-left: 4px solid var(--leaf); }
+.wfd-test-error { border-left: 4px solid var(--kumkum); color: var(--kumkum); }
+.wfd-change { margin-bottom: 12px; }
+@media (max-width: 900px) {
+  .wfc-drawer { grid-template-columns: minmax(0, 1fr); }
+  .wfd { position: absolute; inset: auto 0 0 0; max-height: 70%; border-left: 0; border-top: 1px solid var(--line); box-shadow: 0 -6px 24px rgba(0, 0, 0, .2); z-index: 2; }
+  .wfc-hint { display: none; }
+}
+.wfc-svg text { stroke: none; }
+.wfc-svg { stroke: none; }
