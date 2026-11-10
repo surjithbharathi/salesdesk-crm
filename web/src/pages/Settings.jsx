@@ -15,6 +15,7 @@ import Assign from "./settings/Assign.jsx";
 import Workspaces from "./settings/Workspaces.jsx";
 import { Import, Export, Archived, Merge } from "./settings/LeadData.jsx";
 import Blocked from "./settings/Blocked.jsx";
+import Workflows from "./settings/Workflows.jsx";
 
 const THEMES = [["", "Automatic", "Follows your phone or computer"], ["light", "Light", "Bright pages"], ["dark", "Dark", "Easy on the eyes at night"]];
 function chooseTheme(value) {
@@ -68,6 +69,7 @@ export default function Settings({ params, me }) {
     ["telecrm", "TeleCRM copy", can("integrations.manage"), <TelecrmMirror />, "Connections", "Keep a read-only copy of TeleCRM here: team, leads, timelines and follow-ups."],
     ["callai", "Call AI", admin, <CallAI />, "AI", "Turn call recordings into summaries and next steps."],
     ["mcp", "AI connections", admin, <Mcp />, "AI", "Let AI assistants read and work with this CRM through keys you control."],
+    ["workflows", "Workflows", access.crmOwner || ["owner", "admin"].includes(access.role), <Workflows users={me.users} />, "Leads and data", "Rules that act on leads by themselves: assign, follow up, message."],
     ["assign", "Assign leads", can("leads.write") && me.lead, <Assign access={full} />, "Leads and data", "Hand leads to people in bulk."],
     ["import", "Add leads from a file", can("leads.write") && can("data.export"), <Import access={full} />, "Leads and data", "Bring in leads from a spreadsheet."],
     ["merge", "Merge duplicates", can("leads.write") && me.lead, <Merge />, "Leads and data", "Combine leads that share a mobile number."],

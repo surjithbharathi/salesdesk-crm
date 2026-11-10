@@ -27,6 +27,7 @@ import { createUserAuth } from "./user-auth.mjs";
 import { scopedState } from "./user-scope.mjs";
 import { createClickToCall } from "./click-to-call.mjs";
 import { bridgeConfig, createAutomationBridge } from "./automation-bridge.mjs";
+import { createWorkflows } from "./workflows.mjs";
 
 const port = Number(process.env.PORT || 3100);
 const publicOrigin = process.env.PUBLIC_ORIGIN || "";
@@ -432,6 +433,8 @@ const rawPut = (kind, v) => db.prepare("INSERT INTO records VALUES(?,?,?) ON CON
 const telecrm = createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecording: (callId, bytes) => mobile.importRecording(callId, bytes), shareTwins: () => mobile.shareTwins(), keyPath: (process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname) + ".telecrm-key", log: (m) => console.error(m) });
 const waGateway = createWaGateway({ db, all, get, put, stamp, tx, log, systemUser: process.env.CRM_OWNER_USER_ID || "", keyPath: (process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname) + ".wagw-key" });
 const blocked = createBlockedNumbers(db);
+// Workflows: admins' "when this happens, do that" rules, checked every 30 seconds; WhatsApp goes out through the gateway
+const workflows = createWorkflows({ db, get, put, stamp, tx, log, users: () => all("users").filter((u) => u.active !== false), sendWhatsApp: (leadId, message) => waGateway.send(leadId, message, ""), report: (m) => console.error(m) });
 // Removes a lead and everything recorded against it (calls and their recordings, notes, messages, chats, follow-ups, deals).
 // With block, its number is blocked first so no sync brings it back.
 function deleteLead(id, { block = false, by = "" } = {}) {
@@ -1271,6 +1274,17 @@ const server = http.createServer(async (req, res) => {
       if (req.method === "DELETE" && one) return send(200, { removed: blocked.remove(one) });
       bad("Method not allowed", 405);
     }
+    // Workflows (admins only)
+    if (url.pathname === "/api/workflows" || url.pathname.startsWith("/api/workflows/")) {
+      if (identity && !["owner", "admin"].includes(workspaceAccess.profile(identity.user.id).role)) bad("Only an admin can manage workflows", 403);
+      const one = decodeURIComponent(url.pathname.slice("/api/workflows/".length) || "");
+      if (req.method === "GET" && url.pathname === "/api/workflows") return send(200, { ...workflows.list(), meta: workflows.meta(), gateway: waGateway.settings().enabled });
+      sameOrigin();
+      if (req.method === "POST" && url.pathname === "/api/workflows") return send(200, workflows.create(await body(req), identity?.user.id || ""));
+      if (req.method === "PUT" && one) return send(200, workflows.update(one, await body(req)));
+      if (req.method === "DELETE" && one) return send(200, workflows.remove(one));
+      bad("Method not allowed", 405);
+    }
     if (url.pathname === "/api/deleted-leads" && req.method === "GET") {
       if (identity && !["owner", "admin"].includes(workspaceAccess.profile(identity.user.id).role)) bad("Only an admin can see deleted leads", 403);
       return send(200, blocked.deleted());
@@ -1449,6 +1463,8 @@ function scheduleTelecrm() {
   }
 }
 scheduleTelecrm();
+workflows.tick();
+setInterval(() => workflows.tick(), 30000).unref();
 server.listen(port, bindHost, () =>
   console.log(`Salesdesk CRM: ${publicOrigin || `http://localhost:${port}`}`),
 );

@@ -1,0 +1,277 @@
+// Workflows: "when this happens to a lead, and these conditions hold, do these things."
+// Admins write the rules in Settings. The engine looks at the database every 30 seconds instead of hooking every place that
+// writes a lead (the screens, the phone app, TeleCRM, IndiaMART, Meta, WhatsApp), so a lead from anywhere is covered.
+// It remembers how far it has read (rowid cursors) and each lead's last stage, so a restart neither misses nor repeats events.
+// The first run only takes that snapshot: rules never fire for history that happened before the engine was switched on.
+import { PIPELINE } from "./pipeline.mjs";
+
+const fail = (message, status = 400) => { throw Object.assign(new Error(message), { status }); };
+export const TRIGGERS = {
+  lead_created: "A new lead comes in",
+  stage_changed: "A lead's stage changes",
+  call_missed: "A call from a lead is missed",
+  no_activity: "A lead has no activity for some days",
+};
+export const FIELDS = { source: "Source", city: "City", owner: "Owner", stage: "Stage", company: "Company", name: "Name" };
+export const OPS = { is: "is", is_not: "is not", contains: "contains", is_empty: "is empty", not_empty: "is not empty" };
+export const ACTIONS = { assign: "Assign the lead", stage: "Change the stage", task: "Create a follow-up task", whatsapp: "Send a WhatsApp message", note: "Add a note" };
+const STAGES = ["New", "Prospecting", "Opportunity", "Quotation given", "Closed", ...PIPELINE.map((p) => p.name)];
+const FRESH_MS = 2 * 86400000; // events older than this (history arriving late, e.g. a TeleCRM full read) never fire
+const QUIET_WINDOW_DAYS = 3; // "no activity for N days" fires for leads that went quiet N to N+3 days ago, not for years-old leads
+const PER_LEAD_HOUR = 3; // a rule acts on one lead at most this often per hour, so two rules cannot ping-pong a stage forever
+const MAX_EVENTS = 300; // per tick; a flood beyond this (a bulk import) is skipped and reported, not sent as hundreds of messages
+
+const str = (v, max) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+const stageOf = (l) => l.deal || l.stage || "New";
+
+export function createWorkflows({ db, get, put, stamp, tx, log, users, sendWhatsApp = async () => fail("WhatsApp gateway is not connected"), now = () => Date.now(), report = () => {} }) {
+  const rules = () => db.prepare("SELECT body FROM records WHERE kind='workflows' ORDER BY rowid").all().map((r) => JSON.parse(r.body));
+  const userIds = () => new Set(users().map((u) => u.id));
+  const userName = (id) => users().find((u) => u.id === id)?.name || "";
+
+  function clean(input, old = {}) {
+    const ids = userIds();
+    const name = str(input.name, 120);
+    if (!name) fail("Give the workflow a name");
+    const t = input.trigger || {};
+    if (!TRIGGERS[t.type]) fail("Choose when the workflow runs");
+    const trigger = { type: t.type };
+    if (t.type === "stage_changed") {
+      trigger.to = str(t.to, 80);
+      trigger.from = str(t.from, 80);
+      for (const s of [trigger.to, trigger.from]) if (s && !STAGES.includes(s)) fail("Unknown stage " + s);
+    }
+    if (t.type === "no_activity") {
+      trigger.days = Number(t.days);
+      if (!Number.isInteger(trigger.days) || trigger.days < 1 || trigger.days > 365) fail("Days without activity must be 1 to 365");
+    }
+    const conditions = (Array.isArray(input.conditions) ? input.conditions : []).slice(0, 10).map((c) => {
+      if (!FIELDS[c.field] || !OPS[c.op]) fail("Each condition needs a field and a test");
+      const value = ["is_empty", "not_empty"].includes(c.op) ? "" : str(c.value, 200);
+      if (!["is_empty", "not_empty"].includes(c.op) && !value) fail(`Fill in the value for "${FIELDS[c.field]}"`);
+      if (c.field === "owner" && value && !ids.has(value)) fail("Unknown person in a condition");
+      return { field: c.field, op: c.op, value };
+    });
+    const list = Array.isArray(input.actions) ? input.actions.slice(0, 10) : [];
+    if (!list.length) fail("Add at least one action");
+    const actions = list.map((a) => {
+      if (a.type === "assign") {
+        const to = a.to === "round_robin" ? "round_robin" : str(a.to, 64);
+        if (to === "round_robin") {
+          const pool = [...new Set((Array.isArray(a.users) ? a.users : []).filter((u) => ids.has(u)))].slice(0, 50);
+          if (pool.length < 2) fail("Pick at least two people to take turns");
+          return { type: "assign", to, users: pool };
+        }
+        if (!ids.has(to)) fail("Choose who gets the lead");
+        return { type: "assign", to };
+      }
+      if (a.type === "stage") {
+        const stage = str(a.stage, 80);
+        if (!PIPELINE.some((p) => p.name === stage)) fail("Choose the stage to move the lead to");
+        return { type: "stage", stage };
+      }
+      if (a.type === "task") {
+        const title = str(a.title, 300), hours = Number(a.hours);
+        if (!title) fail("Write what the follow-up task is");
+        if (!Number.isFinite(hours) || hours < 0 || hours > 24 * 90) fail("A task is due 0 to 2160 hours later");
+        const owner = a.owner === "lead_owner" || !a.owner ? "lead_owner" : str(a.owner, 64);
+        if (owner !== "lead_owner" && !ids.has(owner)) fail("Choose who does the task");
+        return { type: "task", title, hours, owner };
+      }
+      if (a.type === "whatsapp") {
+        const text = str(a.text, 1000), template = str(a.template, 80);
+        if (!text && !template) fail("Write the WhatsApp message or name an approved template");
+        if (template && !/^[a-z0-9_]{1,80}$/.test(template)) fail("A template name has only small letters, digits and _");
+        return template ? { type: "whatsapp", template, language: str(a.language, 10) || "en" } : { type: "whatsapp", text };
+      }
+      if (a.type === "note") {
+        const text = str(a.text, 2000);
+        if (!text) fail("Write the note");
+        return { type: "note", text };
+      }
+      fail("Unknown action");
+    });
+    return { ...old, name, enabled: input.enabled !== false, trigger, conditions, actions };
+  }
+
+  function list() {
+    const runs = db.prepare("SELECT body FROM records WHERE kind='workflowRuns' ORDER BY rowid DESC LIMIT 60").all().map((r) => JSON.parse(r.body));
+    return { rules: rules(), runs };
+  }
+  function create(input, by) {
+    const rule = stamp({ ...clean(input), createdBy: by || "", runs: 0, rr: 0 });
+    put("workflows", rule);
+    return rule;
+  }
+  function update(id, input) {
+    const old = get("workflows", id);
+    if (!old) fail("Workflow not found", 404);
+    const rule = { ...clean(input, old), updatedAt: new Date(now()).toISOString() };
+    put("workflows", rule);
+    return rule;
+  }
+  function remove(id) {
+    if (!get("workflows", id)) fail("Workflow not found", 404);
+    db.prepare("DELETE FROM records WHERE kind='workflows' AND id=?").run(id);
+    return { removed: id };
+  }
+
+  // ---- conditions and actions ----
+  function matches(rule, lead) {
+    return rule.conditions.every((c) => {
+      const actual = String(c.field === "stage" ? stageOf(lead) : lead[c.field] ?? "").trim(), a = actual.toLowerCase(), v = c.value.toLowerCase();
+      if (c.op === "is_empty") return !actual;
+      if (c.op === "not_empty") return Boolean(actual);
+      if (c.op === "contains") return a.includes(v);
+      // the basic stage also matches its pipeline steps' basic stage, so "Stage is Closed" covers Won and Lost
+      const same = a === v || (c.field === "stage" && String(lead.stage || "").toLowerCase() === v);
+      return c.op === "is" ? same : !same;
+    });
+  }
+  const fill = (text, lead) => text.replace(/\{(name|company|city|source|owner)\}/g, (_, k) => (k === "owner" ? userName(lead.owner) : lead[k]) || "");
+
+  // returns the WhatsApp sends to do after the database work is saved
+  function act(rule, lead, why) {
+    const later = [], done = [];
+    let current = { ...lead };
+    for (const a of rule.actions) {
+      if (a.type === "assign") {
+        let to = a.to;
+        if (to === "round_robin") {
+          const pool = a.users.filter((u) => userIds().has(u));
+          if (!pool.length) continue;
+          const fresh = get("workflows", rule.id) || rule;
+          to = pool[(fresh.rr || 0) % pool.length];
+          put("workflows", { ...fresh, rr: (fresh.rr || 0) + 1 });
+        }
+        if (current.owner === to) continue;
+        current = { ...current, owner: to, updatedAt: new Date(now()).toISOString() };
+        put("leads", current);
+        done.push("assigned to " + (userName(to) || "someone"));
+      } else if (a.type === "stage") {
+        const step = PIPELINE.find((p) => p.name === a.stage);
+        if (!step || current.deal === step.name) continue;
+        current = { ...current, deal: step.name, stage: step.stage, disposition: step.disposition, updatedAt: new Date(now()).toISOString() };
+        put("leads", current);
+        done.push("moved to " + step.name);
+      } else if (a.type === "task") {
+        put("tasks", stamp({ leadId: lead.id, title: fill(a.title, current), owner: a.owner === "lead_owner" ? current.owner || "" : a.owner, due: new Date(now() + a.hours * 3600000).toISOString(), status: "Open", origin: "Workflow", workflowId: rule.id }));
+        done.push("task added");
+      } else if (a.type === "note") {
+        log(lead.id, "Note", fill(a.text, current), { userId: "", workflowId: rule.id });
+        done.push("note added");
+      } else if (a.type === "whatsapp") {
+        later.push(a.template ? { template: a.template, language: a.language } : { text: fill(a.text, current) });
+      }
+    }
+    if (done.length) log(lead.id, "System", `Workflow "${rule.name}" (${why}): ${done.join(", ")}`, { workflowId: rule.id });
+    return { later, done };
+  }
+
+  function recentRuns(ruleId, leadId) {
+    const since = new Date(now() - 3600000).toISOString();
+    return Number(db.prepare("SELECT COUNT(*) n FROM records WHERE kind='workflowRuns' AND json_extract(body,'$.ruleId')=? AND json_extract(body,'$.leadId')=? AND json_extract(body,'$.at')>=?").get(ruleId, leadId, since).n) || 0;
+  }
+
+  // one event against every rule that listens for it; `key` makes each (rule, event) run once even after a restart
+  async function fire(type, lead, key, why, extra = {}) {
+    for (const rule of rules()) {
+      if (!rule.enabled || rule.trigger.type !== type) continue;
+      if (type === "stage_changed" && ((rule.trigger.to && rule.trigger.to !== extra.to && rule.trigger.to !== extra.toStage) || (rule.trigger.from && rule.trigger.from !== extra.from && rule.trigger.from !== extra.fromStage))) continue;
+      if (type === "no_activity" && rule.trigger.days !== extra.days) continue;
+      const runId = rule.id + ":" + key;
+      if (get("workflowRuns", runId)) continue;
+      const fresh = get("leads", lead.id);
+      if (!fresh || fresh.archived || fresh.mergedInto || !matches(rule, fresh)) continue;
+      if (recentRuns(rule.id, lead.id) >= PER_LEAD_HOUR) continue;
+      let result;
+      try {
+        result = tx(() => {
+          const r = act(rule, fresh, why);
+          const latest = get("workflows", rule.id) || rule;
+          put("workflows", { ...latest, runs: (latest.runs || 0) + 1, lastRunAt: new Date(now()).toISOString() });
+          put("workflowRuns", { id: runId, ruleId: rule.id, rule: rule.name, leadId: lead.id, lead: fresh.name || "", why, at: new Date(now()).toISOString(), done: r.done, ok: true });
+          return r;
+        });
+      } catch (e) {
+        put("workflowRuns", { id: runId, ruleId: rule.id, rule: rule.name, leadId: lead.id, lead: fresh.name || "", why, at: new Date(now()).toISOString(), done: [], ok: false, note: String(e.message).slice(0, 200) });
+        continue;
+      }
+      for (const message of result.later) {
+        let note = "WhatsApp sent";
+        try { await sendWhatsApp(lead.id, message); } catch (e) { note = "WhatsApp not sent: " + String(e.message).slice(0, 160); log(lead.id, "System", `Workflow "${rule.name}": ${note}`, { workflowId: rule.id }); }
+        const run = get("workflowRuns", runId);
+        if (run) put("workflowRuns", { ...run, done: [...run.done, note], ok: run.ok && note === "WhatsApp sent" });
+      }
+    }
+  }
+
+  // ---- reading what changed ----
+  const STATE = "engine";
+  const maxRow = (kind) => Number(db.prepare("SELECT COALESCE(MAX(rowid),0) n FROM records WHERE kind=?").get(kind).n) || 0;
+  let running = null;
+  function tick() {
+    if (!running) running = tickNow().catch((e) => report("Workflows: " + e.message)).finally(() => { running = null; });
+    return running;
+  }
+  async function tickNow() {
+    const leads = db.prepare("SELECT rowid r, body FROM records WHERE kind='leads' ORDER BY rowid").all().map((x) => ({ r: x.r, ...JSON.parse(x.body) }));
+    const state = get("workflowState", STATE);
+    if (!state) {
+      put("workflowState", { id: STATE, leadRow: maxRow("leads"), activityRow: maxRow("activities"), stages: Object.fromEntries(leads.map((l) => [l.id, stageOf(l)])), quietAt: 0 });
+      return { events: 0 };
+    }
+    const active = rules().filter((r) => r.enabled);
+    const events = [], t = now(), recent = (iso) => t - Date.parse(iso || 0) <= FRESH_MS;
+    const stages = { ...state.stages };
+    let leadRow = state.leadRow;
+    for (const l of leads) {
+      const stage = stageOf(l), before = stages[l.id];
+      if (l.r > state.leadRow) {
+        leadRow = Math.max(leadRow, l.r);
+        if (before === undefined && recent(l.createdAt) && !l.archived && !l.mergedInto) events.push(["lead_created", l, "lead:" + l.id, "new lead"]);
+      } else if (before !== undefined && before !== stage && !l.archived) {
+        const old = PIPELINE.find((p) => p.name === before)?.stage || before;
+        events.push(["stage_changed", l, `stage:${l.id}:${before}>${stage}:${l.updatedAt || ""}`, `${before} → ${stage}`, { from: before, fromStage: old, to: stage, toStage: l.stage }]);
+      }
+      stages[l.id] = stage;
+    }
+    const activities = db.prepare("SELECT rowid r, body FROM records WHERE kind='activities' AND rowid>? ORDER BY rowid LIMIT 5000").all(state.activityRow);
+    let activityRow = state.activityRow;
+    const byId = new Map(leads.map((l) => [l.id, l]));
+    for (const row of activities) {
+      activityRow = row.r;
+      const a = JSON.parse(row.body);
+      if (a.type === "Call" && ["Missed", "Rejected"].includes(a.direction) && recent(a.occurredAt || a.createdAt) && byId.has(a.leadId))
+        events.push(["call_missed", byId.get(a.leadId), "missed:" + a.id, "missed call"]);
+    }
+    // "no activity for N days": a heavier read, so every 15 minutes and only when such a rule exists
+    const quietRules = active.filter((r) => r.trigger.type === "no_activity");
+    let quietAt = state.quietAt || 0;
+    if (quietRules.length && t - quietAt >= 15 * 60000) {
+      quietAt = t;
+      const last = new Map(db.prepare("SELECT json_extract(body,'$.leadId') l, MAX(COALESCE(json_extract(body,'$.occurredAt'),json_extract(body,'$.createdAt'))) at FROM records WHERE kind='activities' AND json_extract(body,'$.type')<>'System' GROUP BY l").all().map((x) => [x.l, x.at]));
+      for (const days of new Set(quietRules.map((r) => r.trigger.days))) {
+        for (const l of leads) {
+          if (l.archived || l.mergedInto || l.stage === "Closed") continue;
+          const at = last.get(l.id) || l.createdAt, idle = (t - Date.parse(at || 0)) / 86400000;
+          if (idle >= days && idle < days + QUIET_WINDOW_DAYS) events.push(["no_activity", l, `quiet:${days}:${l.id}:${at}`, `no activity for ${days} days`, { days }]);
+        }
+      }
+    }
+    put("workflowState", { ...state, leadRow, activityRow, stages, quietAt });
+    if (!active.length) return { events: 0 };
+    let fired = 0;
+    const wanted = events.filter(([type]) => active.some((r) => r.trigger.type === type));
+    if (wanted.length > MAX_EVENTS) report(`Workflows: ${wanted.length - MAX_EVENTS} events skipped this time (more than ${MAX_EVENTS} at once)`);
+    for (const [type, lead, key, why, extra] of wanted.slice(0, MAX_EVENTS)) {
+      await fire(type, lead, key, why, extra);
+      fired++;
+    }
+    // runs older than 60 days are only history
+    db.prepare("DELETE FROM records WHERE kind='workflowRuns' AND json_extract(body,'$.at')<?").run(new Date(t - 60 * 86400000).toISOString());
+    return { events: fired };
+  }
+
+  return { list, create, update, remove, tick, meta: () => ({ triggers: TRIGGERS, fields: FIELDS, ops: OPS, actions: ACTIONS, stages: STAGES, pipeline: PIPELINE.map((p) => p.name) }) };
+}
