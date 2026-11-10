@@ -289,3 +289,9 @@ td.right .btn + .btn, td.right .quick-actions + .btn { margin-left: 6px; }
 }
 .wfc-svg text { stroke: none; }
 .wfc-svg { stroke: none; }
+
+/* Salesmax history import */
+.smx-pick { display: grid; gap: 6px; font-size: 13px; color: var(--ink-2); margin-bottom: 12px; }
+.smx-progress { display: grid; gap: 6px; margin: 12px 0; }
+.smx-progress progress { width: 100%; height: 12px; accent-color: var(--oil); }
+.smx-notes { margin: 8px 0; padding-left: 18px; display: grid; gap: 4px; font-size: 13px; color: var(--ink-2); }

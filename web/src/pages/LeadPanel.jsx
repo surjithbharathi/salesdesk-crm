@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { crmSend } from "../api.js";
-import { useCrm, userName, phoneLabel, telHref, waHref, stageText } from "../crm.jsx";
+import { useCrm, useLeadHistory, userName, phoneLabel, telHref, waHref, stageText } from "../crm.jsx";
 import { PIPELINE, pipelineStep } from "../pipeline.js";
 import { useToast } from "../toast.jsx";
 import { when, day, rupees, dueText, timeOnly, dayLabel, minutes } from "../format.js";
@@ -176,7 +176,10 @@ export default function LeadPanel({ id, onClose }) {
   const notify = useToast();
   useEffect(() => closeButton.current?.focus(), [id]);
   useEffect(() => setTab("overview"), [id]);
-  const activities = useMemo(() => crm.activities.filter((a) => a.leadId === id).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))), [crm.activities, id]);
+  const history = useLeadHistory(id);
+  const activities = useMemo(() => [...crm.activities.filter((a) => a.leadId === id), ...history].sort((a, b) => String(b.occurredAt || b.createdAt).localeCompare(String(a.occurredAt || a.createdAt))), [crm.activities, id, history]);
+  // counted from the timeline, so calls brought in from Salesmax count too
+  const callActs = activities.filter((a) => a.type === "Call"), talk = callActs.reduce((n, c) => n + (Number(c.duration) || 0), 0);
   const calls = useMemo(() => crm.calls.filter((c) => c.leadId === id).sort((a, b) => b.startedAt - a.startedAt), [crm.calls, id]);
   async function copy(text) {
     try {
@@ -228,8 +231,8 @@ export default function LeadPanel({ id, onClose }) {
                   <h3>Work so far</h3>
                   <Facts rows={[
                     ["First call or message", lead.firstTouchAt && when(lead.firstTouchAt)],
-                    ["Calls", lead.callCount ? `${lead.callCount}, ${lead.connectedCalls || 0} answered` : ""],
-                    ["Talk time", lead.totalCallSeconds ? minutes(Math.max(1, Math.round(lead.totalCallSeconds / 60))) : ""],
+                    ["Calls", callActs.length ? `${callActs.length}, ${callActs.filter((c) => c.duration > 0).length} answered` : ""],
+                    ["Talk time", talk ? minutes(Math.max(1, Math.round(talk / 60))) : ""],
                     ["Next follow-up", due && <span className={due.tone}>{when(crm.nextDue.get(lead.id))}, {due.text}</span>],
                   ]} />
                   <h3>Details</h3>

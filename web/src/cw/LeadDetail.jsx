@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { crmSend } from "../api.js";
-import { useCrm, phoneLabel, telHref, waHref, stageText } from "../crm.jsx";
+import { useCrm, useLeadHistory, phoneLabel, telHref, waHref, stageText } from "../crm.jsx";
 import { useToast } from "../toast.jsx";
 import { dueText } from "../format.js";
 import Icon from "../icons.jsx";
@@ -46,7 +46,8 @@ export default function CwLeadDetail({ id, onClose }) {
   const [taskDue, setTaskDue] = useState(() => at10(1));
   const [busy, setBusy] = useState(false);
   const [callForm, setCallForm] = useState(null);
-  const m = useMemo(() => (crm.state ? buildModel(crm) : null), [crm.state, crm.leads, crm.activities, crm.users, crm.nextDue]);
+  const history = useLeadHistory(id);
+  const m = useMemo(() => (crm.state ? buildModel(history.length ? { ...crm, activities: [...crm.activities, ...history] } : crm) : null), [crm.state, crm.leads, crm.activities, crm.users, crm.nextDue, history]);
   useEffect(() => {
     const onKey = (e) => e.key === "Escape" && (menu ? setMenu(false) : onClose());
     document.addEventListener("keydown", onKey);
@@ -58,7 +59,7 @@ export default function CwLeadDetail({ id, onClose }) {
   if (!crm.state || !raw || !l) return <div className="cw-detail"><div className="scrim" onClick={onClose} /><div className="sheet"><p className="empty">{crm.error || "Loading the lead…"}</p></div></div>;
 
   const recordings = new Map((crm.calls || []).filter((c) => c.recordingId).map((c) => [c.activityId, c.recordingId]));
-  const rawActs = crm.activities.filter((a) => a.leadId === id);
+  const rawActs = [...crm.activities.filter((a) => a.leadId === id), ...history];
   const tasks = crm.tasks.filter((t) => t.leadId === id).sort((a, b) => String(a.due).localeCompare(String(b.due)));
   const openTasks = tasks.filter((t) => t.status !== "Done");
   const next = openTasks[0];

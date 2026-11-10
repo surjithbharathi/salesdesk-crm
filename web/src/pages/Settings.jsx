@@ -16,6 +16,7 @@ import Workspaces from "./settings/Workspaces.jsx";
 import { Import, Export, Archived, Merge } from "./settings/LeadData.jsx";
 import Blocked from "./settings/Blocked.jsx";
 import Workflows from "./settings/Workflows.jsx";
+import SalesmaxImport from "./settings/SalesmaxImport.jsx";
 
 const THEMES = [["", "Automatic", "Follows your phone or computer"], ["light", "Light", "Bright pages"], ["dark", "Dark", "Easy on the eyes at night"]];
 function chooseTheme(value) {
@@ -72,6 +73,7 @@ export default function Settings({ params, me }) {
     ["workflows", "Workflows", access.crmOwner || ["owner", "admin"].includes(access.role), <Workflows users={me.users} />, "Leads and data", "Rules that act on leads by themselves: assign, follow up, message."],
     ["assign", "Assign leads", can("leads.write") && me.lead, <Assign access={full} />, "Leads and data", "Hand leads to people in bulk."],
     ["import", "Add leads from a file", can("leads.write") && can("data.export"), <Import access={full} />, "Leads and data", "Bring in leads from a spreadsheet."],
+    ["salesmax", "Salesmax history", access.crmOwner || ["owner", "admin"].includes(access.role), <SalesmaxImport />, "Leads and data", "Bring in leads, deals, tasks and activity from Salesmax export files."],
     ["merge", "Merge duplicates", can("leads.write") && me.lead, <Merge />, "Leads and data", "Combine leads that share a mobile number."],
     ["archived", "Archived leads", can("leads.write"), <Archived />, "Leads and data", "Bring archived leads back."],
     ["blocked", "Blocked numbers", access.crmOwner || ["owner", "admin"].includes(access.role), <Blocked />, "Leads and data", "Numbers whose calls and chats never become leads."],

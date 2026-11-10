@@ -28,6 +28,7 @@ import { scopedState } from "./user-scope.mjs";
 import { createClickToCall } from "./click-to-call.mjs";
 import { bridgeConfig, createAutomationBridge } from "./automation-bridge.mjs";
 import { createWorkflows } from "./workflows.mjs";
+import { createSalesmaxImport } from "./salesmax-import.mjs";
 
 const port = Number(process.env.PORT || 3100);
 const publicOrigin = process.env.PUBLIC_ORIGIN || "";
@@ -56,6 +57,14 @@ const all = (kind) =>
     .prepare("SELECT body FROM records WHERE kind=? ORDER BY rowid DESC")
     .all(kind)
     .map((r) => {const value=JSON.parse(r.body);if(kind==="leads")try{return {...value,...phoneParts(value.phone)};}catch{}return value;});
+// what the screens load at once: history brought in from another CRM (importedFrom) stays out, except open tasks, and is read
+// per lead when the lead is opened; otherwise a big import would make every page load download it all
+db.exec("CREATE INDEX IF NOT EXISTS activities_by_lead ON records(json_extract(body,'$.leadId')) WHERE kind='activities'");
+const stateAll = (kind) =>
+  kind === "activities" ? db.prepare("SELECT body FROM records WHERE kind='activities' AND json_extract(body,'$.importedFrom') IS NULL ORDER BY rowid DESC").all().map((r) => JSON.parse(r.body))
+  : kind === "tasks" ? db.prepare("SELECT body FROM records WHERE kind='tasks' AND (json_extract(body,'$.importedFrom') IS NULL OR json_extract(body,'$.status')<>'Done') ORDER BY rowid DESC").all().map((r) => JSON.parse(r.body))
+  : kind === "leads" ? all("leads").map(({ salesmax, ...lead }) => lead)
+  : all(kind);
 const get = (kind, id) => {
   const r = db.prepare("SELECT body FROM records WHERE kind=? AND id=?").get(kind, id);
   if(!r&&kind==="leads"){const alias=db.prepare("SELECT body FROM records WHERE kind='leadAliases' AND id=?").get(id);if(alias)return get(kind,JSON.parse(alias.body).targetId);}
@@ -430,6 +439,7 @@ const callAI = createCallAI({db,all,get,playback:mobile.playback,keyPath:(proces
 const smtpEmail=createSmtpEmail({db,keyPath:(process.env.CRM_DB||new URL('./data/crm.sqlite',import.meta.url).pathname)+'.smtp-key',origin:publicOrigin});
 // the one-way mirror of TeleCRM: it writes records directly (no per-lead uniqueness scan), the unique phone index still protects against duplicates
 const rawPut = (kind, v) => db.prepare("INSERT INTO records VALUES(?,?,?) ON CONFLICT(kind,id) DO UPDATE SET body=excluded.body").run(kind, v.id, JSON.stringify(v));
+const salesmaxImport = createSalesmaxImport({ db, get, put: rawPut, tx, users: () => all("users") });
 const telecrm = createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecording: (callId, bytes) => mobile.importRecording(callId, bytes), shareTwins: () => mobile.shareTwins(), keyPath: (process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname) + ".telecrm-key", log: (m) => console.error(m) });
 const waGateway = createWaGateway({ db, all, get, put, stamp, tx, log, systemUser: process.env.CRM_OWNER_USER_ID || "", keyPath: (process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname) + ".wagw-key" });
 const blocked = createBlockedNumbers(db);
@@ -1087,9 +1097,11 @@ const server = http.createServer(async (req, res) => {
           "/api/wa-gateway/status",
           "/api/whatsapp/status",
           "/api/click-to-call/devices",
-        ].includes(url.pathname) || /^\/api\/mobile\/recordings\/[a-f0-9-]{36}$/.test(url.pathname);
+          "/api/notifications",
+        ].includes(url.pathname) || /^\/api\/mobile\/recordings\/[a-f0-9-]{36}$/.test(url.pathname) || /^\/api\/leads\/[\w-]{1,80}\/history$/.test(url.pathname);
       const allowedWrite =
         (url.pathname === "/api/click-to-call/request" && req.method === "POST") ||
+        (url.pathname === "/api/notifications/read" && req.method === "POST") ||
         (/^\/api\/wa-gateway\/leads\/[\w-]{1,64}\/(send|history)$/.test(url.pathname) && req.method === "POST") ||
         (/^\/api\/(leads|tasks|activities)(?:\/[a-zA-Z0-9-]+)?$/.test(url.pathname) &&
           ["POST", "PATCH"].includes(req.method));
@@ -1140,13 +1152,22 @@ const server = http.createServer(async (req, res) => {
     }
     if (url.pathname === "/api/state" && req.method === "GET") {
       if (member) {
-        send(200, withBadges(permittedState(scopedState(all, identity.user.id),identity.user.id)));
+        send(200, withBadges(permittedState(scopedState(stateAll, identity.user.id),identity.user.id)));
         return;
       }
       send(200, withBadges(permittedState({
-        ...Object.fromEntries(kinds.map((k) => [k, all(k)])),
+        ...Object.fromEntries(kinds.map((k) => [k, stateAll(k)])),
         mobileCalls: all("mobileCalls"),
       },identity?.user.id)));
+      return;
+    }
+    // the imported history of one lead (left out of /api/state)
+    const historyOf = url.pathname.match(/^\/api\/leads\/([\w-]{1,80})\/history$/);
+    if (historyOf && req.method === "GET") {
+      const lead = member ? ownLead(identity.user.id, historyOf[1]) : get("leads", historyOf[1]);
+      if (!lead) bad("Lead not found", 404);
+      const activities = db.prepare("SELECT body FROM records WHERE kind='activities' AND json_extract(body,'$.leadId')=? AND json_extract(body,'$.importedFrom') IS NOT NULL ORDER BY json_extract(body,'$.occurredAt') DESC LIMIT 2000").all(lead.id).map((r) => JSON.parse(r.body));
+      send(200, { activities: permittedState({ activities, mobileCalls: [], messages: [], conversations: [] }, identity?.user.id).activities, salesmax: lead.salesmax || null });
       return;
     }
     if (url.pathname === "/api/mobile/devices" && req.method === "GET") {
@@ -1285,6 +1306,13 @@ const server = http.createServer(async (req, res) => {
       if (req.method === "PUT" && one) return send(200, workflows.update(one, await body(req)));
       if (req.method === "DELETE" && one) return send(200, workflows.remove(one));
       bad("Method not allowed", 405);
+    }
+    // Import of a Salesmax account's export files (admins only); the browser sends the rows in batches
+    if (url.pathname === "/api/import/salesmax" && req.method === "POST") {
+      if (identity && !["owner", "admin"].includes(workspaceAccess.profile(identity.user.id).role)) bad("Only an admin can import", 403);
+      sameOrigin();
+      const p = await body(req);
+      return send(200, salesmaxImport.importBatch(String(p.kind || ""), p.rows));
     }
     // Notifications a workflow sent to this person (the bell in the top bar)
     if (url.pathname === "/api/notifications" || url.pathname === "/api/notifications/read") {

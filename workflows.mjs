@@ -457,7 +457,7 @@ export function createWorkflows({ db, get, put, stamp, tx, log, users, sendWhats
       const stage = stageOf(l), before = stages[l.id];
       if (l.r > state.leadRow) {
         leadRow = Math.max(leadRow, l.r);
-        if (before === undefined && recent(l.createdAt) && !l.archived && !l.mergedInto) events.push(["lead_created", l, "lead:" + l.id, "new lead"]);
+        if (before === undefined && recent(l.createdAt) && !l.archived && !l.mergedInto && !l.importedFrom) events.push(["lead_created", l, "lead:" + l.id, "new lead"]);
       } else if (before !== undefined && before !== stage && !l.archived) {
         const old = PIPELINE.find((p) => p.name === before)?.stage || before;
         events.push(["stage_changed", l, `stage:${l.id}:${before}>${stage}:${l.updatedAt || ""}`, `${before} → ${stage}`, { from: before, fromStage: old, to: stage, toStage: l.stage }]);
@@ -470,7 +470,7 @@ export function createWorkflows({ db, get, put, stamp, tx, log, users, sendWhats
     for (const row of activities) {
       activityRow = row.r;
       const a = JSON.parse(row.body);
-      if (a.type === "Call" && ["Missed", "Rejected"].includes(a.direction) && recent(a.occurredAt || a.createdAt) && byId.has(a.leadId))
+      if (a.type === "Call" && ["Missed", "Rejected"].includes(a.direction) && !a.importedFrom && recent(a.occurredAt || a.createdAt) && byId.has(a.leadId))
         events.push(["call_missed", byId.get(a.leadId), "missed:" + a.id, "missed call"]);
     }
     // "no activity for N days": a heavier read, so every 15 minutes and only when such a flow exists

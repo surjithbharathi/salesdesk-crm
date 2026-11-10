@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { crmSend } from "../api.js";
-import { useCrm, phoneLabel, telHref, waHref } from "../crm.jsx";
+import { useCrm, useLeadHistory, phoneLabel, telHref, waHref } from "../crm.jsx";
 import { useToast } from "../toast.jsx";
 import { initials } from "../format.js";
 import Recording from "../Recording.jsx";
@@ -45,7 +45,8 @@ export function LeadDetail({ id }) {
   const [busy, setBusy] = useState(false);
   const raw = crm.leadById.get(id);
   useEffect(() => { setMenu(""); setComposer(""); }, [id]);
-  const acts = useMemo(() => crm.activities.filter((a) => a.leadId === id).sort((a, b) => String(b.occurredAt || b.createdAt).localeCompare(String(a.occurredAt || a.createdAt))), [crm.activities, id]);
+  const history = useLeadHistory(id);
+  const acts = useMemo(() => [...crm.activities.filter((a) => a.leadId === id), ...history].sort((a, b) => String(b.occurredAt || b.createdAt).localeCompare(String(a.occurredAt || a.createdAt))), [crm.activities, id, history]);
   if (!crm.state || !raw) return <p className="muted">{crm.error || "Loading the lead…"}</p>;
 
   // A TeleCRM recording not here yet is either still being copied or gave up after 4 tries (or is too large).

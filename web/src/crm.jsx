@@ -1,9 +1,23 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { crmState } from "./api.js";
+import { crmGet, crmState } from "./api.js";
 import { pipelineStep } from "./pipeline.js";
 
 const CrmContext = createContext(null);
 export const useCrm = () => useContext(CrmContext);
+
+// History brought in from another CRM (the Salesmax import) is not in the shared state; a lead's screen reads it when opened.
+const histories = new Map();
+export function useLeadHistory(id) {
+  const [items, setItems] = useState(() => histories.get(id) || []);
+  useEffect(() => {
+    let on = true;
+    setItems(histories.get(id) || []);
+    if (!id) return;
+    crmGet(`leads/${encodeURIComponent(id)}/history`).then((r) => { histories.set(id, r.activities || []); if (on) setItems(r.activities || []); }).catch(() => {});
+    return () => { on = false; };
+  }, [id]);
+  return items;
+}
 
 const open = (lead) => lead.stage !== "Closed" && !lead.archived;
 
