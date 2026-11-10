@@ -10,6 +10,7 @@ import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { PIPELINE } from "./pipeline.mjs";
 import { privateAddress } from "./wa-gateway.mjs";
+import { cleanState, cleanLanguage, withRegion } from "./lead-region.mjs";
 
 const fail = (message, status = 400) => { throw Object.assign(new Error(message), { status }); };
 export const TRIGGERS = {
@@ -22,11 +23,11 @@ export const TRIGGERS = {
   no_activity: "A lead has no activity for some days",
 };
 // fields of every lead; TeleCRM's own fields (State, Requirement…) are added as "tc:<name>"
-export const FIELDS = { source: "Source", city: "City", owner: "Owner", stage: "Stage", company: "Company", name: "Name", email: "Email", value: "Expected value", rating: "Rating" };
+export const FIELDS = { source: "Source", state: "State", language: "Language", city: "City", owner: "Owner", stage: "Stage", company: "Company", name: "Name", email: "Email", value: "Expected value", rating: "Rating" };
 export const OPS = { is: "is", is_not: "is not", contains: "contains", is_empty: "is empty", not_empty: "is not empty", more: "is more than", less: "is less than" };
 export const ACTIONS = { assign: "Assign the lead", stage: "Change the stage", field: "Update a lead field", task: "Create a follow-up task", whatsapp: "Send a WhatsApp message", notify: "Notify a team member", note: "Add a note", cancel_tasks: "Cancel open tasks", webhook: "Call an API (webhook)" };
 // what the "Update a lead field" box may write; owner and stage have their own boxes, TeleCRM fields belong to TeleCRM
-export const EDITABLE = { company: "Company", city: "City", source: "Source", email: "Email", value: "Expected value" };
+export const EDITABLE = { state: "State", language: "Language", company: "Company", city: "City", source: "Source", email: "Email", value: "Expected value" };
 const CUSTOM = /^tc:[^:\s][^:]{0,59}$/;
 const fieldOk = (k) => Boolean(FIELDS[k]) || CUSTOM.test(k);
 const fieldLabel = (k) => FIELDS[k] || String(k).slice(3).replace(/_/g, " ");
@@ -300,8 +301,14 @@ export function createWorkflows({ db, get, put, stamp, tx, log, users, sendWhats
       let value = fill(a.value, lead).trim();
       if (a.field === "value") value = Number(value.replace(/[,\s₹]/g, "")) || 0;
       if (a.field === "email" && value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) fail(`"${value}" is not an email`);
+      if (a.field === "state") value = cleanState(value);
+      if (a.field === "language") value = cleanLanguage(value);
       if (String(lead[a.field] ?? "") === String(value)) return "";
-      put("leads", { ...lead, [a.field]: value, updatedAt: at });
+      const next = { ...lead, [a.field]: value, updatedAt: at };
+      if (a.field === "language") delete next.languageGuess;
+      // a new state brings its language when the language was only a guess
+      if (a.field === "state" && (lead.languageGuess || !lead.language)) { delete next.language; delete next.languageGuess; Object.assign(next, withRegion(next) || {}); }
+      put("leads", next);
       return `${EDITABLE[a.field]} set to ${value === "" ? "empty" : value}`;
     }
     if (a.type === "notify") {

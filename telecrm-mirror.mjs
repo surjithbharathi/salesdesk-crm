@@ -10,6 +10,7 @@ import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { phoneParts } from "./lead-phone.mjs";
 import { PIPELINE } from "./pipeline.mjs";
+import { withRegion, regionHints } from "./lead-region.mjs";
 
 const BASE = "https://next.telecrm.in/autoupdate/v2";
 const fail = (message, status = 400) => { throw Object.assign(Error(message), { status }); };
@@ -274,6 +275,8 @@ export function createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecor
       telecrm: { id: tid, status, rating: item.rating ?? 0, score: item.score ?? 0, assignee: String(item.employeeid || "").toLowerCase(), lostReason: text(lost_reason, 200), nextFollowup: msOf(next_followup) || null, modifiedOn: Number(f.modified_on) || 0, lastActivityOn: Number(f.last_activity_on) || 0, syncedAt: now(), fields: rest, phoneRaw: f.phone ? text(f.phone, 40) : "" },
     };
     ctx.claimed.add(lead.id);
+    // TeleCRM's State (and a language field, if one exists) fill an empty state / language here; what a person set stays
+    Object.assign(lead, withRegion(lead, regionHints(lead)) || {});
     try { rawPut("leads", lead); } catch (e) {
       if (!/UNIQUE/i.test(e.message)) throw e;
       Object.assign(lead, { phone: "", countryCode: "", mobileNumber: "", phoneKey: "" });

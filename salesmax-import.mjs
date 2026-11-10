@@ -10,6 +10,7 @@
 import { createHash } from "node:crypto";
 import { phoneParts } from "./lead-phone.mjs";
 import { PIPELINE } from "./pipeline.mjs";
+import { withRegion } from "./lead-region.mjs";
 
 const fail = (message, status = 400) => { throw Object.assign(new Error(message), { status }); };
 const MAX_ROWS = 400;
@@ -119,6 +120,7 @@ export function createSalesmaxImport({ db, get, put, tx, users }) {
         if (istToIso(r.CREATED) && (!lead.createdAt || istToIso(r.CREATED) < lead.createdAt)) lead.createdAt = istToIso(r.CREATED);
         if (str(r["LEAD SOURCE"]) && (!lead.source || /^(excel|telecrm)$/i.test(lead.source))) lead.source = sourceOf(r["LEAD SOURCE"]);
         lead.salesmax = info;
+        Object.assign(lead, withRegion(lead, { state: info.state }) || {});
         if (JSON.stringify(old) === JSON.stringify(lead)) { counts.skipped++; continue; }
         // workflows see this change as the import's, not a person's (see workflows.mjs)
         lead.importTouch = lead.updatedAt = new Date().toISOString();
@@ -130,6 +132,7 @@ export function createSalesmaxImport({ db, get, put, tx, users }) {
           owner: personOf(r["LEAD OWNER"]), list: "", ...stage, archived: false, repeat: norm(r["LEAD STAGE"]) === "return customer" || Number(r["TIMES RE-ENGAGED"]) > 0,
           firstTouchAt: istToIso(r["STARTED WORK ON"]) || null, createdAt: created, updatedAt: updated, importedFrom: FROM, salesmax: info,
         };
+        Object.assign(lead, withRegion(lead, { state: info.state }) || {});
         counts.created++;
       }
       put("leads", lead);

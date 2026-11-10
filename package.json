@@ -1,13 +1,13 @@
 {
   "name": "salesdesk-crm",
-  "version": "0.45.0",
+  "version": "0.46.0",
   "private": true,
   "type": "module",
   "scripts": {
     "start": "node workspace-gateway.mjs",
     "web:build": "npm --prefix web ci && npm --prefix web run build",
     "check": "node --check server.mjs && node --check public/app.js && node --check workspace-gateway.mjs && node --check smtp-email.mjs && node --check kpi.mjs && node --check pipeline.mjs && node --check wa-gateway.mjs && node --check telecrm-mirror.mjs",
-    "test": "node --test kpi.test.mjs kpi-http.test.mjs workspace.test.mjs smtp-email.test.mjs mcp-access.test.mjs crm-mcp.test.mjs call-ai.test.mjs mcp-oauth.test.mjs pipeline.test.mjs wa-gateway.test.mjs wa-gateway-http.test.mjs telecrm-mirror.test.mjs workspace-remove.test.mjs mobile-import-recording.test.mjs workflows.test.mjs salesmax-import.test.mjs"
+    "test": "node --test kpi.test.mjs kpi-http.test.mjs workspace.test.mjs smtp-email.test.mjs mcp-access.test.mjs crm-mcp.test.mjs call-ai.test.mjs mcp-oauth.test.mjs pipeline.test.mjs wa-gateway.test.mjs wa-gateway-http.test.mjs telecrm-mirror.test.mjs workspace-remove.test.mjs mobile-import-recording.test.mjs workflows.test.mjs salesmax-import.test.mjs lead-region.test.mjs"
   },
   "dependencies": {
     "baileys": "7.0.0-rc14",

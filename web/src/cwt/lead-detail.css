@@ -147,3 +147,5 @@
 .cwt .more-btn:hover { background: #f6f4ff; }
 .cwt .more-btn svg.kebab { width: 18px; height: 18px; stroke-width: 3.6; stroke-linecap: round; background: none; margin: 0; padding: 0; }
 .cwt .menu button:disabled { opacity: 0.5; }
+/* a language filled in from the state, to be checked */
+.cwt .field .guess { display: block; margin-top: 3px; font-size: 11px; color: #b45309; }

@@ -8,6 +8,7 @@ import { PIPELINE, pipelineStep } from "../pipeline.js";
 import { TIcon } from "./icons.jsx";
 import GatewayChat, { useGatewayOn } from "../GatewayChat.jsx";
 import ChatEntry, { fromActivity, userForNumber, saidInChat } from "../ChatEntry.jsx";
+import { STATES, LANGUAGES } from "../regions.js";
 
 // One lead in the TeleCRM style: header with status and assignee, field tabs, the action bar and the activity history.
 // The class names are the reference web app's, so its style sheet (cwt/lead-detail.css) applies as written.
@@ -17,6 +18,7 @@ const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, "-");
 const OUTCOMES = ["Interested", "Callback", "No answer", "Not interested", "Connected"];
 const FIELDS = [
   ["primary", "email", "Email", "mail"], ["primary", "phone", "Phone", "phone"], ["primary", "company", "Business", "box"], ["primary", "city", "City", "box"],
+  ["primary", "state", "State", "pin"], ["primary", "language", "Language", "message"],
   ["basic", "name", "Name", "box"], ["basic", "source", "Source", "box"],
   ["others", "value", "Deal Value", "box"], ["others", "id", "Lead ID", "box"],
 ];
@@ -150,10 +152,13 @@ export function LeadDetail({ id }) {
               <div key={key} className="field">
                 <label><TIcon name={icon} />{label}{key === "phone" && <span className="wa-badge" title="On WhatsApp"><TIcon name="whatsapp" /></span>}</label>
                 {key === "phone" ? <div className="phone"><span className="flag" aria-hidden="true" /><input defaultValue={value(key)} key={`${id}-${value(key)}`} placeholder="Enter Phone Number" onBlur={(e) => e.target.value.trim() && setField(key, e.target.value)} /></div>
-                  : <input defaultValue={value(key)} key={`${id}-${key}-${value(key)}`} placeholder="Empty" readOnly={key === "id"} onBlur={(e) => key !== "id" && setField(key, e.target.value)} />}
+                  : <input defaultValue={value(key)} key={`${id}-${key}-${value(key)}`} placeholder={key === "state" ? "Choose or type a state" : key === "language" ? "Choose or type a language" : "Empty"} list={key === "state" ? "sd-states" : key === "language" ? "sd-languages" : undefined} readOnly={key === "id"} onBlur={(e) => key !== "id" && e.target.value !== value(key) && setField(key, e.target.value)} />}
+                {key === "language" && raw.languageGuess && <small className="guess">Guessed from the state. Change it if the customer speaks another language.</small>}
               </div>
             ))}
             {!fields.length && <p className="no-fields">No fields match.</p>}
+            <datalist id="sd-states">{STATES.map((s) => <option key={s} value={s} />)}</datalist>
+            <datalist id="sd-languages">{LANGUAGES.map((l) => <option key={l} value={l} />)}</datalist>
           </div>
 
           <nav className="action-bar">

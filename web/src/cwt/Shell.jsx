@@ -3,6 +3,7 @@ import { useCrm } from "../crm.jsx";
 import { crmGet, crmSend } from "../api.js";
 import { hashFor, initials } from "../format.js";
 import { TIcon } from "./icons.jsx";
+import GlobalSearch from "./GlobalSearch.jsx";
 
 // The frame of the TeleCRM style: a slim icon menu on the left that can open to full width, and a top bar with the workspace, follow-ups due and the account.
 // The class names are the reference web app's, so its style sheet (cwt/shell.css) applies as written.
@@ -14,7 +15,6 @@ function navFor(owner) {
   return [
     { key: "dash", label: "Dashboard", icon: "dashboard", link: owner ? "/business" : "/my-day" },
     ...(owner ? [{ key: "day", label: "My day", icon: "user", link: "/my-day" }] : []),
-    { key: "search", label: "Search", icon: "search", link: "/search" },
     { key: "calls", label: "My Calls", icon: "calls", link: "/calls" },
     { key: "todo", label: "Follow Ups", icon: "alarm", link: "/todo" },
     { key: "views", label: "Leads", icon: "filter", link: "/leads" },
@@ -119,6 +119,7 @@ export default function Shell({ path, owner, session, onLogout, children }) {
                 </div>
               )}
             </div>
+            <GlobalSearch />
             <div className="top-right">
               <div className="anchor">
                 <button type="button" className="round alarm" onClick={() => openPanel("alarm")} aria-label="Follow-ups due"><TIcon name="alarm" />{due.length > 0 && <em className="count">{due.length > 99 ? "99+" : due.length}</em>}</button>

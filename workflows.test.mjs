@@ -324,3 +324,15 @@ test("a field changed by an import a moment ago starts nothing; a later change b
   await s.wf.tick();
   assert.equal(s.all("activities").filter((a) => a.text === "source now TradeIndia").length, 1);
 });
+
+test("a flow can check state and language and route a lead to the right people", async () => {
+  const s = setup();
+  await s.wf.tick();
+  s.wf.create(rule("Tamil leads", { type: "lead_created" }, [{ field: "language", op: "is", value: "Tamil" }], [{ type: "assign", to: "round_robin", users: ["u1", "u3"] }]));
+  s.wf.create(rule("Fix state", { type: "lead_created" }, [{ field: "state", op: "is_empty" }], [{ type: "field", field: "state", value: "karnataka" }]));
+  const a = s.lead({ state: "Tamil Nadu", language: "Tamil" }), b = s.lead({ state: "Kerala", language: "Malayalam" }), c = s.lead({});
+  await s.wf.tick();
+  assert.equal(s.get("leads", a.id).owner, "u1");
+  assert.equal(s.get("leads", b.id).owner, "");
+  assert.deepEqual([s.get("leads", c.id).state, s.get("leads", c.id).language, s.get("leads", c.id).languageGuess], ["Karnataka", "Kannada", true]);
+});

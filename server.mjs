@@ -14,6 +14,7 @@ import { createMcpOAuth } from './mcp-oauth.mjs';
 import { createCallAI } from './call-ai.mjs';
 import { mergeLeads } from "./lead-merge.mjs";
 import { phoneParts, phoneKeyOf, assertUniqueLead, initializeLeadPhoneIndex } from "./lead-phone.mjs";
+import { cleanState, cleanLanguage, withRegion, regionHints } from "./lead-region.mjs";
 import { readFile, mkdir } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
 import { randomUUID } from "node:crypto";
@@ -51,6 +52,14 @@ db.exec(
   "PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS records(kind TEXT, id TEXT, body TEXT, PRIMARY KEY(kind,id))",
 );
 initializeLeadPhoneIndex(db);
+// leads without a state or language get them from what TeleCRM and Salesmax know (and the state's main language as a guess)
+{
+  const rows = db.prepare("SELECT id, body FROM records WHERE kind='leads' AND (COALESCE(json_extract(body,'$.state'),'')='' OR COALESCE(json_extract(body,'$.language'),'')='')").all();
+  const write = db.prepare("UPDATE records SET body=? WHERE kind='leads' AND id=?");
+  db.exec("BEGIN");
+  try { for (const r of rows) { const lead = JSON.parse(r.body), next = withRegion(lead, regionHints(lead)); if (next) write.run(JSON.stringify(next), r.id); } db.exec("COMMIT"); }
+  catch (e) { db.exec("ROLLBACK"); console.error("Filling lead state and language failed: " + e.message); }
+}
 const kinds = ["leads", "activities", "tasks", "deals", "payments", "products", "users", "lists"];
 const all = (kind) =>
   db
@@ -218,6 +227,12 @@ function validate(kind, p, old = {}) {
   if (kind === "leads") {
     for (const k of ["name", "company", "phone", "email", "source", "city", "disposition"])
       s(k, 200);
+    // state and language decide who gets the lead; written the same way everywhere ("TAMILNADU" -> "Tamil Nadu")
+    s("state", 80);
+    s("language", 40);
+    if (Object.hasOwn(p, "state")) v.state = cleanState(v.state);
+    if (Object.hasOwn(p, "language")) { v.language = cleanLanguage(v.language); delete v.languageGuess; }
+    else if (Object.hasOwn(p, "state") && (v.languageGuess || !v.language)) { delete v.language; delete v.languageGuess; Object.assign(v, withRegion(v) || {}); }
     if (!v.name) bad("Lead name required");
     if(["phone","countryCode","mobileNumber"].some(k=>Object.hasOwn(p,k)))Object.assign(v,phoneParts(p.mobileNumber ?? p.phone ?? v.mobileNumber ?? v.phone,p.countryCode ?? (Object.hasOwn(p,"mobileNumber")?v.countryCode||"91":"")));
     if (v.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.email)) bad("Invalid email");
