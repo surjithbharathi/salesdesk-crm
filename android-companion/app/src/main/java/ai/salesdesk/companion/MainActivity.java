@@ -92,7 +92,20 @@ public class MainActivity extends Activity {
         });caption(b,"Password is never saved. Business call sync and background calling stay off until you enable them in Settings.");
     }
     void refresh(){work(()->{try{loadWorkspace();}catch(Exception e){failure(e);}});}
-    void loadWorkspace()throws Exception{try{JSONObject policy=SyncEngine.requestApi(this,"/v1/tracking-preferences","GET",null);SecureConfig.prefs(this).edit().putString("trackingPolicy",policy.toString()).commit();}catch(SyncEngine.HttpError e){if(e.code!=404)throw e;}JSONObject d=SyncEngine.requestApi(this,"/v1/workspace","GET",null);SecureConfig.prefs(this).edit().putString("workspace",d.toString()).putLong("workspaceAt",System.currentTimeMillis()).commit();workspace=d;loadKpi();runOnUiThread(this::render);}
+    void loadWorkspace()throws Exception{try{JSONObject policy=SyncEngine.requestApi(this,"/v1/tracking-preferences","GET",null);SecureConfig.prefs(this).edit().putString("trackingPolicy",policy.toString()).commit();}catch(SyncEngine.HttpError e){if(e.code!=404)throw e;}JSONObject d=SyncEngine.requestApi(this,"/v1/workspace","GET",null);SecureConfig.prefs(this).edit().putString("workspace",d.toString()).putLong("workspaceAt",System.currentTimeMillis()).commit();workspace=d;loadKpi();runOnUiThread(this::render);runOnUiThread(this::offerCaller);}
+    // Right after sign-in the app offers the caller popup once, so it works on the next call without digging in settings.
+    // Android itself asks the person to allow the caller ID role and showing over other apps; the app cannot grant them.
+    boolean callerOffered;
+    void offerCaller(){
+        if(callerOffered||isFinishing()||android.os.Build.VERSION.SDK_INT<29||!SecureConfig.loggedIn(this))return;
+        android.content.SharedPreferences p=SecureConfig.prefs(this);
+        boolean working=p.getBoolean("screenPop",false)&&android.provider.Settings.canDrawOverlays(this)&&getSystemService(android.app.role.RoleManager.class).isRoleHeld(android.app.role.RoleManager.ROLE_CALL_SCREENING);
+        if(working||p.getBoolean("callerDeclined",false))return;
+        callerOffered=true;
+        new AlertDialog.Builder(this).setTitle("Show who is calling?").setMessage("When a call rings, Salesdesk can show the lead on top of the call screen: name, stage, owner, last call and next follow-up. A new number shows its probable state.\n\nAndroid will ask you to choose Salesdesk as the caller ID app and to allow it over other apps.")
+            .setNegativeButton("Not now",(d,w)->p.edit().putBoolean("callerDeclined",true).commit())
+            .setPositiveButton("Turn on",(d,w)->new SimplePreferences(this).setupCaller()).show();
+    }
     /** Today's goals, streak and next call from the CRM. An older server without this endpoint just leaves the card out. */
     void loadKpi(){
         try{

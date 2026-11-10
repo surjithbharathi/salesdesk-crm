@@ -75,7 +75,7 @@ final class SimplePreferences {
         a.pendingCallerSetup=true;
         if(!roles.isRoleHeld(android.app.role.RoleManager.ROLE_CALL_SCREENING)){a.startActivityForResult(roles.createRequestRoleIntent(android.app.role.RoleManager.ROLE_CALL_SCREENING),307);return;}
         if(!android.provider.Settings.canDrawOverlays(a)){a.startActivityForResult(new Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,Uri.parse("package:"+a.getPackageName())),310);return;}
-        a.pendingCallerSetup=false;prefs().edit().putBoolean("screenPop",true).commit();a.render();
+        a.pendingCallerSetup=false;prefs().edit().putBoolean("screenPop",true).remove("callerDeclined").commit();a.render();
     }
     void enableBridge(){a.pendingBridgeSetup=false;prefs().edit().putBoolean("clickToCall",true).commit();a.clickToCall.start();a.render();}
 }
