@@ -189,7 +189,7 @@ export function CwtFollowups() {
 
 // ---------------------------------------------------------------- Reports
 const R_TABS = [["leaderboard", "Leaderboard"], ["calls", "Call Report"], ["download", "Report Download"], ["duplicates", "Duplicate Leads"], ["deleted", "Deleted leads"]];
-const R_HINT = { leaderboard: "Who is closing the most leads and making the most calls.", calls: "Calls made by each person, how many connected and for how long.", download: "Download your data as spreadsheets.", duplicates: "Leads that share the same name and company.", deleted: "Leads that were archived. Restore them here." };
+const R_HINT = { leaderboard: "Who is closing the most leads and making the most calls.", calls: "Calls made by each person, how many connected and for how long.", download: "Download your data as spreadsheets.", duplicates: "Leads that share the same mobile number.", deleted: "Leads that were archived. Restore them here." };
 function csvOf(rows) { const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`; return rows.map((r) => r.map(esc).join(",")).join("\n"); }
 function save(name, csv) { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); a.download = name; a.click(); URL.revokeObjectURL(a.href); }
 

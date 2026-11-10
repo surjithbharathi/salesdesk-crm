@@ -134,15 +134,19 @@ export function Archived() {
   );
 }
 
-// Likely duplicates: the same name and company written in different cases. The server already refuses the same phone number.
+// Duplicates are leads with the same mobile number; the number is what identifies a person, not the name
+// (many different customers are called Sanjay). The last 10 digits are compared, so "+91 98…", "098…" and
+// "98…" written for the same phone still meet. Leads without a usable number are never grouped.
 export function Merge() {
   const crm = useCrm();
   const notify = useToast();
   const groups = useMemo(() => {
     if (!crm.state) return [];
     const by = new Map();
-    for (const l of crm.leads.filter((x) => !x.archived)) {
-      const key = `${l.name}|${l.company || ""}`.toLowerCase().replace(/\s+/g, " ").trim();
+    for (const l of crm.leads.filter((x) => !x.archived && !x.mergedInto)) {
+      const digits = String(l.phone || l.mobileNumber || "").replace(/\D/g, "");
+      if (digits.length < 10) continue;
+      const key = digits.slice(-10);
       by.set(key, [...(by.get(key) || []), l]);
     }
     return [...by.values()].filter((g) => g.length > 1).map((g) => g.sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt))));
@@ -160,8 +164,8 @@ export function Merge() {
   }
   if (!crm.state) return <Loading>Loading…</Loading>;
   return (
-    <Section title="Likely duplicates" desc="Leads with the same name and company are listed together. The oldest one is kept; the others are merged into it with their calls, notes and follow-ups." status={groups.length ? `${groups.length} to review` : "None found"} tone={groups.length ? "warn" : "ok"}>
-      {!groups.length && <div className="empty"><b>No likely duplicates</b>Nothing here shares a name and company.</div>}
+    <Section title="Likely duplicates" desc="Leads with the same mobile number are listed together. Leads that only share a name are different people and are not listed. The oldest one is kept; the others are merged into it with their calls, notes and follow-ups." status={groups.length ? `${groups.length} to review` : "None found"} tone={groups.length ? "warn" : "ok"}>
+      {!groups.length && <div className="empty"><b>No duplicates</b>No two leads share a mobile number.</div>}
       {groups.map((g) => (
         <div key={g[0].id} className="dup-group">
           <ul>
