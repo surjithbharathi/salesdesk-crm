@@ -41,10 +41,10 @@ function Appearance() {
     <Section title="Look" desc="Pick the layout and colours you are used to. It stays in this browser.">
       <div className="skin-list" role="radiogroup" aria-label="Appearance">
         {SKINS.map((s) => (
-          <button key={s.id} role="radio" aria-checked={skin === s.id} className="skin-option" onClick={() => { applySkin(s.id); setSkin(s.id); }}>
+          <button key={s.id} role="radio" aria-checked={skin === s.id} className="skin-option" disabled={s.off} title={s.off ? "Not available for now" : undefined} onClick={() => { if (s.off) return; applySkin(s.id); setSkin(s.id); }}>
             <span className={`skin-swatch swatch-${s.id}`} aria-hidden="true"><i /><i /><i /></span>
             <b>{s.name}</b>
-            <small>{s.note}</small>
+            <small>{s.off ? "Not available for now" : s.note}</small>
           </button>
         ))}
       </div>

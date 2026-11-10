@@ -169,7 +169,7 @@ export function createMobileSync({ db, all, get, put, stamp, tx, log, keyPath, o
       const activity = log(lead.id, "Call", `Phone sync · ${p.direction} · ${p.duration}s`, {
         direction: p.direction,
         duration: p.duration,
-        outcome: ["Missed", "Rejected"].includes(p.direction) ? "No answer" : "Recorded",
+        outcome: ["Missed", "Rejected"].includes(p.direction) ? "No answer" : "Answered",
         occurredAt: new Date(p.startedAt).toISOString(),
         deviceId: d.id,
         userId: d.owner,

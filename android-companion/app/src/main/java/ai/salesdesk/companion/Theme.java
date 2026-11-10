@@ -13,11 +13,15 @@ final class Theme {
         {"salesmax", "Salesmax style", "Indigo and white, with the palette Salesmax uses."},
         {"telecrm", "TeleCRM style", "Deep purple and white, with the palette TeleCRM uses."},
     };
-    static String current = "salesdesk";
+    /** For now everyone uses the TeleCRM style; the other looks stay listed in Settings, greyed out. */
+    static final String DEFAULT = "telecrm";
+    static boolean available(String id) { return DEFAULT.equals(id); }
+    static String current = DEFAULT;
 
-    static void load(Context c) { apply(SecureConfig.prefs(c).getString("theme", "salesdesk")); }
+    static void load(Context c) { String id = SecureConfig.prefs(c).getString("theme", DEFAULT); apply(available(id) ? id : DEFAULT); }
 
     static void save(Context c, String id) {
+        if (!available(id)) return;
         SecureConfig.prefs(c).edit().putString("theme", id).commit();
         apply(id);
     }

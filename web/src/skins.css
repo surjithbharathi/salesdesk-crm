@@ -183,6 +183,7 @@
 .swatch-telecrm i:nth-child(1) { background: #4f38a2; } .swatch-telecrm i:nth-child(2) { background: #e8e4ff; } .swatch-telecrm i:nth-child(3) { background: #f6f5fb; }
 .skin-option b { font-weight: 700; }
 .skin-option small { color: var(--muted); }
+.skin-option:disabled, .cwt .skin-list .skin-option:disabled { opacity: .45; cursor: not-allowed; filter: grayscale(1); }
 
 /* ---- TeleCRM style: its layout as seen on the web dashboard. A narrow icon rail, a thin top bar with the workspace name,
    a small page title, and flat white cards with grey lines and compact tables. ---- */

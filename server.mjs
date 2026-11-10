@@ -17,6 +17,7 @@ import { phoneParts, phoneKeyOf, assertUniqueLead, initializeLeadPhoneIndex } fr
 import { cleanState, cleanLanguage, withRegion, regionHints } from "./lead-region.mjs";
 import { probableStates } from "./probable-state.mjs";
 import { callerCard } from "./caller-card.mjs";
+import { leadScreen } from "./lead-screen.mjs";
 import { phoneWorkspace } from "./phone-workspace.mjs";
 import { isBlocked as numberBlocked } from "./blocked-numbers.mjs";
 import { readFile, mkdir } from "node:fs/promises";
@@ -646,6 +647,14 @@ const mobileServer = http.createServer(async (req, res) => {
       reply(200, callerCard({ db, get, users: () => all("users"), isBlocked: (key) => numberBlocked(db, key), spokenOf: (id) => callAI.spokenOf(id) }, callerOf[1], { id: identity.user.id, admin }));
       return;
     }
+    // one lead as the web shows it (details, history including imported history, open follow-ups), for the phone's lead screen
+    const phoneLead = /^\/v1\/leads\/([A-Za-z0-9_-]{1,80})$/.exec(url.pathname);
+    if (phoneLead && req.method === "GET") {
+      if (!identity) bad("Shared user login required", 401);
+      const admin = identity.user.role === "admin" || ["owner", "admin"].includes(workspaceAccess.profile(identity.user.id).role);
+      reply(200, leadScreen({ db, get, users: () => all("users") }, phoneLead[1], { id: identity.user.id, admin }));
+      return;
+    }
     if (url.pathname === "/v1/workspace" && req.method === "GET") {
       if (!identity) bad("Shared user login required", 401);
       reply(200, { ...phoneWorkspace(permittedState(scopedState(stateAll, identity.user.id), identity.user.id)), user: identity.user, company: identity.company });
@@ -674,7 +683,7 @@ const mobileServer = http.createServer(async (req, res) => {
         if (id && !old) bad("Record not found", 404);
         if (kind === "leads") {
           if (old) ownLead(userId, id);
-          const allowed = ["name", "phone", "countryCode", "mobileNumber", "company", "email", "city", "stage", "value"];
+          const allowed = ["name", "phone", "countryCode", "mobileNumber", "company", "email", "city", "state", "language", "stage", "value"];
           if (Object.keys(p).some((k) => !allowed.includes(k))) bad("Unsupported lead field");
           const value = validate("leads", { ...p, owner: userId }, old || {}),
             record = old ? { ...value, updatedAt: now() } : stamp({ ...value, firstTouchAt: null });
