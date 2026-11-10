@@ -642,7 +642,7 @@ const mobileServer = http.createServer(async (req, res) => {
     if (callerOf && req.method === "GET") {
       if (!identity) bad("Shared user login required", 401);
       const admin = identity.user.role === "admin" || ["owner", "admin"].includes(workspaceAccess.profile(identity.user.id).role);
-      reply(200, callerCard({ db, get, users: () => all("users"), isBlocked: (key) => numberBlocked(db, key) }, callerOf[1], { id: identity.user.id, admin }));
+      reply(200, callerCard({ db, get, users: () => all("users"), isBlocked: (key) => numberBlocked(db, key), spokenOf: (id) => callAI.spokenOf(id) }, callerOf[1], { id: identity.user.id, admin }));
       return;
     }
     if (url.pathname === "/v1/workspace" && req.method === "GET") {

@@ -34,23 +34,90 @@ final class CallerCard {
         new Handler(Looper.getMainLooper()).post(() -> {
             if (current != null && !number.equals(shownFor)) dismiss();
             Theme.load(c);
-            View view = build(c, number, card);
-            try {
-                if (current != null) {
-                    manager.removeView(current);
-                    manager.addView(view, params);
-                } else {
-                    manager = c.getSystemService(WindowManager.class);
-                    params = new WindowManager.LayoutParams(-1, -2, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS | showWhenLocked(c), PixelFormat.TRANSLUCENT);
-                    params.gravity = Gravity.TOP;
-                    params.y = dp(c, 90);
-                    manager.addView(view, params);
-                    watchCall(c, view);
-                }
-                current = view; shownFor = number;
-            } catch (Exception e) { current = null; manager = null; params = null; }
+            lastNumber = number; lastCard = card;
+            place(c, number, build(c, number, card));
+            if (!number.equals(watching)) watchCall(c, number);
         });
+    }
+
+    // puts a view on screen, in place of the one shown (same spot, so a dragged card stays where it was put)
+    private static void place(Context c, String number, View view) {
+        try {
+            if (current != null) {
+                manager.removeView(current);
+                manager.addView(view, params);
+            } else {
+                manager = c.getSystemService(WindowManager.class);
+                params = new WindowManager.LayoutParams(-1, -2, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS | showWhenLocked(c), PixelFormat.TRANSLUCENT);
+                params.gravity = Gravity.TOP;
+                params.y = dp(c, 90);
+                manager.addView(view, params);
+            }
+            current = view; shownFor = number;
+        } catch (Exception e) { current = null; manager = null; params = null; }
+    }
+
+    private static String lastNumber = "", watching = "";
+    private static JSONObject lastCard = new JSONObject();
+
+    /** After the call: how it went, and a button to send the customer a WhatsApp message (and open or add the lead). */
+    private static void afterCall(Context c, String number, JSONObject d, boolean answered, long seconds) {
+        if (!SecureConfig.loggedIn(c) || !android.provider.Settings.canDrawOverlays(c)) return;
+        boolean found = d.optBoolean("found"), own = d.optBoolean("own", true);
+        if (d.optBoolean("blocked")) return;
+        FrameLayout outer = new FrameLayout(c); outer.setPadding(dp(c, 12), 0, dp(c, 12), 0);
+        LinearLayout box = new LinearLayout(c); box.setOrientation(LinearLayout.VERTICAL); box.setPadding(dp(c, 16), dp(c, 14), dp(c, 16), dp(c, 12));
+        GradientDrawable bg = new GradientDrawable(); bg.setColor(Color.WHITE); bg.setCornerRadius(dp(c, 18)); bg.setStroke(dp(c, 1), MainActivity.LINE);
+        box.setBackground(bg); box.setElevation(dp(c, 10));
+        outer.addView(box, new FrameLayout.LayoutParams(-1, -2));
+        LinearLayout head = new LinearLayout(c); head.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout titles = new LinearLayout(c); titles.setOrientation(LinearLayout.VERTICAL);
+        String name = found ? d.optString("name") : pretty(d.optString("number", number));
+        TextView title = line(c, name, 17, MainActivity.INK); title.setTypeface(Typeface.DEFAULT_BOLD); title.setSingleLine(true); title.setEllipsize(TextUtils.TruncateAt.END);
+        titles.addView(title);
+        titles.addView(line(c, answered ? "Call ended · talked " + talk(seconds) : "Missed call", 13, answered ? MainActivity.MUTED : MainActivity.RED));
+        head.addView(titles, new LinearLayout.LayoutParams(0, -2, 1));
+        TextView close = new TextView(c); close.setText("✕"); close.setTextSize(18); close.setTextColor(MainActivity.MUTED); close.setPadding(dp(c, 10), dp(c, 4), dp(c, 4), dp(c, 4));
+        close.setContentDescription("Close"); close.setOnClickListener(v -> dismiss());
+        head.addView(close);
+        box.addView(head);
+        LinearLayout actions = new LinearLayout(c); actions.setGravity(Gravity.END | Gravity.CENTER_VERTICAL); actions.setPadding(0, dp(c, 12), 0, 0);
+        if (found && own) actions.addView(plain(c, "Open lead", () -> open(c, new Intent(c, MainActivity.class).putExtra("openLeadId", d.optString("id")))));
+        else if (!found) actions.addView(plain(c, "Add as lead", () -> open(c, new Intent(c, MainActivity.class).putExtra("newLeadPhone", d.optString("number", number)))));
+        Button wa = action(c, "Send WhatsApp", () -> whatsApp(c, d.optString("number", number), found ? d.optString("name") : "", answered));
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-2, -2); p.setMarginStart(dp(c, 8));
+        actions.addView(wa, p);
+        box.addView(actions);
+        drag(outer);
+        new Handler(Looper.getMainLooper()).post(() -> {
+            Theme.load(c);
+            place(c, number, outer);
+            new Handler(Looper.getMainLooper()).postDelayed(() -> { if (current == outer) dismiss(); }, 120000);
+        });
+    }
+
+    // opens WhatsApp (or WhatsApp Business, the phone asks) on this number with a greeting the person can change before sending
+    private static void whatsApp(Context c, String number, String name, boolean answered) {
+        String digits = number.replaceAll("[^0-9]", "");
+        if (digits.length() == 10) digits = SecureConfig.prefs(c).getString("country", "91") + digits;
+        String me = "", company = "";
+        try { me = new JSONObject(SecureConfig.prefs(c).getString("user", "{}")).optString("name"); } catch (Exception ignored) {}
+        try { Object co = new JSONObject(SecureConfig.prefs(c).getString("workspace", "{}")).opt("company"); company = co instanceof JSONObject ? ((JSONObject) co).optString("name") : co == null ? "" : String.valueOf(co); } catch (Exception ignored) {}
+        String first = name.trim().isEmpty() ? "" : " " + name.trim().split("\\s+")[0];
+        String from = me.isEmpty() ? "" : ", this is " + me.trim().split("\\s+")[0] + (company.isEmpty() ? "" : " from " + company);
+        String text = answered ? "Hi" + first + from + ". Thank you for speaking with us. " : "Hi" + first + from + ". Sorry I missed your call. ";
+        dismiss();
+        try { c.startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://wa.me/" + digits + "?text=" + android.net.Uri.encode(text))).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); }
+        catch (Exception e) { Toast.makeText(c, "WhatsApp is not installed on this phone.", Toast.LENGTH_SHORT).show(); }
+    }
+    private static String talk(long s) { return s < 60 ? s + " s" : (s / 60) + " min " + (s % 60) + " s"; }
+    private static Button plain(Context c, String text, Runnable run) {
+        Button b = new Button(c); b.setText(text); b.setAllCaps(false); b.setTextColor(MainActivity.ACCENT); b.setTextSize(14);
+        GradientDrawable g = new GradientDrawable(); g.setColor(Color.WHITE); g.setStroke(dp(c, 1), MainActivity.ACCENT); g.setCornerRadius(dp(c, 10)); b.setBackground(g);
+        b.setPadding(dp(c, 14), 0, dp(c, 14), 0); b.setMinHeight(dp(c, 40)); b.setMinimumHeight(dp(c, 40));
+        b.setOnClickListener(v -> run.run());
+        return b;
     }
 
     private static View build(Context c, String number, JSONObject d) {
@@ -99,7 +166,20 @@ final class CallerCard {
         }
         if (found && own) {
             JSONObject last = d.optJSONObject("last"), next = d.optJSONObject("next");
-            if (last != null) box.addView(fact(c, "Last", last.optString("text") + " · " + ago(last.optString("at")) + (last.optString("by").isEmpty() ? "" : " · " + last.optString("by"))));
+            JSONObject call = d.optJSONObject("lastCall");
+            if (call != null) {
+                // when the last call was, and what was said in it (Call AI summary, TeleCRM Call IQ or a note after it)
+                long secs = call.optLong("seconds");
+                String how = join(" · ", ago(call.optString("at")), call.optString("direction"), secs > 0 ? talk(secs) : "not answered", call.optString("outcome"), call.optString("by"));
+                box.addView(fact(c, "Call", how));
+                if (!call.optString("spoken").isEmpty()) {
+                    View said = fact(c, "Said", call.optString("spoken"));
+                    TextView text = (TextView) ((LinearLayout) said).getChildAt(1); text.setMaxLines(4);
+                    box.addView(said);
+                    box.addView(line(c, "from " + call.optString("spokenFrom"), 11, MainActivity.MUTED));
+                }
+                if (last != null && !"Call".equals(last.optString("type"))) box.addView(fact(c, "Last", last.optString("text") + " · " + ago(last.optString("at"))));
+            } else if (last != null) box.addView(fact(c, "Last", last.optString("text") + " · " + ago(last.optString("at")) + (last.optString("by").isEmpty() ? "" : " · " + last.optString("by"))));
             if (next != null) box.addView(fact(c, "Next", next.optString("title") + " · " + when(next.optString("due"))));
             int calls = d.optInt("calls");
             if (d.has("calls")) {
@@ -187,17 +267,28 @@ final class CallerCard {
     }
 
     // closes with the call: watches the call state while shown (at most 10 minutes); without that permission, after 60 seconds
-    private static void watchCall(Context c, View view) {
+    // follows the call while it lasts (up to an hour): notes when it is answered, and when it ends shows the after-call card
+    // (even if the ringing card was closed). Without the phone-state permission the card just closes after a minute.
+    private static void watchCall(Context c, String number) {
+        watching = number;
         Handler h = new Handler(Looper.getMainLooper());
-        long until = System.currentTimeMillis() + 600000;
+        long until = System.currentTimeMillis() + 3600000;
         int[] idle = {0};
+        long[] answeredAt = {0};
         Runnable check = new Runnable() { public void run() {
-            if (current != view) return;
+            if (!number.equals(watching)) return;
             int state;
             try { state = c.getSystemService(TelephonyManager.class).getCallState(); }
-            catch (Exception e) { h.postDelayed(() -> { if (current == view) dismiss(); }, 60000); return; }
+            catch (Exception e) { watching = ""; h.postDelayed(() -> { if (number.equals(shownFor)) dismiss(); }, 60000); return; }
+            if (state == TelephonyManager.CALL_STATE_OFFHOOK && answeredAt[0] == 0) answeredAt[0] = System.currentTimeMillis();
             idle[0] = state == TelephonyManager.CALL_STATE_IDLE ? idle[0] + 1 : 0;
-            if (idle[0] >= 2 || System.currentTimeMillis() > until) { dismiss(); return; }
+            if (idle[0] >= 2 || System.currentTimeMillis() > until) {
+                watching = "";
+                boolean answered = answeredAt[0] > 0;
+                long seconds = answered ? Math.max(1, (System.currentTimeMillis() - answeredAt[0] - 3000) / 1000) : 0;
+                if (number.equals(lastNumber)) afterCall(c, number, lastCard, answered, seconds); else if (number.equals(shownFor)) dismiss();
+                return;
+            }
             h.postDelayed(this, 1500);
         } };
         h.postDelayed(check, 3000);

@@ -44,3 +44,16 @@ test("an unknown number gets its probable state; a blocked number says so", () =
   assert.equal(callerCard({ ...s, isBlocked: (k) => k === "919786000001" }, "9786000001", { id: "u1" }).blocked, true);
   assert.equal(callerCard(s, "12", { id: "u1" }).found, false);
 });
+
+test("the last call says what was spoken: Call AI first, else the Call IQ note near it", () => {
+  const s = setup();
+  s.db.prepare("INSERT INTO records VALUES('activities','a4',?)").run(JSON.stringify({ id: "a4", leadId: "l1", type: "Note", text: "Call IQ: Wants 2 machines, loan needed.\nNext: send quote", occurredAt: "2026-11-08T05:10:00Z" }));
+  const card = callerCard(s, "9840012345", { id: "u1" });
+  assert.deepEqual([card.lastCall.direction, card.lastCall.seconds, card.lastCall.by, card.lastCall.spokenFrom], ["Outgoing", 125, "Bala", "Call IQ"]);
+  assert.match(card.lastCall.spoken, /^Wants 2 machines/);
+  s.db.prepare("UPDATE records SET body=json_set(body,'$.recordingId','rec1') WHERE id='a1'").run();
+  const ai = callerCard({ ...s, spokenOf: (id) => (id === "rec1" ? { summary: "Asked for price of 10kg model.\nCustomer language: Tamil", transcript: "..." } : null) }, "9840012345", { id: "u1" });
+  assert.equal(ai.lastCall.spoken, "Asked for price of 10kg model.");
+  assert.equal(ai.lastCall.spokenFrom, "Call AI");
+  assert.equal(callerCard(s, "9840012345", { id: "u2" }).lastCall, undefined, "nothing about the call for a colleague's lead");
+});

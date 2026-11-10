@@ -258,7 +258,9 @@ export function createCallAI({db,keyPath,all,get,playback,fetcher=fetch,onLangua
     } finally {busy=false;}
   }
   const timer=setInterval(()=>void tick(),10000);timer.unref();
-  return {publicSettings,save,enqueue,tick,vaultList,saveKey,async models(input){
+  // the finished summary (or transcript) of one recording, for the caller card; the caller decides who may see it
+  const spokenOf=id=>{try{const j=readJob(id);return j.status==='complete'?{summary:j.summary||'',transcript:j.transcript||''}:null;}catch{return null;}};
+  return {publicSettings,save,enqueue,tick,vaultList,saveKey,spokenOf,async models(input){
     if(typeof input.key!=='undefined'&&(typeof input.key!=='string'||input.key.length>4096))fail('Invalid API key');
     const saved=settings()[input.part];
     return listModels({...input,key:input.keyId?resolveKey(input.keyId,input.provider):(input.key||(canonicalProvider(saved?.provider)===canonicalProvider(input.provider)?saved.key:''))},fetcher);
