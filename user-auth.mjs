@@ -114,6 +114,13 @@ export function createUserAuth({ db, getUser, now = () => Date.now() }) {
     failures.delete(name);
     return session(account, deviceId);
   }
+  // The company / workspace name people see in the top bar and on the sign-in session.
+  function setCompany(value) {
+    if (typeof value !== "string" || !value.trim() || value.trim().length > 120)
+      fail("Workspace name required (maximum 120 characters)");
+    db.prepare("INSERT INTO auth_settings VALUES('company',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(value.trim());
+    return { name: companyName() };
+  }
   // A session for someone who proved who they are another way (a WhatsApp code, Devi ERP). Only existing logins qualify.
   function sessionForUser(userId) {
     const account = typeof userId === "string" && db.prepare("SELECT * FROM auth_accounts WHERE user_id=?").get(userId);
@@ -205,6 +212,7 @@ export function createUserAuth({ db, getUser, now = () => Date.now() }) {
     createAccount,
     login,
     sessionForUser,
+    setCompany,
     authenticate,
     revoke,
     listAccounts,
