@@ -137,7 +137,12 @@ public class MainActivity extends Activity {
         TextView synced=Ui.text(this,at==0?"Not synced yet. Tap the sync button at the top.":"Last synced "+Ui.dayLabel(at).toLowerCase(Locale.ROOT)+" at "+Ui.clock(at),12,false,MUTED);synced.setPadding(dp(4),dp(8),0,0);content.addView(synced);
     }
     void login(){
-        LinearLayout banner=column();banner.setBackgroundColor(BAR);banner.setPadding(dp(26),dp(64),dp(26),dp(30));text(banner,"Salesdesk",40,true).setTextColor(BARACCENT);TextView tag=text(banner,"Calls, follow-ups and daily goals for the Devi Industries team.",15,false);tag.setTextColor(ONBAR);root.addView(banner);ScrollView scroll=new ScrollView(this);LinearLayout b=column();b.setPadding(dp(26),dp(24),dp(26),dp(24));scroll.addView(b);root.addView(scroll);
+        // the logo: the blue tile with the rising steps, a thin rule, then "Devi Industries" over "Salesdesk"
+        LinearLayout banner=column();banner.setBackgroundColor(Color.WHITE);banner.setPadding(dp(26),dp(56),dp(26),dp(28));
+        LinearLayout logo=horizontal();ImageView mark=glyph(R.drawable.ic_mark,Color.WHITE);mark.clearColorFilter();mark.setPadding(dp(14),dp(14),dp(14),dp(14));mark.setBackground(surface(ACCENT,16));logo.addView(mark,new LinearLayout.LayoutParams(dp(64),dp(64)));
+        View rule=new View(this);rule.setBackgroundColor(0xffb8b8c0);LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(dp(2),dp(52));rp.setMargins(dp(14),0,dp(14),0);logo.addView(rule,rp);
+        LinearLayout words=column();TextView company=Ui.text(this,"Devi Industries",17,true,INK);words.addView(company);TextView product=Ui.text(this,"Salesdesk",34,true,ACCENT);product.setTypeface(Typeface.create("sans-serif",Typeface.BOLD));product.setIncludeFontPadding(false);words.addView(product);logo.addView(words);banner.addView(logo);
+        TextView tag=Ui.text(this,"Calls, follow-ups and daily goals for the Devi Industries team.",15,false,MUTED);tag.setPadding(0,dp(18),0,0);banner.addView(tag);root.addView(banner);ScrollView scroll=new ScrollView(this);LinearLayout b=column();b.setPadding(dp(26),dp(24),dp(26),dp(24));scroll.addView(b);root.addView(scroll);
         text(b,"Sign in",26,true);
         caption(b,"Use the same username and password as web CRM. Your company connection is already configured — no IP address or server link needed.");
         EditText user=input(b,"Username",""),password=input(b,"Password","");user.setInputType(33);password.setInputType(129);

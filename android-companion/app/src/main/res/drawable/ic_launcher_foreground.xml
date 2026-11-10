@@ -1,0 +1,6 @@
+<!-- The app icon's mark, sized to stay inside the safe zone of every launcher mask (round, squircle, square). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#FFFFFFFF" android:pathData="M35,61.4 L45.4,61.4 L45.4,71.3 L35,71.3 Z"/>
+    <path android:fillColor="#FFFFFFFF" android:pathData="M43.4,47.8 L59,47.8 L59,63.4 L51.2,63.4 L51.2,55.6 L43.4,55.6 Z"/>
+    <path android:fillColor="#FFFFFFFF" android:pathData="M51.2,34 L73.6,34 L73.6,55.6 L66.3,55.6 L66.3,41.3 L51.2,41.3 Z"/>
+</vector>

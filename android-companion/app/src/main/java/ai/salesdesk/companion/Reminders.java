@@ -153,7 +153,7 @@ final class Reminders {
         int n = idOf(id);
         String body = t.optString("title") + (lead == null ? "" : joined(lead.optString("company"), lead.optString("city")));
         Notification.Builder b = new Notification.Builder(c, CHANNEL)
-            .setSmallIcon(R.drawable.ic_phone).setColor(MainActivity.ACCENT)
+            .setSmallIcon(R.drawable.ic_mark).setColor(MainActivity.ACCENT)
             .setContentTitle(name.isEmpty() ? t.optString("title") : "Call " + name)
             .setContentText(body).setStyle(new Notification.BigTextStyle().bigText(body))
             .setCategory(Notification.CATEGORY_REMINDER).setAutoCancel(true)
@@ -175,7 +175,7 @@ final class Reminders {
         }
         if (late.size() > 3) who.append(" and ").append(late.size() - 3).append(" more");
         String title = late.size() == 1 ? "1 follow-up is late" : late.size() + " follow-ups are late";
-        Notification.Builder b = new Notification.Builder(c, CHANNEL).setSmallIcon(R.drawable.ic_calendar_check).setColor(MainActivity.RED)
+        Notification.Builder b = new Notification.Builder(c, CHANNEL).setSmallIcon(R.drawable.ic_mark).setColor(MainActivity.RED)
             .setContentTitle(title).setContentText(who).setStyle(new Notification.BigTextStyle().bigText(who)).setAutoCancel(true)
             .setContentIntent(open(c, 4101, intent("openScreen", "To-do")));
         JSONObject first = lead(ws, late.get(0).optString("leadId"));
@@ -199,7 +199,7 @@ final class Reminders {
         String title = "Your day: " + today + (today == 1 ? " follow-up" : " follow-ups") + (fresh > 0 ? ", " + fresh + " new " + (fresh == 1 ? "lead" : "leads") : "");
         JSONObject fl = first == null ? null : lead(ws, first.optString("leadId"));
         String body = (fl == null ? "" : "First: " + fl.optString("name") + " at " + Ui.clock(Ui.ms(first.optString("due"))) + ". ") + (carried > 0 ? carried + " left over from before." : "");
-        Notification n = new Notification.Builder(c, CHANNEL).setSmallIcon(R.drawable.ic_calendar_check).setColor(MainActivity.ACCENT)
+        Notification n = new Notification.Builder(c, CHANNEL).setSmallIcon(R.drawable.ic_mark).setColor(MainActivity.ACCENT)
             .setContentTitle(title).setContentText(body).setAutoCancel(true)
             .setContentIntent(open(c, 4201, intent("openScreen", "My day"))).build();
         post(c, 4200, n);

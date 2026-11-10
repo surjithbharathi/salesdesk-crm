@@ -32,7 +32,7 @@ final class CallPrompts {
         NotificationManager manager=c.getSystemService(NotificationManager.class);manager.createNotificationChannel(new NotificationChannel("call-feedback","Post-call feedback",NotificationManager.IMPORTANCE_HIGH));
         PendingIntent open=PendingIntent.getActivity(c,id.hashCode(),intent,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
         if(android.os.Build.VERSION.SDK_INT<33||c.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)==android.content.pm.PackageManager.PERMISSION_GRANTED)
-            manager.notify(id.hashCode(),new Notification.Builder(c,"call-feedback").setSmallIcon(android.R.drawable.ic_menu_edit).setContentTitle("Add call feedback").setContentText("Tap to add a text or voice note in Salesdesk").setVisibility(Notification.VISIBILITY_PRIVATE).setContentIntent(open).setAutoCancel(true).build());
+            manager.notify(id.hashCode(),new Notification.Builder(c,"call-feedback").setSmallIcon(R.drawable.ic_mark).setContentTitle("Add call feedback").setContentText("Tap to add a text or voice note in Salesdesk").setVisibility(Notification.VISIBILITY_PRIVATE).setContentIntent(open).setAutoCancel(true).build());
         popup(c,"Call finished","Add a text or voice note for this call.",intent);
     }
 }
