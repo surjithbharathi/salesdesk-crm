@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { crmGet, crmState } from "./api.js";
 import { pipelineStep } from "./pipeline.js";
+import { PhoneDial } from "./PhoneDial.jsx";
 
 const CrmContext = createContext(null);
 export const useCrm = () => useContext(CrmContext);
@@ -57,7 +58,7 @@ export function CrmProvider({ me, children }) {
     for (const t of openTasks) if (t.leadId && (!nextDue.has(t.leadId) || t.due < nextDue.get(t.leadId))) nextDue.set(t.leadId, t.due);
     return { me, state, error, reload, leads, tasks, openTasks, users, leadById, nextDue, activities: state.activities || [], calls: state.mobileCalls || [], isOpen: open };
   }, [state, error, me, reload]);
-  return <CrmContext.Provider value={value}>{children}</CrmContext.Provider>;
+  return <CrmContext.Provider value={value}><PhoneDial />{children}</CrmContext.Provider>;
 }
 
 export const userName = (crm, id) => crm.users.get(id)?.name || "No owner";

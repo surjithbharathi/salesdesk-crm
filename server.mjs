@@ -527,6 +527,7 @@ const clickToCall = createClickToCall({
   db,
   getLead: (id) => get("leads", id),
   getDevice: (id) => mobile.devices().find((d) => d.id === id),
+  canCall: (userId, l) => l.owner === userId || !l.owner || get("users", userId)?.role === "admin" || (() => { try { return ["owner", "admin"].includes(workspaceAccess.profile(userId).role); } catch { return false; } })(),
 });
 function sessionToken(req) {
   return (

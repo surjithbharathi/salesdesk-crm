@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 const fail = (message, status = 400) => {
   throw Object.assign(new Error(message), { status });
 };
-export function createClickToCall({ db, getLead, getDevice, now = () => Date.now() }) {
+// canCall: a person may dial their own leads; the server also lets them dial unassigned leads, and administrators any lead
+export function createClickToCall({ db, getLead, getDevice, canCall = (userId, l) => l.owner === userId, now = () => Date.now() }) {
   db.exec(`CREATE TABLE IF NOT EXISTS call_receiver(device_id TEXT PRIMARY KEY,user_id TEXT NOT NULL,seen INTEGER NOT NULL,armed INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS call_commands(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,device_id TEXT NOT NULL,request_id TEXT NOT NULL,lead_id TEXT NOT NULL,phone TEXT NOT NULL,created INTEGER NOT NULL,expires INTEGER NOT NULL,status TEXT NOT NULL,UNIQUE(user_id,request_id));`);
   const expose = (r) => ({
@@ -20,7 +21,7 @@ export function createClickToCall({ db, getLead, getDevice, now = () => Date.now
   }
   function checkLead(userId, id) {
     const l = getLead(id);
-    if (!l || l.archived || l.owner !== userId) fail("Choose your assigned active lead", 403);
+    if (!l || l.archived || !canCall(userId, l)) fail("Choose your assigned active lead", 403);
     return l;
   }
   function expire() {

@@ -22,11 +22,20 @@ test("the phone gets working leads and recent work, with only the fields it show
     messages: [], conversations: [], tickets: [], documents: [{ id: "d" }],
   };
   const w = phoneWorkspace(st, now);
-  assert.deepEqual(w.leads.map((l) => l.id).sort(), ["closedTask", "open", "recentClosed"]);
+  assert.deepEqual(w.leads.map((l) => l.id).sort(), ["closedTask", "oldClosed", "open", "recentClosed"], "a closed lead worked in the last weeks stays too");
   assert.equal(w.leads.find((l) => l.id === "open").telecrm, undefined, "TeleCRM and Salesmax extras stay on the server");
-  assert.deepEqual(w.activities.map((a) => a.id), ["a1"], "recent work of kept leads only");
-  assert.equal(w.activities[0].text.length, 240);
+  assert.deepEqual(w.activities.map((a) => a.id), ["a3", "a1"], "recent work of kept leads only");
+  assert.equal(w.activities.find((a) => a.id === "a1").text.length, 240);
   assert.deepEqual(w.tasks.map((t) => t.id), ["t1"]);
   assert.deepEqual(w.mobileCalls.map((c) => c.id), ["c1"]);
   assert.deepEqual(w.documents, []);
+});
+
+test("a lead with a recent call reaches the phone even past the lead limit", () => {
+  const now = Date.parse("2026-11-10T10:00:00Z"), iso = (d) => new Date(now - d * 86400000).toISOString();
+  const leads = Array.from({ length: 4001 }, (_, i) => ({ id: "L" + i, name: "N" + i, stage: "New", updatedAt: iso(1) }));
+  leads.push({ id: "called", name: "Called", stage: "Closed", updatedAt: iso(300) });
+  const w = phoneWorkspace({ leads, activities: [], tasks: [], messages: [], mobileCalls: [{ id: "c", leadId: "called", startedAt: now - 3600000 }] }, now);
+  assert.equal(w.leads.length, 4000);
+  assert.ok(w.leads.some((l) => l.id === "called"));
 });

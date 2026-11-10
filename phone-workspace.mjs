@@ -6,8 +6,13 @@ const LEAD_FIELDS = ["id", "name", "phone", "countryCode", "mobileNumber", "phon
 export function phoneWorkspace(st, now = Date.now()) {
   const since = now - PHONE_DAYS * 86400000, recent = (iso) => Date.parse(iso || 0) >= since;
   const openTask = new Set((st.tasks || []).filter((t) => t.status !== "Done" && t.leadId).map((t) => t.leadId));
-  const leads = (st.leads || []).filter((l) => !l.archived && !l.mergedInto && (l.stage !== "Closed" || openTask.has(l.id) || Date.parse(l.updatedAt || 0) >= now - 60 * 86400000))
-    .sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || ""))).slice(0, PHONE_LEADS)
+  const callAt = (c) => c.createdAt || (c.startedAt ? new Date(c.startedAt).toISOString() : "");
+  // leads the person is working now come first, so a recent call or a follow-up always shows its lead's name on the phone
+  const working = new Set([...openTask,
+    ...(st.mobileCalls || []).filter((c) => c.leadId && recent(callAt(c))).map((c) => c.leadId),
+    ...(st.activities || []).filter((a) => a.leadId && recent(a.occurredAt || a.createdAt)).map((a) => a.leadId)]);
+  const leads = (st.leads || []).filter((l) => !l.archived && !l.mergedInto && (working.has(l.id) || l.stage !== "Closed" || Date.parse(l.updatedAt || 0) >= now - 60 * 86400000))
+    .sort((a, b) => (working.has(b.id) - working.has(a.id)) || String(b.updatedAt || "").localeCompare(String(a.updatedAt || ""))).slice(0, PHONE_LEADS)
     .map((l) => Object.fromEntries(LEAD_FIELDS.filter((k) => l[k] !== undefined && l[k] !== "").map((k) => [k, l[k]])));
   const kept = new Set(leads.map((l) => l.id));
   const activities = (st.activities || []).filter((a) => kept.has(a.leadId) && recent(a.occurredAt || a.createdAt))
@@ -16,7 +21,7 @@ export function phoneWorkspace(st, now = Date.now()) {
   return {
     ...st, leads, activities,
     tasks: (st.tasks || []).filter((t) => t.status !== "Done" || recent(t.updatedAt || t.due)),
-    mobileCalls: (st.mobileCalls || []).filter((c) => recent(c.createdAt || (c.startedAt ? new Date(c.startedAt).toISOString() : ""))),
+    mobileCalls: (st.mobileCalls || []).filter((c) => recent(callAt(c))),
     messages: (st.messages || []).filter((m) => kept.has(m.leadId) && recent(m.occurredAt || m.createdAt)),
     documents: [],
   };

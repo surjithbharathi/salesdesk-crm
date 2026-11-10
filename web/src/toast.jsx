@@ -9,7 +9,7 @@ export function ToastProvider({ children }) {
   const notify = useCallback((text) => {
     setMessage(text);
     clearTimeout(timer.current);
-    timer.current = setTimeout(() => setMessage(""), 2200);
+    timer.current = setTimeout(() => setMessage(""), String(text).length > 60 ? 6000 : 2200);
   }, []);
   return (
     <ToastContext.Provider value={notify}>
