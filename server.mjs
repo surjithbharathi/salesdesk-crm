@@ -486,10 +486,10 @@ const rawPut = (kind, v) => db.prepare("INSERT INTO records VALUES(?,?,?) ON CON
 const salesmaxImport = createSalesmaxImport({ db, get, put: rawPut, tx, users: () => all("users") });
 const telecrm = createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecording: (callId, bytes) => mobile.importRecording(callId, bytes), shareTwins: () => mobile.shareTwins(), keyPath: (process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname) + ".telecrm-key", log: (m) => console.error(m) });
 const waGateway = createWaGateway({ db, all, get, put, stamp, tx, log, systemUser: process.env.CRM_OWNER_USER_ID || "", keyPath: (process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname) + ".wagw-key" });
-const blocked = createBlockedNumbers(db);
-// Workflows: admins' "when this happens, do that" rules, checked every 30 seconds; WhatsApp goes out through the gateway
 // WhatsApp-code and Devi ERP sign-in, for people who already have a login
 const signin = createSigninMethods({ db, getUser: (id) => get("users", id), users: () => all("users"), userAuth, waGateway, checkUrl: publicHttps, publicOrigin, keyPath: (process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname) + ".signin-key", log: (event, detail) => console.log(JSON.stringify({ event, ...detail })) });
+const blocked = createBlockedNumbers(db);
+// Workflows: admins' "when this happens, do that" rules, checked every 30 seconds; WhatsApp goes out through the gateway
 const workflows = createWorkflows({ db, get, put, stamp, tx, log, users: () => all("users").filter((u) => u.active !== false), sendWhatsApp: (leadId, message) => waGateway.send(leadId, message, ""), gatewayOn: () => waGateway.settings().enabled, report: (m) => console.error(m) });
 // Removes a lead and everything recorded against it (calls and their recordings, notes, messages, chats, follow-ups, deals).
 // With block, its number is blocked first so no sync brings it back.
@@ -1032,12 +1032,12 @@ const server = http.createServer(async (req, res) => {
           configured: userAuth.configured(),
           user: identity?.user || null,
           company: identity?.company || "",
+          methods: userAuth.configured() ? signin.methods() : { otp: false, erp: false },
           ...(!userAuth.configured()
             ? {
                 users: all("users")
                   .filter((u) => u.active)
                   .map((u) => ({ id: u.id, name: u.name })),
-          methods: userAuth.configured() ? signin.methods() : { otp: false, erp: false },
               }
             : {}),
         });
@@ -1055,11 +1055,6 @@ const server = http.createServer(async (req, res) => {
         send(200, userAuth.resetPassword(await body(req)));
         return;
       }
-      if (!identity) bad("Login required", 401);
-      if (action === "logout" && req.method === "POST") {
-        sameOrigin();
-        userAuth.revoke(sessionToken(req));
-        cookie("");
       // sign in with a 6-digit code sent on WhatsApp
       if (action === "otp/start" && req.method === "POST") {
         sameOrigin();
@@ -1097,7 +1092,7 @@ const server = http.createServer(async (req, res) => {
         res.end();
         return;
       }
-        send(200, { ok: true });
+      if (!identity) bad("Login required", 401);
       if (action === "signin-settings") {
         if (identity.user.role !== "admin") bad("Administrator required", 403);
         workspaceAccess.requirePermission(identity, "users.manage");
@@ -1111,6 +1106,11 @@ const server = http.createServer(async (req, res) => {
           return;
         }
       }
+      if (action === "logout" && req.method === "POST") {
+        sameOrigin();
+        userAuth.revoke(sessionToken(req));
+        cookie("");
+        send(200, { ok: true });
         return;
       }
       if (action === "accounts") {
