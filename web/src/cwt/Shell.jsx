@@ -17,7 +17,7 @@ function navFor(owner) {
     { key: "search", label: "Search", icon: "search", link: "/search" },
     { key: "calls", label: "My Calls", icon: "calls", link: "/calls" },
     { key: "todo", label: "Follow Ups", icon: "alarm", link: "/todo" },
-    { key: "views", label: "Views", icon: "filter", link: "/leads" },
+    { key: "views", label: "Leads", icon: "filter", link: "/leads" },
     { key: "chat", label: "Messages", icon: "message", link: "/messages" },
     ...(owner ? [{ key: "reports", label: "Reports", icon: "chart", children: [{ label: "Leaderboard", icon: "trophy", link: "/reports?tab=leaderboard" }, { label: "Call Report", icon: "bars", link: "/reports?tab=calls" }, { label: "Report Download", icon: "download", link: "/reports?tab=download" }, { label: "Duplicate Leads", icon: "merge", link: "/reports?tab=duplicates" }, { label: "Deleted leads", icon: "trash", link: "/reports?tab=deleted" }, { label: "Team today", icon: "user", link: "/team" }, { label: "Daily goals", icon: "chart", link: "/goals" }] }] : []),
     { key: "settings", label: "Settings", icon: "gear", link: "/settings" },

@@ -115,3 +115,10 @@
 .cwt .mode { display: none; }
 .cwt .search { width: 100%; }
 }
+/* stage tabs with their lead counts; on a narrow screen they wrap instead of running off the page */
+.cwt .view-tabs { flex-wrap: wrap; height: auto; min-height: 46px; }
+.cwt .view-tabs .vt { height: 46px; }
+.cwt .vt-n { font-style: normal; font-size: 11px; font-weight: 600; min-width: 20px; padding: 1px 6px; border-radius: 10px; background: #f1f5f9; color: #64748b; text-align: center; }
+.cwt .vt.active .vt-n { background: #ede9fe; color: #4f38a2; }
+.cwt .menu .vt-n { margin-left: auto; }
+.cwt .menu button { display: flex; align-items: center; gap: 8px; }

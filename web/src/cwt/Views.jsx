@@ -13,11 +13,18 @@ import LeadPanel from "./LeadDetail.jsx";
 const STATUSES = ["New", ...PIPELINE.map((d) => d.name)];
 const statusOf = (l) => (l.stage === "New" ? "New" : pipelineStep(l) || "New");
 const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, "-");
-const QUEUE_VIEW = { "": "active", all: "all", new: "new", untouched: "untouched", unassigned: "unassigned", closed: "won" };
-const VIEWS = [
-  ["all", "All Leads"], ["mine", "My Leads"], ["active", "All Active Leads"], ["new", "New Leads"], ["untouched", "Untouched Leads"], ["unassigned", "No Owner"], ["report", "Status vs Assignee Report"], ["won", "Won Leads"],
+// The tabs are the pipeline stages, so the team sees at once how many leads stand where. The less used stages and the
+// work lists (my leads, no owner, the report) sit under "more". Old links (?view=won, ?view=new) still land on their stage.
+const stageView = (s) => "st-" + slug(s);
+const OLD_VIEW = { won: stageView("Won"), new: stageView("New") };
+const QUEUE_VIEW = { "": "all", all: "all", new: stageView("New"), untouched: "untouched", unassigned: "unassigned", closed: stageView("Won") };
+const MAIN_STAGES = ["New", "Interested Customer", "Requirement Discussion", "Quotation Shared", "Loan in Process", "Advance Received", "Won", "Lost"];
+const MAIN = [["all", "All Leads"], ...MAIN_STAGES.map((s) => [stageView(s), s])];
+const MORE = [
+  ...STATUSES.filter((s) => !MAIN_STAGES.includes(s)).map((s) => [stageView(s), s]),
+  ["mine", "My Leads"], ["active", "All Active Leads"], ["untouched", "Untouched Leads"], ["unassigned", "No Owner"], ["report", "Status vs Assignee Report"],
 ];
-const MAIN = VIEWS.slice(0, 7), MORE = VIEWS.slice(7);
+const STAGE_OF_VIEW = Object.fromEntries(STATUSES.map((s) => [stageView(s), s]));
 const ALL_COLS = [["status", "Status"], ["assignee", "Assignee"], ["created", "Created On"], ["phone", "Phone"], ["source", "Source"], ["value", "Deal Value"], ["next", "Next Follow-up"]];
 const readCols = () => { try { const s = localStorage.getItem("salesdesk-cwt-cols"); return new Set(s ? JSON.parse(s) : ["status", "assignee", "created"]); } catch { return new Set(["status", "assignee", "created"]); } };
 const ago = (t) => { const m = Math.floor((Date.now() - t) / 60000); if (m < 60) return m < 1 ? "just now" : `${m}m ago`; const h = Math.floor(m / 60); if (h < 24) return `${h}h ago`; const d = Math.floor(h / 24); return d < 30 ? `${d}d ago` : `${Math.floor(d / 30)}mo ago`; };
@@ -28,7 +35,7 @@ export default function Views({ params }) {
   const crm = useCrm();
   const notify = useToast();
   const { view: viewParam, queue = "", q: qParam = "", lead: openId = "" } = params;
-  const viewId = viewParam || QUEUE_VIEW[queue] || "active";
+  const viewId = OLD_VIEW[viewParam] || viewParam || QUEUE_VIEW[queue] || "all";
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [status, setStatus] = useState("");
   const [assignee, setAssignee] = useState("");
@@ -51,10 +58,10 @@ export default function Views({ params }) {
   const rows = useMemo(() => {
     if (!crm.state) return [];
     const needle = query.trim().toLowerCase(), digits = needle.replace(/\D/g, "");
-    const test = {
-      all: () => true, mine: (l) => l.owner === me, active: (l) => l.stage !== "Closed", new: (l) => l.stage === "New",
+    const stage = STAGE_OF_VIEW[viewId];
+    const test = stage ? (l) => statusOf(l) === stage : {
+      all: () => true, mine: (l) => l.owner === me, active: (l) => l.stage !== "Closed",
       untouched: (l) => !l.firstTouchAt && l.stage !== "Closed", unassigned: (l) => !l.owner && l.stage !== "Closed", report: () => true,
-      won: (l) => l.stage === "Closed" && l.disposition === "Won",
     }[viewId] || (() => true);
     const list = crm.leads.filter((l) => !l.archived && test(l) && (!status || statusOf(l) === status) && (!assignee || nameOf(l.owner) === assignee) && (!source || l.source === source)
       && (!needle || (by === "name" ? `${l.name} ${l.company || ""}`.toLowerCase().includes(needle) : by === "email" ? String(l.email || "").toLowerCase().includes(needle) : digits.length > 1 && String(l.phone || "").replace(/\D/g, "").includes(digits))));
@@ -65,6 +72,12 @@ export default function Views({ params }) {
     for (const l of crm.leads || []) { if (l.archived) continue; const name = nameOf(l.owner) || "No owner"; const r = map.get(name) || { name, c: Object.fromEntries([...STATUSES.map((s) => [s, 0]), ["total", 0]]) }; r.c[statusOf(l)]++; r.c.total++; map.set(name, r); }
     return [...map.values()].sort((a, b) => b.c.total - a.c.total);
   }, [crm.leads, crm.users]);
+  // how many leads each tab holds
+  const counts = useMemo(() => {
+    const c = { all: 0 };
+    for (const l of crm.leads || []) { if (l.archived) continue; c.all++; const v = stageView(statusOf(l)); c[v] = (c[v] || 0) + 1; }
+    return c;
+  }, [crm.leads]);
   const sources = useMemo(() => [...new Set((crm.leads || []).map((l) => l.source).filter(Boolean))].sort(), [crm.leads]);
   const team = crm.me?.users?.filter((u) => u.active !== false) || [];
   if (!crm.state) return <p className="muted">{crm.error || "Loading leads…"}</p>;
@@ -100,12 +113,12 @@ export default function Views({ params }) {
   return (
     <div className="cwt-views">
       <div className="page">
-        <h1>All Views</h1>
+        <h1>Leads</h1>
         <div className="view-tabs">
-          {MAIN.map(([id, label]) => <button key={id} type="button" className={`vt ${viewId === id ? "active" : ""}`} onClick={() => pick(id)}><TIcon name="addUser" />{label}{viewId === id && id === "all" && <span className="dots">⋯</span>}</button>)}
+          {MAIN.map(([id, label]) => <button key={id} type="button" className={`vt ${viewId === id ? "active" : ""}`} onClick={() => pick(id)}>{label}<em className="vt-n">{(counts[id] || 0).toLocaleString("en-IN")}</em></button>)}
           <div className="drop">
-            <button type="button" className={`more ${viewId === "won" ? "on" : ""}`} onClick={() => setMenu(menu === "more" ? "" : "more")}>+{MORE.length} more <TIcon name="chevronDown" /></button>
-            {menu === "more" && <div className="menu" onMouseLeave={() => setMenu("")}>{MORE.map(([id, label]) => <button key={id} type="button" className={viewId === id ? "on" : ""} onClick={() => pick(id)}>{label}</button>)}</div>}
+            <button type="button" className={`more ${MORE.some(([id]) => id === viewId) ? "on" : ""}`} onClick={() => setMenu(menu === "more" ? "" : "more")}>{MORE.find(([id]) => id === viewId)?.[1] || `+${MORE.length} more`} <TIcon name="chevronDown" /></button>
+            {menu === "more" && <div className="menu" onMouseLeave={() => setMenu("")}>{MORE.map(([id, label]) => <button key={id} type="button" className={viewId === id ? "on" : ""} onClick={() => pick(id)}>{label}{counts[id] !== undefined && <em className="vt-n">{counts[id].toLocaleString("en-IN")}</em>}</button>)}</div>}
           </div>
           <span className="grow" />
           <div className="mode">
