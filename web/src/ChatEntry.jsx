@@ -28,6 +28,9 @@ export function fromActivity(a, { by = "", at = "", recordingId = "", customer =
     return { id: a.id, kind: "call", customer, badge, out: dir === "Outgoing", dir, secs, text: a.text, outcome: a.outcome, by, at, recordingPending, recordingId: recordingId || a.recordingId || "" };
   }
   if (type === "Message") return { id: a.id, kind: "message", customer, badge, out: a.direction === "Outgoing", text: a.text, sender: a.sender, via: a.via, label: a.numberLabel, by, at };
+  // the call itself is already on the timeline; these raw phone-system records become one short label
+  const phoneEvent = superfoneOf(a.text) || callStatusOf(a.text);
+  if (phoneEvent) return { id: a.id, kind: "system", text: phoneEvent, at };
   if (type === "System") {
     const arrived = unrepeated(leadArrivedOf(a.text), said);
     return arrived ? { id: a.id, kind: "buylead", customer, badge, out: false, lead: arrived, by, at } : { id: a.id, kind: "system", text: a.text, at };
@@ -35,6 +38,30 @@ export function fromActivity(a, { by = "", at = "", recordingId = "", customer =
   const lead = buyLeadOf(a);
   if (lead) return { id: a.id, kind: "buylead", customer, badge, out: false, lead, by, at };
   return { id: a.id, kind: type === "Visit" ? "visit" : "note", customer, badge, out: true, text: a.text, by, at, voiceNoteId: a.voiceNoteId, type };
+}
+
+// The Superfone office phone posts each call to TeleCRM as a raw webhook, which TeleCRM keeps as a note:
+// `ACTION_1005: {"body_event":"CDR_RECORDING_AVAILABLE","body_cdr call type":"INBOUND","body_cdr disposition":"ANSWER",
+// "body_staff first name":"Priya","superfone_duration seconds":24,"superfone_recording_url":"https://…(expires in 7 days)"…}`.
+// The text can be cut short, so each field is read on its own. The recording link has long expired, so it is not shown.
+const SF_STATUS = { ANSWER: "answered", ANSWERED: "answered", ACTIVE: "ringing", NOANSWER: "not answered", NO_ANSWER: "not answered", BUSY: "busy", CANCEL: "cancelled", CANCELLED: "cancelled", FAILED: "failed", MISSED: "missed", CONGESTION: "network busy", CHANUNAVAIL: "not reachable" };
+export function superfoneOf(text) {
+  const t = String(text || "");
+  if (!/^ACTION_\d+:\s*\{/.test(t) || !/"body_event"\s*:/.test(t)) return "";
+  const field = (k) => { const m = new RegExp(`"${k}"\\s*:\\s*(?:"((?:[^"\\\\]|\\\\.)*)"|(-?\\d+(?:\\.\\d+)?))`).exec(t); return m ? (m[1] ?? m[2]) : ""; };
+  const event = field("body_event"), dir = field("body_cdr call type"), status = field("body_cdr disposition"), staff = field("body_staff first name");
+  const secs = Number(field("superfone_duration seconds")) || 0;
+  if (/CUSTOMER_CREATE/i.test(event)) return "Superfone saved this number as a contact";
+  if (/^CDR/i.test(event)) {
+    const parts = [`${/OUT/i.test(dir) ? "Outgoing" : /IN/i.test(dir) ? "Incoming" : "A"} call`, SF_STATUS[status.toUpperCase()] || status.toLowerCase(), secs > 0 ? secondsText(secs) : "", staff];
+    return "Superfone · " + parts.filter(Boolean).join(" · ");
+  }
+  return "Superfone · " + event.replace(/_/g, " ").toLowerCase();
+}
+// A note that is only Superfone's status word for a call ("ANSWER", "ACTIVE") says nothing the call line does not
+export function callStatusOf(text) {
+  const t = String(text || "").trim();
+  return SF_STATUS[t] && t === t.toUpperCase() ? `Call ${SF_STATUS[t]}` : "";
 }
 
 // An IndiaMART enquiry (Buy-Lead, direct enquiry, call) that TeleCRM stored as a raw action like
