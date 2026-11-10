@@ -132,6 +132,7 @@ final class CallLogView {
         else if (!known) pill(actions, "Add as lead", () -> a.leadForm(phone));
         if (!recording.isEmpty()) pill(actions, "▶ Recording", () -> a.remotePlay(recording));
         else if (e.local && !r.optString("uri").isEmpty()) pill(actions, "▶ Recording", () -> a.play(Uri.parse(r.optString("uri")), false));
+        pill(actions, "Log outcome", () -> AfterCallSheet.open(a, lead, who, phone, r.optLong("duration", 0)));
         if (!remote.isEmpty()) pill(actions, "Feedback", () -> a.startActivity(new Intent(a, FeedbackActivity.class).putExtra("callId", remote).putExtra("userId", SecureConfig.prefs(a).getString("userId", ""))));
         pill(actions, "WhatsApp", () -> whatsApp(phone));
         box.addView(scroll);

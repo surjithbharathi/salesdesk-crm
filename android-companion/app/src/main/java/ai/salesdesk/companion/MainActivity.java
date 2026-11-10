@@ -64,11 +64,24 @@ public class MainActivity extends Activity {
     void fromCaller(Intent intent){
         if(intent==null||!SecureConfig.loggedIn(this))return;
         String open=intent.getStringExtra("openLeadId"),phone=intent.getStringExtra("newLeadPhone");
-        intent.removeExtra("openLeadId");intent.removeExtra("newLeadPhone");
+        String reminder=intent.getStringExtra("reminderTask"),callTask=intent.getStringExtra("callTask"),go=intent.getStringExtra("openScreen"),logNumber=intent.getStringExtra("logCallNumber");
+        String logLead=intent.getStringExtra("logCallLead"),logName=intent.getStringExtra("logCallName");long logSeconds=intent.getLongExtra("logCallSeconds",-1);
+        for(String k:new String[]{"openLeadId","newLeadPhone","reminderTask","callTask","openScreen","logCallNumber","logCallLead","logCallName","logCallSeconds"})intent.removeExtra(k);
         if(open!=null){JSONObject known=null;for(int i=0;i<rows("leads").length();i++){JSONObject l=rows("leads").optJSONObject(i);if(l!=null&&open.equals(l.optString("id")))known=l;}LeadScreen.open(this,open,known);}
         else if(phone!=null)leadForm(phone);
+        else if(reminder!=null){getSystemService(NotificationManager.class).cancel(Reminders.idOf(reminder));Reminders.showDue(this,reminder);}
+        else if(callTask!=null){getSystemService(NotificationManager.class).cancel(Reminders.idOf(callTask));for(JSONObject t:MyDayView.openTasks(this))if(t.optString("id").equals(callTask)){JSONObject l=MyDayView.leadsById(this).get(t.optString("leadId"));if(l!=null)Ui.dial(this,l.optString("phone"));}}
+        else if(go!=null){screen=go;if(go.equals("To-do"))TodoView.tab="followups";render();}
+        else if(logNumber!=null)AfterCallSheet.open(this,logLead,logName==null||logName.isEmpty()?prettyNumber(logNumber):logName,logNumber,logSeconds);
     }
-    void applyBars(){getWindow().setStatusBarColor(BAR);getWindow().setNavigationBarColor(BAR);getWindow().getDecorView().setSystemUiVisibility(LIGHTBARS?(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR):0);}
+    // reminders need the notification permission on Android 13 and later; asked once, after sign-in
+    void askNotifications(){
+        if(android.os.Build.VERSION.SDK_INT<33||!SecureConfig.loggedIn(this)||checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED)return;
+        if(callerOffered||SecureConfig.prefs(this).getBoolean("askedNotifications",false))return;
+        SecureConfig.prefs(this).edit().putBoolean("askedNotifications",true).apply();
+        requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},320);
+    }
+    void applyBars(){getWindow().setStatusBarColor(LIGHTBARS?BG:BAR);getWindow().setNavigationBarColor(BAR);getWindow().getDecorView().setSystemUiVisibility(LIGHTBARS?(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR):0);}
     GradientDrawable panelBg(){GradientDrawable g=surface(BAR,RADIUS+2);if(LIGHTBARS)g.setStroke(dp(1),LINE);return g;}
     /** Settings: choose the look. */
     void appearance(){
@@ -81,10 +94,47 @@ public class MainActivity extends Activity {
         }
     }
     void render(){applyBars();syncStatus=null;root=column();root.setBackgroundColor(BG);root.setOnApplyWindowInsetsListener((v,insets)->{if(android.os.Build.VERSION.SDK_INT>=30){android.graphics.Insets bars=insets.getInsets(WindowInsets.Type.systemBars());v.setPadding(bars.left,bars.top,bars.right,bars.bottom);}else v.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());return insets;});setContentView(root);root.requestApplyInsets();if(!SecureConfig.loggedIn(this)){login();return;}
-        LinearLayout bar=horizontal();bar.setBackgroundColor(BAR);bar.setPadding(dp(20),dp(10),dp(16),dp(12));LinearLayout heading=column();TextView brand=text(heading,"Salesdesk",12,true);brand.setTextColor(BARACCENT);text(heading,screen.equals("Dashboard")?"Overview":screen,26,true).setTextColor(ONBAR);bar.addView(heading,new LinearLayout.LayoutParams(0,-2,1));ImageButton refresh=new ImageButton(this);refresh.setImageResource(R.drawable.ic_refresh_cw);refresh.setColorFilter(BARACCENT);refresh.setPadding(dp(13),dp(13),dp(13),dp(13));refresh.setContentDescription("Refresh workspace");refresh.setBackground(surface(BARCHIP,12));bar.addView(refresh,new LinearLayout.LayoutParams(dp(48),dp(48)));refresh.setOnClickListener(v->refresh());ImageButton preferences=new ImageButton(this);preferences.setImageResource(R.drawable.ic_settings_2);preferences.setContentDescription("Workspace menu");preferences.setColorFilter(BARACCENT);preferences.setBackground(surface(BARCHIP,12));bar.addView(preferences,new LinearLayout.LayoutParams(dp(48),dp(48)));preferences.setOnClickListener(this::workspaceMenu);root.addView(bar);
-        ScrollView scroll=new ScrollView(this);scroll.setClipToPadding(false);scroll.setVerticalScrollBarEnabled(false);content=column();content.setPadding(dp(18),dp(6),dp(18),dp(18));scroll.addView(content);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-        if(screen.equals("My day"))myDay();else if(screen.equals("Dashboard"))home();else if(screen.equals("Leads"))leads();else if(screen.equals("Tickets"))tickets();else if(screen.equals("Users"))workspaceUsers();else if(screen.equals("To-do"))tasks();else if(screen.equals("Activity"))activity();else if(screen.equals("Calls"))calls();else if(screen.equals("Advanced"))advancedPreferences();else settings();
-        LinearLayout nav=horizontal();nav.setPadding(dp(8),dp(8),dp(8),dp(6));nav.setBackgroundColor(BAR);String[] names={"My day","Leads","Calls","To-do","Activity"};int[] icons={R.drawable.ic_house,R.drawable.ic_users_round,R.drawable.ic_phone,R.drawable.ic_calendar_check,R.drawable.ic_refresh_cw};for(int i=0;i<names.length;i++){final String target=names[i];boolean selected=screen.equals(target);LinearLayout item=column();item.setGravity(Gravity.CENTER);item.setPadding(0,dp(7),0,dp(3));item.setContentDescription(target);item.setSelected(selected);item.setFocusable(true);item.setMinimumHeight(dp(56));ImageView icon=glyph(icons[i],selected?BARACCENT:BARMUTED);icon.setPadding(dp(10),dp(5),dp(10),dp(5));if(selected)icon.setBackground(surface(BARCHIP,12));item.addView(icon,new LinearLayout.LayoutParams(dp(46),dp(32)));text(item,target,10,selected).setTextColor(selected?BARACCENT:BARMUTED);nav.addView(item,new LinearLayout.LayoutParams(0,-2,1));item.setOnClickListener(v->{screen=target;render();});}root.addView(nav);
+        // the top bar: a large title on white (My day shows the date over a greeting) and one round refresh button
+        LinearLayout bar=horizontal();bar.setBackgroundColor(BG);bar.setPadding(dp(18),dp(14),dp(14),dp(6));LinearLayout heading=column();
+        String[] title=titleFor(screen);
+        if(!title[0].isEmpty()){TextView over=Ui.text(this,title[0],13,false,MUTED);heading.addView(over);}
+        TextView big=Ui.text(this,title[1],24,true,INK);big.setTypeface(Typeface.create("sans-serif",Typeface.BOLD));big.setLetterSpacing(-0.01f);heading.addView(big);
+        bar.addView(heading,new LinearLayout.LayoutParams(0,-2,1));
+        ImageButton refresh=new ImageButton(this);refresh.setImageResource(R.drawable.ic_refresh_cw);refresh.setColorFilter(ACCENT);refresh.setPadding(dp(12),dp(12),dp(12),dp(12));refresh.setContentDescription("Sync now");GradientDrawable rb=surface(Color.WHITE,22);rb.setStroke(dp(1),LINE);refresh.setBackground(rb);bar.addView(refresh,new LinearLayout.LayoutParams(dp(44),dp(44)));refresh.setOnClickListener(v->refresh());root.addView(bar);
+        overlay=new FrameLayout(this);
+        ScrollView scroll=new ScrollView(this);scroll.setClipToPadding(false);scroll.setVerticalScrollBarEnabled(false);content=column();content.setPadding(dp(16),dp(4),dp(16),dp(24));scroll.addView(content);overlay.addView(scroll,new FrameLayout.LayoutParams(-1,-1));root.addView(overlay,new LinearLayout.LayoutParams(-1,0,1));
+        if(screen.equals("My day"))MyDayView.draw(this);else if(screen.equals("Dashboard"))home();else if(screen.equals("Leads"))LeadsView.draw(this);else if(screen.equals("Tickets"))tickets();else if(screen.equals("Users"))workspaceUsers();else if(screen.equals("To-do"))TodoView.draw(this);else if(screen.equals("Activity"))activity();else if(screen.equals("Calls"))calls();else if(screen.equals("More"))more();else if(screen.equals("Advanced"))advancedPreferences();else settings();
+        // the bottom bar: white, a soft pill behind the open tab; More holds everything that is not a daily screen
+        LinearLayout nav=horizontal();nav.setPadding(dp(4),dp(6),dp(4),dp(8));nav.setBackgroundColor(Color.WHITE);View top=new View(this);top.setBackgroundColor(LINE);root.addView(top,new LinearLayout.LayoutParams(-1,1));
+        String[] names={"My day","Leads","Calls","To-do","More"};int[] icons={R.drawable.ic_house,R.drawable.ic_users_round,R.drawable.ic_phone,R.drawable.ic_calendar_check,R.drawable.ic_more};
+        boolean daily=Arrays.asList("My day","Leads","Calls","To-do").contains(screen);
+        for(int i=0;i<names.length;i++){final String target=names[i];boolean selected=target.equals("More")?!daily:screen.equals(target);LinearLayout item=column();item.setGravity(Gravity.CENTER);item.setPadding(0,dp(4),0,dp(2));item.setContentDescription(target);item.setSelected(selected);item.setFocusable(true);item.setMinimumHeight(dp(56));ImageView icon=glyph(icons[i],selected?ACCENT:MUTED);icon.setPadding(dp(16),dp(5),dp(16),dp(5));if(selected)icon.setBackground(surface(SOFT,15));item.addView(icon,new LinearLayout.LayoutParams(dp(60),dp(32)));TextView label=Ui.text(this,target,11,selected,selected?ACCENT:MUTED);label.setPadding(0,dp(3),0,0);item.addView(label);nav.addView(item,new LinearLayout.LayoutParams(0,-2,1));item.setOnClickListener(v->{screen=target;render();});}root.addView(nav);
+    }
+    FrameLayout overlay;
+    // the title over each screen: My day greets the person under today's date
+    String[] titleFor(String s){
+        if(s.equals("My day")){JSONObject user=workspace.optJSONObject("user");String name=user==null?"":user.optString("name","").split(" ")[0];int hour=Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
+            return new String[]{new java.text.SimpleDateFormat("EEEE, d MMMM",Locale.ENGLISH).format(new Date()),(hour<12?"Good morning":hour<17?"Good afternoon":"Good evening")+(name.isEmpty()?"":", "+name)};}
+        if(s.equals("Dashboard"))return new String[]{"","Overview"};
+        if(s.equals("Preferences"))return new String[]{"","Settings"};
+        return new String[]{"",s};
+    }
+    /** More: everything that is not a daily screen. */
+    void more(){
+        LinearLayout g=Ui.group(this,content);
+        String[][] items={{"Activity","Everything your team logged, newest first"},{"Dashboard","Pipeline, work plan and recent updates"},{"Preferences","Calls, recordings, popups, look"},{"Tickets","Support tickets assigned to you"},{"Users","Who can sign in"}};
+        boolean first=true;
+        for(String[] it:items){
+            if(it[0].equals("Tickets")&&rows("tickets").length()==0)continue;
+            if(it[0].equals("Users")&&!workspaceAdmin())continue;
+            if(!first)Ui.hairline(this,g,16);first=false;
+            LinearLayout row=Ui.row(this,g,null,it[0].equals("Dashboard")?"Overview":it[0].equals("Preferences")?"Settings":it[0],it[1],INK,MUTED);
+            row.setPadding(dp(16),dp(12),dp(12),dp(12));
+            TextView go=Ui.text(this,"›",22,false,MUTED);row.addView(go);
+            row.setFocusable(true);row.setOnClickListener(v->{screen=it[0];render();});
+        }
+        long at=SecureConfig.prefs(this).getLong("workspaceAt",0);
+        TextView synced=Ui.text(this,at==0?"Not synced yet. Tap the sync button at the top.":"Last synced "+Ui.dayLabel(at).toLowerCase(Locale.ROOT)+" at "+Ui.clock(at),12,false,MUTED);synced.setPadding(dp(4),dp(8),0,0);content.addView(synced);
     }
     void login(){
         LinearLayout banner=column();banner.setBackgroundColor(BAR);banner.setPadding(dp(26),dp(64),dp(26),dp(30));text(banner,"Salesdesk",40,true).setTextColor(BARACCENT);TextView tag=text(banner,"Calls, follow-ups and daily goals for the Devi Industries team.",15,false);tag.setTextColor(ONBAR);root.addView(banner);ScrollView scroll=new ScrollView(this);LinearLayout b=column();b.setPadding(dp(26),dp(24),dp(26),dp(24));scroll.addView(b);root.addView(scroll);
@@ -98,7 +148,7 @@ public class MainActivity extends Activity {
         });caption(b,"Password is never saved. Business call sync and background calling stay off until you enable them in Settings.");
     }
     void refresh(){work(()->{try{loadWorkspace();}catch(Exception e){failure(e);}});}
-    void loadWorkspace()throws Exception{try{JSONObject policy=SyncEngine.requestApi(this,"/v1/tracking-preferences","GET",null);SecureConfig.prefs(this).edit().putString("trackingPolicy",policy.toString()).commit();}catch(SyncEngine.HttpError e){if(e.code!=404)throw e;}JSONObject d=SyncEngine.requestApi(this,"/v1/workspace","GET",null);SecureConfig.prefs(this).edit().putString("workspace",d.toString()).putLong("workspaceAt",System.currentTimeMillis()).commit();workspace=d;loadKpi();runOnUiThread(this::render);runOnUiThread(this::offerCaller);}
+    void loadWorkspace()throws Exception{try{JSONObject policy=SyncEngine.requestApi(this,"/v1/tracking-preferences","GET",null);SecureConfig.prefs(this).edit().putString("trackingPolicy",policy.toString()).commit();}catch(SyncEngine.HttpError e){if(e.code!=404)throw e;}JSONObject d=SyncEngine.requestApi(this,"/v1/workspace","GET",null);SecureConfig.prefs(this).edit().putString("workspace",d.toString()).putLong("workspaceAt",System.currentTimeMillis()).commit();workspace=d;loadKpi();Reminders.schedule(this);runOnUiThread(this::render);runOnUiThread(this::offerCaller);runOnUiThread(this::askNotifications);}
     // Right after sign-in the app offers the caller popup once, so it works on the next call without digging in settings.
     // Android itself asks the person to allow the caller ID role and showing over other apps; the app cannot grant them.
     boolean callerOffered;
@@ -187,19 +237,12 @@ public class MainActivity extends Activity {
     }
     int earnedCount(JSONArray items){int n=0;for(int i=0;i<items.length();i++)if(items.optJSONObject(i)!=null&&items.optJSONObject(i).optBoolean("earned"))n++;return n;}
     /** Level, next call, goal rings, team goal, challenges, badges, milestones, leaderboard and the stars of the week. */
-    void myDay(){
-        JSONObject d;
-        try{d=new JSONObject(SecureConfig.prefs(this).getString("kpiDay","{}"));}catch(Exception e){d=new JSONObject();}
+    /** Below My day's cards: level and streak, today's goal rings, challenges, badges, milestones and the leaderboard. */
+    void progress(JSONObject d){
         JSONObject goal=d.optJSONObject("goal"),today=d.optJSONObject("today");
-        JSONObject user=workspace.optJSONObject("user");
-        String name=user==null?"":user.optString("name","").split(" ")[0];
-        int hour=java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY);
-        LinearLayout hero=card();hero.setBackground(panelBg());
-        text(hero,(hour<12?"Good morning":hour<17?"Good afternoon":"Good evening")+(name.isEmpty()?"":", "+name),24,true).setTextColor(ONBAR);
-        if(goal==null||today==null){
-            lightCaption(hero,"Your goals and points appear here once the CRM answers. Use the refresh button at the top.");
-            return;
-        }
+        if(goal==null||today==null){TextView t=Ui.text(this,"Goals and points show here once the CRM answers. Tap the sync button at the top.",13,false,MUTED);t.setPadding(dp(4),dp(16),0,0);content.addView(t);return;}
+        section("Your progress",today.optInt("points")+" points today");
+        LinearLayout hero=card();
         JSONObject level=d.optJSONObject("level");
         if(level!=null){
             LinearLayout row=horizontal();
@@ -220,26 +263,10 @@ public class MainActivity extends Activity {
         if(week!=null&&week.optInt("rank")>0)standing.append(" · #").append(week.optInt("rank")).append(" of ").append(week.optInt("of")).append(" this week");
         if(month!=null&&month.optInt("rank")>0)standing.append(" · #").append(month.optInt("rank")).append(" this month");
         lightCaption(hero,standing.toString());
-        int late=d.optInt("lateLeft");
-        if(late>0){TextView t=text(hero,late+(late==1?" follow-up is late":" follow-ups are late"),14,true);t.setTextColor(PANELBAD);}
+        int left=goal.optInt("calls")-today.optInt("calls");
+        lightCaption(hero,today.optInt("calls")==0?"Your first call starts the day.":left>0?left+(left==1?" call":" calls")+" to reach today's goal.":"Goal reached. Every extra call still scores.");
 
-        JSONObject next=d.optJSONObject("next");
-        LinearLayout nextCard=card();
-        if(next!=null){
-            GradientDrawable edge=surface(Color.WHITE,10);edge.setStroke(dp(2),next.optString("reason").contains("late")?RED:ACCENT);nextCard.setBackground(edge);
-            TextView reason=text(nextCard,next.optString("reason"),12,true);reason.setTextColor(RED);
-            text(nextCard,next.optString("name"),20,true);
-            caption(nextCard,joined(next.optString("company"),joined(next.optString("city"),next.optString("product"))));
-            final String phone=next.optString("phone");
-            if(!phone.isEmpty())primary(nextCard,"Call "+phone,()->startActivity(new Intent(Intent.ACTION_DIAL,Uri.fromParts("tel",phone,null))));
-            int left=goal.optInt("calls")-today.optInt("calls");
-            caption(nextCard,today.optInt("calls")==0?"Your first call starts the day.":left>0?left+(left==1?" call":" calls")+" to reach today's goal.":"Goal reached. Every extra call still scores.");
-        }else{
-            text(nextCard,"You are all caught up",18,true);
-            caption(nextCard,"No late follow-ups and no uncalled leads. New enquiries will appear here.");
-        }
-
-        section("Today's goals",today.optInt("points")+" points");
+        section("Today's goals","");
         LinearLayout rings=card();rings.setBackground(panelBg());rings.setTag("dark");LinearLayout ringRow=horizontal();
         String[] labels={"Calls","Answered","Quotations"};String[] keys={"calls","answered","quotations"};
         for(int i=0;i<3;i++){
@@ -336,7 +363,6 @@ public class MainActivity extends Activity {
         try{return java.time.Instant.parse(activity.optString("createdAt",activity.optString("date"))).toEpochMilli();}
         catch(java.time.DateTimeException ignored){return 0;}
     }
-    JSONObject latestActivity(String id){List<JSONObject> items=leadActivities(id);return items.isEmpty()?null:items.get(0);}
     void leadTimeline(LinearLayout parent,String id){
         text(parent,"Activity timeline",17,true);
         List<JSONObject> items=leadActivities(id);
@@ -388,14 +414,11 @@ public class MainActivity extends Activity {
     interface Payload{JSONObject get()throws Exception;}
     void playVoiceFeedback(String id){work(()->{try{java.io.File audio=SyncEngine.audio(this,id,true);runOnUiThread(()->play(Uri.fromFile(audio),true));}catch(Exception e){failure(e);}});}
     void mutate(String path,String method,Payload payload){work(()->{try{SyncEngine.requestApi(this,path,method,payload.get());loadWorkspace();}catch(Exception e){if(path.startsWith("/v1/leads")&&e instanceof SyncEngine.HttpError&&((SyncEngine.HttpError)e).code==409)runOnUiThread(()->notice("A lead with this mobile number already exists in your workspace. Search for it or ask your administrator."));else failure(e);}});}
-    void leads(){LinearLayout tools=card();EditText query=input(tools,"Search your leads",search);query.setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_search,0,0,0);query.setCompoundDrawablePadding(dp(10));query.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH);Runnable apply=()->{search=query.getText().toString().trim();((android.view.inputmethod.InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(query.getWindowToken(),0);render();};query.setOnEditorActionListener((v,action,event)->{if(action==android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH){apply.run();return true;}return false;});pair(tools,"Search",apply,"+ Add lead",this::leadForm);button(tools,leadsToday?"Show all my leads":"Show today’s new leads",()->{leadsToday=!leadsToday;render();});section("My leads",rows("leads").length()+" assigned · "+todayLeads()+" new today");int shown=0;for(int i=0;i<rows("leads").length();i++){JSONObject l=rows("leads").optJSONObject(i);if(l==null||(leadsToday&&!isToday(l.optString("createdAt"))))continue;if(!l.toString().toLowerCase(Locale.ROOT).contains(search.toLowerCase(Locale.ROOT)))continue;shown++;LinearLayout c=card();identity(c,l.optString("name"),l.optString("company").isEmpty()?displayPhone(l):l.optString("company"),R.drawable.ic_users_round);if(!l.optString("company").isEmpty())caption(c,displayPhone(l));badge(c,l.optString("stage","New"));if(!l.optString("source").isEmpty())caption(c,"Source · "+l.optString("source"));JSONObject last=latestActivity(l.optString("id"));if(last!=null)caption(c,last.optString("type","Activity")+" · "+dateLabel(last.optString("createdAt",last.optString("date"))));c.setFocusable(true);c.setContentDescription("Open lead "+l.optString("name"));c.setOnClickListener(v->leadDetail(l));}if(shown==0){LinearLayout empty=card();identity(empty,"No matching leads","Try a different name or phone number.",R.drawable.ic_search);}}
     String displayPhone(JSONObject lead){return lead.optString("countryCode").isEmpty()?lead.optString("phone"):"+"+lead.optString("countryCode")+" · "+lead.optString("mobileNumber");}
     void leadForm(){leadForm("");}
     // the caller card's "Add as lead" opens this with the caller's number already in
     void leadForm(String number){String digits=number==null?"":number.replaceAll("[^0-9]","");String cc="+91",mobile=digits;if(digits.length()==12&&digits.startsWith("91")){mobile=digits.substring(2);}else if(digits.length()>10){cc="+"+digits.substring(0,digits.length()-10);mobile=digits.substring(digits.length()-10);}
         LinearLayout b=column();b.setPadding(dp(20),0,dp(20),0);EditText name=input(b,"Name",""),code=input(b,"Country code",cc),phone=input(b,"Mobile number",mobile),company=input(b,"Company","");code.setInputType(3);phone.setInputType(3);new AlertDialog.Builder(this).setTitle("New lead").setView(dialogBody(b)).setNegativeButton("Cancel",null).setPositiveButton("Save",(d,w)->mutate("/v1/leads","POST",()->new JSONObject().put("name",name.getText().toString()).put("countryCode",code.getText().toString()).put("mobileNumber",phone.getText().toString()).put("company",company.getText().toString()))).show();}
-    void leadDetail(JSONObject l){LeadScreen.open(this,l.optString("id"),l);}
-    void tasks(){LinearLayout tools=card();identity(tools,"Keep the next step clear",rows("tasks").length()+" assigned tasks",R.drawable.ic_calendar_check);primary(tools,"+ Add task",this::taskForm);button(tools,tasksToday?"Show all tasks":"Show today’s tasks",()->{tasksToday=!tasksToday;render();});section(tasksToday?"Today’s to-do":"All tasks","");int visibleTasks=0;for(int i=0;i<rows("tasks").length();i++){JSONObject item=rows("tasks").optJSONObject(i);if(item!=null&&(!tasksToday||(isToday(item.optString("due"))&&!"Done".equals(item.optString("status")))))visibleTasks++;}if(visibleTasks==0){LinearLayout empty=card();identity(empty,"A clear schedule","Create a follow-up for your next conversation.",R.drawable.ic_calendar_check);}for(int i=0;i<rows("tasks").length();i++){JSONObject t=rows("tasks").optJSONObject(i);if(t==null||(tasksToday&&(!isToday(t.optString("due"))||"Done".equals(t.optString("status")))))continue;LinearLayout c=card();badge(c,t.optString("status","Open"));text(c,t.optString("title"),16,true);caption(c,dateLabel(t.optString("due")));button(c,t.optString("status").equals("Done")?"Reopen task":"Mark as done",()->mutate("/v1/tasks/"+t.optString("id"),"PATCH",()->new JSONObject().put("status",t.optString("status").equals("Done")?"Open":"Done")));}}
     void taskForm(){LinearLayout b=column();b.setPadding(dp(20),0,dp(20),dp(12));EditText title=input(b,"Task title","");Calendar due=Calendar.getInstance();due.add(Calendar.DAY_OF_YEAR,1);due.set(Calendar.SECOND,0);due.set(Calendar.MILLISECOND,0);TextView summary=text(b,dateLabel(due.toInstant().toString()),14,true);button(b,"Choose due date and time",()->new DatePickerDialog(this,(picker,y,m,d)->{due.set(y,m,d);new TimePickerDialog(this,(clock,h,min)->{due.set(Calendar.HOUR_OF_DAY,h);due.set(Calendar.MINUTE,min);summary.setText(dateLabel(due.toInstant().toString()));},due.get(Calendar.HOUR_OF_DAY),due.get(Calendar.MINUTE),android.text.format.DateFormat.is24HourFormat(this)).show();},due.get(Calendar.YEAR),due.get(Calendar.MONTH),due.get(Calendar.DAY_OF_MONTH)).show());AlertDialog dialog=new AlertDialog.Builder(this).setTitle("New task").setView(dialogBody(b)).setNegativeButton("Cancel",null).setPositiveButton("Save",null).create();dialog.setOnShowListener(v->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(w->{String value=title.getText().toString().trim();if(value.isEmpty()){title.setError("Enter a task title");return;}mutate("/v1/tasks","POST",()->new JSONObject().put("title",value).put("due",due.toInstant().toString()));dialog.dismiss();}));dialog.show();}
     void calls(){HorizontalScrollView horizontal=new HorizontalScrollView(this);horizontal.setHorizontalScrollBarEnabled(false);LinearLayout tabs=new LinearLayout(this);for(String f:new String[]{"All","Incoming","Outgoing","Missed"}){Button b=new Button(this);b.setText(f);b.setTextSize(13);b.setAllCaps(false);b.setMinHeight(dp(36));b.setMinimumHeight(dp(36));b.setMinWidth(0);b.setMinimumWidth(0);b.setPadding(dp(16),0,dp(16),0);b.setTextColor(f.equals(filter)?ONACCENT:PURPLE);b.setBackgroundTintList(null);b.setBackground(surface(f.equals(filter)?ACCENT:SOFT,18));b.setSelected(f.equals(filter));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-2,dp(36));p.setMargins(0,0,dp(8),dp(4));tabs.addView(b,p);b.setOnClickListener(v->{filter=f;render();});}horizontal.addView(tabs);content.addView(horizontal);
         // one quiet line instead of a big button: what is shown, and a link to sync now
@@ -430,7 +453,6 @@ public class MainActivity extends Activity {
     }
     void settings(){new SimplePreferences(this).render();}
     boolean workspaceAdmin(){JSONObject user=workspace.optJSONObject("user");return user!=null&&"admin".equals(user.optString("role"));}
-    void workspaceMenu(View anchor){PopupMenu menu=new PopupMenu(this,anchor);menu.getMenu().add("Overview");menu.getMenu().add("Preferences");if(rows("tickets").length()>0)menu.getMenu().add("Tickets");if(workspaceAdmin())menu.getMenu().add("Users");menu.setOnMenuItemClickListener(item->{String picked=item.getTitle().toString();screen=picked.equals("Overview")?"Dashboard":picked;render();return true;});menu.show();}
     void tickets(){section("My tickets","Assigned to you");if(rows("tickets").length()==0){caption(card(),"No tickets assigned to you.");return;}for(int i=0;i<rows("tickets").length();i++){JSONObject ticket=rows("tickets").optJSONObject(i);if(ticket==null)continue;LinearLayout box=card();text(box,ticket.optString("subject",ticket.optString("title","Support ticket")),17,true);badge(box,ticket.optString("status","Open"));caption(box,ticket.optString("description"));}}
     void workspaceUsers(){if(!workspaceAdmin()){caption(card(),"Workspace administrator access required.");return;}caption(content,"Workspace users · view only");button(content,"Load users",()->work(()->{try{JSONObject response=SyncEngine.requestApi(this,"/v1/admin/users","GET",null);runOnUiThread(()->{if(!"Users".equals(screen)||!workspaceAdmin())return;JSONArray users=response.optJSONArray("users");if(users==null)return;while(content.getChildCount()>2)content.removeViewAt(2);for(int i=0;i<users.length();i++){JSONObject user=users.optJSONObject(i);if(user==null)continue;LinearLayout box=card();identity(box,user.optString("name"),user.optString("username"),R.drawable.ic_users_round);badge(box,user.optString("role")+" · "+(user.optBoolean("active")?"Active":"Inactive"));}});}catch(Exception e){failure(e);}}));}
     void advancedPreferences(){

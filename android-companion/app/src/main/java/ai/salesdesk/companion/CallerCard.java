@@ -102,10 +102,16 @@ final class CallerCard {
         close.setContentDescription("Close"); close.setOnClickListener(v -> dismiss());
         head.addView(close);
         box.addView(head);
-        LinearLayout actions = new LinearLayout(c); actions.setGravity(Gravity.END | Gravity.CENTER_VERTICAL); actions.setPadding(0, dp(c, 12), 0, 0);
+        // the main step after any call: log how it went (outcome, next follow-up, what was said)
+        Button log = action(c, "Log how it went", () -> open(c, new Intent(c, MainActivity.class).putExtra("logCallNumber", d.optString("number", number))
+            .putExtra("logCallLead", found && own ? d.optString("id") : "").putExtra("logCallName", found ? d.optString("name") : "").putExtra("logCallSeconds", answered ? seconds : 0L)));
+        log.setMinHeight(dp(c, 48)); log.setMinimumHeight(dp(c, 48)); log.setTextSize(15);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(c, 48)); lp.setMargins(0, dp(c, 12), 0, 0);
+        box.addView(log, lp);
+        LinearLayout actions = new LinearLayout(c); actions.setGravity(Gravity.END | Gravity.CENTER_VERTICAL); actions.setPadding(0, dp(c, 8), 0, 0);
         if (found && own) actions.addView(plain(c, "Open lead", () -> open(c, new Intent(c, MainActivity.class).putExtra("openLeadId", d.optString("id")))));
         else if (!found) actions.addView(plain(c, "Add as lead", () -> open(c, new Intent(c, MainActivity.class).putExtra("newLeadPhone", d.optString("number", number)))));
-        Button wa = action(c, "Send WhatsApp", () -> whatsApp(c, d.optString("number", number), found ? d.optString("name") : "", answered, out));
+        Button wa = plain(c, "WhatsApp",() -> whatsApp(c, d.optString("number", number), found ? d.optString("name") : "", answered, out));
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-2, -2); p.setMarginStart(dp(c, 8));
         actions.addView(wa, p);
         box.addView(actions);

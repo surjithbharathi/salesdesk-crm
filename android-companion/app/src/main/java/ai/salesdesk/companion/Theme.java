@@ -9,12 +9,13 @@ import android.content.Context;
  */
 final class Theme {
     static final String[][] SKINS = {
-        {"salesdesk", "Salesdesk", "Our own look: iron grey, oil yellow and paper."},
+        {"royal", "Salesdesk blue", "Royal blue on white, with light bars. The standard look."},
+        {"salesdesk", "Salesdesk classic", "Our first look: iron grey, oil yellow and paper."},
         {"salesmax", "Salesmax style", "Indigo and white, with the palette Salesmax uses."},
         {"telecrm", "TeleCRM style", "Deep purple and white, with the palette TeleCRM uses."},
     };
-    /** For now everyone uses the TeleCRM style; the other looks stay listed in Settings, greyed out. */
-    static final String DEFAULT = "telecrm";
+    /** Everyone uses Salesdesk blue for now; the other looks stay listed in Settings, greyed out. */
+    static final String DEFAULT = "royal";
     static boolean available(String id) { return DEFAULT.equals(id); }
     static String current = DEFAULT;
 
@@ -28,7 +29,15 @@ final class Theme {
 
     static void apply(String id) {
         current = id;
-        if (id.equals("salesmax")) {
+        if (id.equals("royal")) {
+            // royal blue on white; green stays for calling, red for missed and late, so the brand colour never means either
+            MainActivity.PURPLE = 0xff1f4fd1; MainActivity.ACCENT = 0xff1f4fd1; MainActivity.ONACCENT = 0xffffffff;
+            MainActivity.BAR = 0xffffffff; MainActivity.ONBAR = 0xff16152b; MainActivity.BARMUTED = 0xff5e5c70; MainActivity.BARACCENT = 0xff1f4fd1; MainActivity.BARCHIP = 0xffe4eafb;
+            MainActivity.PANELTRACK = 0xffe4eafb; MainActivity.PANELGOOD = 0xff17803d; MainActivity.PANELBAD = 0xffc0302b;
+            MainActivity.INK = 0xff16152b; MainActivity.MUTED = 0xff5e5c70; MainActivity.BG = 0xfff5f5f8; MainActivity.LINE = 0xffe6e5ee;
+            MainActivity.SOFT = 0xffe4eafb; MainActivity.NEUTRAL = 0xfff0f0f4; MainActivity.GOODSOFT = 0xffe6f4ea; MainActivity.LEAF = 0xff17803d; MainActivity.RED = 0xffc0302b;
+            MainActivity.RADIUS = 14; MainActivity.CONDENSED = false; MainActivity.LIGHTBARS = true;
+        } else if (id.equals("salesmax")) {
             MainActivity.PURPLE = 0xff4a52d8; MainActivity.ACCENT = 0xff5b63eb; MainActivity.ONACCENT = 0xffffffff;
             MainActivity.BAR = 0xffffffff; MainActivity.ONBAR = 0xff15161b; MainActivity.BARMUTED = 0xff8a8fa0; MainActivity.BARACCENT = 0xff5b63eb; MainActivity.BARCHIP = 0xffeef0fd;
             MainActivity.PANELTRACK = 0xffe8eafd; MainActivity.PANELGOOD = 0xff17845c; MainActivity.PANELBAD = 0xffc03d39;

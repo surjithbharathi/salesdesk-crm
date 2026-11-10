@@ -1,9 +1,7 @@
 package ai.salesdesk.companion;
 
 import android.app.AlertDialog;
-import android.app.DatePickerDialog;
 import android.app.Dialog;
-import android.app.TimePickerDialog;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
@@ -15,17 +13,17 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
-import java.util.Calendar;
 import java.util.Locale;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 /**
- * One lead, laid out like the web CRM's lead page: name, stage and owner on top; the action bar (Call, WhatsApp, Note,
- * Follow-up); the lead's details (tap one to change it); then the activity history and open follow-ups. The lead is read
+ * One lead: a white header with who it is, the stage and owner, the four actions (Call, WhatsApp, Note, Follow-up) and the
+ * tabs Activity (the history as a conversation), Details (tap one to change it) and Follow-ups. The lead is read
  * from the CRM each time, so it opens for any lead the person may see, with its full history, imported history included.
  */
 final class LeadScreen {
@@ -41,7 +39,7 @@ final class LeadScreen {
     private JSONObject lead, data;
     private Dialog dialog;
     private LinearLayout header, body;
-    private boolean showTasks;
+    private String tab = "activity";
 
     static void open(MainActivity a, String id, JSONObject fromPhone) {
         if (id == null || id.isEmpty()) return;
@@ -61,20 +59,24 @@ final class LeadScreen {
         LinearLayout root = a.column();
         root.setBackgroundColor(MainActivity.BG);
         header = a.column();
-        header.setBackgroundColor(MainActivity.BAR);
-        header.setPadding(dp(16), dp(12), dp(16), dp(16));
+        header.setBackgroundColor(android.graphics.Color.WHITE);
+        header.setPadding(dp(4), dp(4), dp(4), 0);
         root.addView(header, new LinearLayout.LayoutParams(-1, -2));
+        View edge = new View(a); edge.setBackgroundColor(MainActivity.LINE);
+        root.addView(edge, new LinearLayout.LayoutParams(-1, 1));
         ScrollView scroll = new ScrollView(a);
+        scroll.setFillViewport(true);
         body = a.column();
-        body.setPadding(dp(14), dp(14), dp(14), dp(28));
+        body.setPadding(dp(12), dp(12), dp(12), dp(28));
         scroll.addView(body);
         root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         dialog.setContentView(root);
         Window w = dialog.getWindow();
         if (w != null) {
             w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
-            w.setStatusBarColor(MainActivity.BAR);
-            w.setNavigationBarColor(MainActivity.BAR);
+            w.setStatusBarColor(android.graphics.Color.WHITE);
+            w.setNavigationBarColor(android.graphics.Color.WHITE);
+            if (MainActivity.LIGHTBARS) w.getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
         }
         dialog.show();
         draw();
@@ -125,70 +127,80 @@ final class LeadScreen {
     private void draw() {
         drawHeader();
         body.removeAllViews();
-        actions();
-        details();
-        tabs();
-        if (data == null) { TextView t = text(body, "Loading the lead…", 13, false); t.setTextColor(MainActivity.MUTED); return; }
-        if (showTasks) tasks(); else history();
+        body.setBackgroundColor(MainActivity.BG);
+        if (data == null) { TextView t = text(body, "Loading the lead…", 13, false); t.setTextColor(MainActivity.MUTED); if (tab.equals("details")) details(); return; }
+        if (tab.equals("details")) details(); else if (tab.equals("followups")) tasks(); else history();
     }
 
+    // the white header: back and the lead menu, who it is, the four actions, then the tabs
     private void drawHeader() {
         header.removeAllViews();
         LinearLayout top = a.horizontal();
-        TextView back = new TextView(a);
-        back.setText("‹  Back");
-        back.setTextSize(15);
-        back.setTextColor(MainActivity.BARACCENT);
-        back.setPadding(0, dp(6), dp(16), dp(6));
-        back.setOnClickListener(v -> dialog.dismiss());
-        back.setContentDescription("Close the lead");
-        top.addView(back);
+        android.widget.ImageButton back = new android.widget.ImageButton(a);
+        back.setImageResource(R.drawable.ic_chevron_left); back.setColorFilter(MainActivity.INK); back.setBackground(null);
+        back.setContentDescription("Back"); back.setOnClickListener(v -> dialog.dismiss());
+        top.addView(back, new LinearLayout.LayoutParams(dp(44), dp(44)));
+        top.addView(new View(a), new LinearLayout.LayoutParams(0, 1, 1));
         if (data != null && (data.optBoolean("canArchive") || data.optBoolean("canDelete"))) {
-            top.addView(new View(a), new LinearLayout.LayoutParams(0, 1, 1));
             TextView more = new TextView(a);
-            more.setText("⋮");
-            more.setTextSize(22);
-            more.setTypeface(Typeface.DEFAULT_BOLD);
-            more.setTextColor(MainActivity.ONBAR);
-            more.setGravity(Gravity.CENTER);
+            more.setText("⋮"); more.setTextSize(22); more.setTypeface(Typeface.DEFAULT_BOLD); more.setTextColor(MainActivity.INK); more.setGravity(Gravity.CENTER);
             more.setContentDescription("More: archive, delete, block number");
             more.setOnClickListener(v -> moreMenu(more));
-            top.addView(more, new LinearLayout.LayoutParams(dp(44), dp(40)));
+            top.addView(more, new LinearLayout.LayoutParams(dp(44), dp(44)));
         }
         header.addView(top);
-        TextView name = new TextView(a);
-        name.setText(lead.optString("name", "Lead"));
-        name.setTextSize(24);
-        name.setTextColor(MainActivity.ONBAR);
-        name.setTypeface(Typeface.create(MainActivity.CONDENSED ? "sans-serif-condensed" : "sans-serif", Typeface.BOLD));
-        name.setPadding(0, dp(6), 0, 0);
-        header.addView(name);
-        TextView phone = new TextView(a);
-        phone.setText(phoneLabel());
-        phone.setTextSize(14);
-        phone.setTextColor(MainActivity.BARMUTED);
-        header.addView(phone);
+
+        LinearLayout who = a.horizontal(); who.setPadding(dp(8), 0, dp(8), dp(14));
+        who.addView(Ui.avatar(a, lead.optString("name", "Lead"), true, 56));
+        LinearLayout names = a.column(); names.setPadding(dp(14), 0, 0, 0);
+        TextView name = Ui.text(a, lead.optString("name", "Lead"), 21, true, MainActivity.INK); name.setTypeface(Typeface.DEFAULT_BOLD); names.addView(name);
+        String place = a.joined(lead.optString("company"), a.joined(lead.optString("city"), lead.optString("state")));
+        TextView sub = Ui.text(a, a.joined(phoneLabel(), place), 13, false, MainActivity.MUTED); sub.setPadding(0, dp(2), 0, dp(6)); names.addView(sub);
         LinearLayout chips = a.horizontal();
-        chips.setPadding(0, dp(10), 0, 0);
-        chip(chips, stageLabel() + (canEdit() ? "  ▾" : ""), true, canEdit() ? this::chooseStage : null);
+        int[] sc = Ui.stageColours(stageLabel());
+        TextView stage = Ui.chip(a, stageLabel() + (canEdit() ? "  ▾" : ""), sc[0], sc[1]); stage.setPadding(dp(10), dp(5), dp(10), dp(5));
+        if (canEdit()) { stage.setOnClickListener(v -> chooseStage()); stage.setContentDescription("Stage " + stageLabel() + ". Change stage"); }
+        chips.addView(stage);
         String owner = lead.optString("ownerName");
-        chip(chips, owner.isEmpty() ? (lead.optString("owner").isEmpty() ? "Unassigned" : "Owner") : owner, false, null);
-        header.addView(chips);
+        TextView ow = Ui.chip(a, owner.isEmpty() ? (lead.optString("owner").isEmpty() ? "Unassigned" : "Owner") : owner, MainActivity.NEUTRAL, 0xff45525c); ow.setPadding(dp(10), dp(5), dp(10), dp(5)); chips.addView(ow);
+        names.addView(chips);
+        who.addView(names, new LinearLayout.LayoutParams(0, -2, 1));
+        header.addView(who);
+
+        LinearLayout row = a.horizontal(); row.setPadding(dp(8), dp(2), dp(8), dp(14));
+        action(row, "Call", R.drawable.ic_phone, Ui.CALL, android.graphics.Color.WHITE, this::call);
+        action(row, "WhatsApp", R.drawable.ic_message, Ui.CALL_SOFT, Ui.CALL_INK, this::whatsApp);
+        action(row, "Note", R.drawable.ic_note, MainActivity.SOFT, MainActivity.ACCENT, this::addNote);
+        action(row, "Follow-up", R.drawable.ic_calendar_check, MainActivity.SOFT, MainActivity.ACCENT, this::followUp);
+        header.addView(row);
+
+        LinearLayout tabs = a.horizontal();
+        JSONArray tasks = data == null ? null : data.optJSONArray("tasks");
+        tabButton(tabs, "Activity", "activity");
+        tabButton(tabs, "Details", "details");
+        tabButton(tabs, "Follow-ups" + (tasks == null || tasks.length() == 0 ? "" : " " + tasks.length()), "followups");
+        header.addView(tabs);
     }
 
-    private void chip(LinearLayout row, String label, boolean strong, Runnable action) {
-        TextView t = new TextView(a);
-        t.setText(label);
-        t.setTextSize(13);
-        t.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        t.setTextColor(strong ? MainActivity.ONACCENT : MainActivity.ONBAR);
-        t.setPadding(dp(12), dp(7), dp(12), dp(7));
-        GradientDrawable bg = a.surface(strong ? MainActivity.ACCENT : MainActivity.BARCHIP, 16);
-        t.setBackground(bg);
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-2, -2);
-        p.setMargins(0, 0, dp(8), 0);
-        row.addView(t, p);
-        if (action != null) { t.setOnClickListener(v -> action.run()); t.setMinHeight(dp(36)); }
+    private void action(LinearLayout row, String label, int icon, int bg, int fg, Runnable run) {
+        LinearLayout cell = a.column(); cell.setGravity(Gravity.CENTER_HORIZONTAL);
+        ImageView i = a.glyph(icon, fg); i.setPadding(dp(14), dp(14), dp(14), dp(14)); i.setBackground(a.surface(bg, 16));
+        cell.addView(i, new LinearLayout.LayoutParams(dp(52), dp(52)));
+        TextView t = Ui.text(a, label, 12, true, MainActivity.INK); t.setPadding(0, dp(6), 0, 0); cell.addView(t);
+        cell.setFocusable(true); cell.setContentDescription(label); cell.setOnClickListener(v -> run.run());
+        row.addView(cell, new LinearLayout.LayoutParams(0, -2, 1));
+    }
+
+    private void tabButton(LinearLayout row, String label, String key) {
+        boolean on = tab.equals(key);
+        LinearLayout cell = a.column(); cell.setGravity(Gravity.CENTER_HORIZONTAL);
+        TextView t = Ui.text(a, label, 14, true, on ? MainActivity.ACCENT : MainActivity.MUTED); t.setGravity(Gravity.CENTER); t.setPadding(0, dp(12), 0, dp(10));
+        cell.addView(t, new LinearLayout.LayoutParams(-1, -2));
+        View line = new View(a); line.setBackgroundColor(on ? MainActivity.ACCENT : android.graphics.Color.TRANSPARENT);
+        cell.addView(line, new LinearLayout.LayoutParams(-1, dp(2)));
+        cell.setFocusable(true); cell.setSelected(on); cell.setContentDescription(label + (on ? ", selected" : ""));
+        cell.setOnClickListener(v -> { tab = key; draw(); });
+        row.addView(cell, new LinearLayout.LayoutParams(0, -2, 1));
     }
 
     private LinearLayout box() {
@@ -205,35 +217,8 @@ final class LeadScreen {
 
     private TextView text(LinearLayout parent, String value, int size, boolean bold) { return a.text(parent, value, size, bold); }
 
-    private void actions() {
-        LinearLayout c = box();
-        c.setPadding(dp(4), dp(4), dp(4), dp(4));
-        LinearLayout row = a.horizontal();
-        action(row, "Call", MainActivity.LEAF, this::call);
-        action(row, "WhatsApp", MainActivity.LEAF, this::whatsApp);
-        action(row, "Add note", MainActivity.PURPLE, this::addNote);
-        action(row, "Follow-up", MainActivity.PURPLE, this::followUp);
-        c.addView(row);
-    }
-
-    private void action(LinearLayout row, String label, int color, Runnable run) {
-        TextView t = new TextView(a);
-        t.setText(label);
-        t.setTextSize(13);
-        t.setGravity(Gravity.CENTER);
-        t.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        t.setTextColor(color);
-        t.setMinHeight(dp(48));
-        t.setPadding(dp(2), dp(12), dp(2), dp(12));
-        t.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(0x18e9a800), null, a.surface(Color.WHITE, 8)));
-        t.setOnClickListener(v -> run.run());
-        row.addView(t, new LinearLayout.LayoutParams(0, -2, 1));
-    }
-
     private void details() {
         LinearLayout c = box();
-        TextView title = text(c, "Details", 15, true);
-        title.setPadding(0, 0, 0, dp(4));
         field(c, "Phone", phoneLabel(), null);
         field(c, "Email", lead.optString("email"), "email");
         field(c, "Business", lead.optString("company"), "company");
@@ -296,66 +281,27 @@ final class LeadScreen {
         parent.addView(row);
     }
 
-    private void tabs() {
-        LinearLayout row = a.horizontal();
-        row.setPadding(0, dp(4), 0, dp(8));
-        JSONArray acts = data == null ? new JSONArray() : data.optJSONArray("activities");
-        JSONArray tasks = data == null ? new JSONArray() : data.optJSONArray("tasks");
-        tab(row, "Activity history" + (acts == null ? "" : " (" + acts.length() + ")"), !showTasks, () -> { showTasks = false; draw(); });
-        tab(row, "Follow-ups" + (tasks == null ? "" : " (" + tasks.length() + ")"), showTasks, () -> { showTasks = true; draw(); });
-        body.addView(row);
-    }
-
-    private void tab(LinearLayout row, String label, boolean on, Runnable run) {
-        TextView t = new TextView(a);
-        t.setText(label);
-        t.setTextSize(14);
-        t.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        t.setTextColor(on ? MainActivity.ONACCENT : MainActivity.PURPLE);
-        t.setPadding(dp(14), dp(9), dp(14), dp(9));
-        t.setBackground(a.surface(on ? MainActivity.ACCENT : MainActivity.SOFT, 18));
-        t.setMinHeight(dp(40));
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-2, -2);
-        p.setMargins(0, 0, dp(8), 0);
-        row.addView(t, p);
-        t.setOnClickListener(v -> run.run());
-    }
-
     private void history() {
         JSONArray acts = data.optJSONArray("activities");
         if (acts == null || acts.length() == 0) { TextView t = text(body, "Nothing has been recorded for this lead yet. Call, add a note or plan a follow-up.", 13, false); t.setTextColor(MainActivity.MUTED); return; }
-        // the conversation sits on a soft chat background, like the web lead page
-        LinearLayout chat = a.column();
-        chat.setPadding(dp(8), dp(2), dp(8), dp(12));
-        chat.setBackground(a.surface(0xFFF0EEE9, MainActivity.RADIUS));
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, -2); p.setMargins(0, dp(4), 0, dp(8));
-        body.addView(chat, p);
-        HistoryView.draw(a, chat, acts, lead.optString("name"));
+        // the conversation fills the area under the header on a soft chat background, like the web lead page
+        body.setBackgroundColor(0xFFF0EEE9);
+        HistoryView.draw(a, body, acts, lead.optString("name"));
     }
 
     private void tasks() {
         JSONArray tasks = data.optJSONArray("tasks");
         if (tasks == null || tasks.length() == 0) { TextView t = text(body, "No open follow-ups. Tap Follow-up to plan the next call.", 13, false); t.setTextColor(MainActivity.MUTED); return; }
+        LinearLayout g = Ui.group(a, body);
+        long now = System.currentTimeMillis();
         for (int i = 0; i < tasks.length(); i++) {
             JSONObject t = tasks.optJSONObject(i);
             if (t == null) continue;
-            LinearLayout c = box();
-            text(c, t.optString("title"), 15, true);
-            TextView due = text(c, a.dateLabel(t.optString("due")), 13, false);
-            due.setTextColor(MainActivity.MUTED);
-            if (canEdit()) small(c, "Mark as done", () -> save("PATCH", "/v1/tasks/" + t.optString("id"), put("status", "Done"), "Follow-up done"));
+            if (i > 0) Ui.hairline(a, g, 16);
+            long due = Ui.ms(t.optString("due")); boolean late = due > 0 && due < now;
+            LinearLayout row = Ui.row(a, g, null, t.optString("title"), (late ? "Late since " : "") + Ui.dayLabel(due) + " · " + Ui.clock(due), MainActivity.INK, late ? MainActivity.RED : MainActivity.MUTED);
+            if (canEdit()) row.addView(Ui.pill(a, "Done", false, MainActivity.ACCENT, () -> save("PATCH", "/v1/tasks/" + t.optString("id"), put("status", "Done"), "Follow-up done")));
         }
-    }
-
-    private void small(LinearLayout parent, String label, Runnable run) {
-        TextView b = new TextView(a);
-        b.setText(label);
-        b.setTextSize(13);
-        b.setTextColor(MainActivity.PURPLE);
-        b.setPadding(0, dp(10), 0, dp(4));
-        b.setMinHeight(dp(40));
-        b.setOnClickListener(v -> run.run());
-        parent.addView(b);
     }
 
     // ---- actions ----
@@ -395,28 +341,7 @@ final class LeadScreen {
 
     private void followUp() {
         if (!owned()) return;
-        LinearLayout b = a.column();
-        b.setPadding(dp(20), dp(8), dp(20), 0);
-        EditText title = new EditText(a);
-        title.setText("Call " + lead.optString("name"));
-        b.addView(title);
-        Calendar due = Calendar.getInstance();
-        due.add(Calendar.DAY_OF_YEAR, 1);
-        due.set(Calendar.HOUR_OF_DAY, 11);
-        due.set(Calendar.MINUTE, 0);
-        due.set(Calendar.SECOND, 0);
-        due.set(Calendar.MILLISECOND, 0);
-        TextView when = text(b, a.dateLabel(due.toInstant().toString()), 15, true);
-        when.setTextColor(MainActivity.PURPLE);
-        when.setPadding(0, dp(12), 0, dp(12));
-        when.setOnClickListener(v -> new DatePickerDialog(a, (p, y, m, d) -> { due.set(y, m, d);
-            new TimePickerDialog(a, (c, h, min) -> { due.set(Calendar.HOUR_OF_DAY, h); due.set(Calendar.MINUTE, min); when.setText(a.dateLabel(due.toInstant().toString())); },
-                due.get(Calendar.HOUR_OF_DAY), due.get(Calendar.MINUTE), android.text.format.DateFormat.is24HourFormat(a)).show();
-        }, due.get(Calendar.YEAR), due.get(Calendar.MONTH), due.get(Calendar.DAY_OF_MONTH)).show());
-        TextView hint = text(b, "Tap the date to change it.", 12, false);
-        hint.setTextColor(MainActivity.MUTED);
-        new AlertDialog.Builder(a).setTitle("Plan a follow-up").setView(b).setNegativeButton("Cancel", null)
-            .setPositiveButton("Save", (d, w) -> { String t = title.getText().toString().trim(); save("POST", "/v1/tasks", put("leadId", id, "title", t.isEmpty() ? "Follow up" : t, "due", due.toInstant().toString()), "Follow-up saved"); }).show();
+        FollowUpSheet.open(a, id, lead.optString("name"), "Call back", this::load);
     }
 
     // the lead menu, as on the web: archive (kept, out of the lists), delete for good, or delete and block the number
