@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { crmSend } from "../api.js";
 import { useCrm } from "../crm.jsx";
 import { useToast } from "../toast.jsx";
-import { hashFor, initials } from "../format.js";
+import { hashFor, initials, avClass } from "../format.js";
 import { PIPELINE, pipelineStep } from "../pipeline.js";
 import { TIcon } from "./icons.jsx";
 import LeadPanel from "./LeadDetail.jsx";
@@ -32,7 +32,7 @@ const uploadOf = (l) => l.upload?.name || (l.importedFrom === "salesmax" ? "Sale
 const SMART_KEY = "salesdesk-smart-views";
 const readSmart = () => { try { const v = JSON.parse(localStorage.getItem(SMART_KEY) || "[]"); return Array.isArray(v) ? v : []; } catch { return []; } };
 const ALL_COLS = [["status", "Status"], ["assignee", "Assignee"], ["state", "State"], ["probable", "Probable State"], ["language", "Language"], ["created", "Created On"], ["phone", "Phone"], ["source", "Source"], ["value", "Deal Value"], ["next", "Next Follow-up"]];
-const readCols = () => { try { const s = localStorage.getItem("salesdesk-cwt-cols"); return new Set(s ? JSON.parse(s) : ["status", "assignee", "created"]); } catch { return new Set(["status", "assignee", "created"]); } };
+const readCols = () => { try { const s = localStorage.getItem("salesdesk-cwt-cols"); return new Set(s ? JSON.parse(s) : ["status", "assignee", "next", "created"]); } catch { return new Set(["status", "assignee", "next", "created"]); } };
 const ago = (t) => { const m = Math.floor((Date.now() - t) / 60000); if (m < 60) return m < 1 ? "just now" : `${m}m ago`; const h = Math.floor(m / 60); if (h < 24) return `${h}h ago`; const d = Math.floor(h / 24); return d < 30 ? `${d}d ago` : `${Math.floor(d / 30)}mo ago`; };
 const stamp = (t) => { const d = new Date(t); return `${d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} · ${d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}`; };
 const money = (v) => (v ? "₹" + Math.round(v).toLocaleString("en-IN") : "");
@@ -306,10 +306,10 @@ export default function Views({ params }) {
                           {cols.has("state") && <td>{l.state || ""}</td>}
                           {cols.has("probable") && <td>{l.state ? "" : l.probableState || ""}</td>}
                           {cols.has("language") && <td>{l.language || ""}{l.languageGuess && l.language ? <small className="muted"> (guess)</small> : l.languageFrom === "call" ? <small className="muted"> (call)</small> : null}</td>}
-                          {cols.has("assignee") && <td>{l.owner ? <span className="who"><span className="av">{initials(nameOf(l.owner))}</span>{nameOf(l.owner)}</span> : <span className="muted">—</span>}</td>}
+                          {cols.has("assignee") && <td>{l.owner ? <span className="who"><span className={`av ${avClass(nameOf(l.owner))}`}>{initials(nameOf(l.owner))}</span>{nameOf(l.owner)}</span> : <span className="muted">—</span>}</td>}
                           {cols.has("source") && <td>{l.source}</td>}
                           {cols.has("value") && <td>{money(l.value)}</td>}
-                          {cols.has("next") && <td>{crm.nextDue.get(l.id) ? stamp(Date.parse(crm.nextDue.get(l.id))) : ""}</td>}
+                          {cols.has("next") && <td>{crm.nextDue.get(l.id) ? <span className={`next-due ${Date.parse(crm.nextDue.get(l.id)) < Date.now() ? "late" : ""}`}>{Date.parse(crm.nextDue.get(l.id)) < Date.now() ? "Late · " : ""}{stamp(Date.parse(crm.nextDue.get(l.id)))}</span> : <span className="next-due none">Not planned</span>}</td>}
                           {cols.has("created") && <td><span className="created"><TIcon name="calendar" /><span><b>{ago(Date.parse(l.createdAt))}</b><small>{stamp(Date.parse(l.createdAt))}</small></span></span></td>}
                         </tr>
                       ))}

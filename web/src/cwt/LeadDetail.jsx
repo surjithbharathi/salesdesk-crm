@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { crmSend } from "../api.js";
 import { useCrm, useLeadHistory, phoneLabel, telHref, waHref } from "../crm.jsx";
 import { useToast } from "../toast.jsx";
-import { initials } from "../format.js";
+import { initials, avClass } from "../format.js";
 import Recording from "../Recording.jsx";
 import { PIPELINE, pipelineStep } from "../pipeline.js";
 import { TIcon } from "./icons.jsx";
@@ -107,6 +107,7 @@ export function LeadDetail({ id }) {
     <div className="cwt-detail">
       <section className="top-card">
         <div className="head">
+          <span className={`av lead-av ${avClass(raw.name)}`} aria-hidden="true">{initials(raw.name)}</span>
           <div className="title-col">
             <input className="lead-name" defaultValue={raw.name} key={`${id}-${raw.name}`} aria-label="Lead name" onBlur={(e) => e.target.value.trim() && setField("name", e.target.value)} />
             <div className="status-row">
@@ -170,12 +171,12 @@ export function LeadDetail({ id }) {
           </div>
 
           <nav className="action-bar">
-            <a href={telHref(raw)}><TIcon name="phone" />CALL</a>
-            <button type="button" className={composer === "later" ? "on" : ""} onClick={() => open("later")}><TIcon name="clock" />CALL LATER</button>
-            {gatewayOn ? <button type="button" className={composer === "wa" ? "on" : ""} onClick={() => open("wa")}><TIcon name="whatsapp" />WHATSAPP</button> : <a href={waHref(raw)} target="_blank" rel="noopener noreferrer"><TIcon name="whatsapp" />WHATSAPP</a>}
-            <button type="button" className={composer === "note" ? "on" : ""} onClick={() => open("note")}><TIcon name="notePlus" />ADD NOTE</button>
-            <button type="button" className={composer === "call" ? "on" : ""} onClick={() => open("call")}><TIcon name="calls" />LOG CALL</button>
-            <button type="button" className={iqOpen ? "on" : ""} onClick={() => setIqOpen(!iqOpen)}><TIcon name="sparkle" />LEAD-IQ</button>
+            <a href={telHref(raw)}><TIcon name="phone" />Call</a>
+            <button type="button" className={composer === "later" ? "on" : ""} onClick={() => open("later")}><TIcon name="clock" />Call later</button>
+            {gatewayOn ? <button type="button" className={`wa ${composer === "wa" ? "on" : ""}`} onClick={() => open("wa")}><TIcon name="whatsapp" />WhatsApp</button> : <a className="wa" href={waHref(raw)} target="_blank" rel="noopener noreferrer"><TIcon name="whatsapp" />WhatsApp</a>}
+            <button type="button" className={composer === "note" ? "on" : ""} onClick={() => open("note")}><TIcon name="notePlus" />Add note</button>
+            <button type="button" className={composer === "call" ? "on" : ""} onClick={() => open("call")}><TIcon name="calls" />Log call</button>
+            <button type="button" className={iqOpen ? "on" : ""} onClick={() => setIqOpen(!iqOpen)}><TIcon name="sparkle" />Lead-IQ</button>
           </nav>
           {composer === "wa" && <div className="composer"><GatewayChat leadId={id} /></div>}
           {composer && composer !== "wa" && (
@@ -193,7 +194,7 @@ export function LeadDetail({ id }) {
       <div className="lower-head">
         <div className="lower-tabs">
           <button type="button" className={lowerTab === "history" ? "active" : ""} onClick={() => setLowerTab("history")}>Activity History</button>
-          <button type="button" className={lowerTab === "task" ? "active" : ""} onClick={() => setLowerTab("task")}>Task</button>
+          <button type="button" className={lowerTab === "task" ? "active" : ""} onClick={() => setLowerTab("task")}>Task{(() => { const late = tasks.filter((t) => t.status !== "Done" && Date.parse(t.due) < Date.now()).length; return late ? <span className="late">{late} late</span> : null; })()}</button>
         </div>
         <div className="drop">
           <button type="button" className="action-btn" onClick={() => setMenu(menu === "action" ? "" : "action")}><TIcon name="plus" />Action<TIcon name="chevronDown" className="cv" /></button>
@@ -234,7 +235,7 @@ export function LeadDetail({ id }) {
               <span className={`task-state ${t.status === "Done" ? "done" : "pending"}`}>{t.status === "Done" ? "Done" : Date.parse(t.due) < Date.now() ? "Late" : "Upcoming"}</span>
             </div>
           ))}
-          {!tasks.length && <p className="none">No tasks. Use <b>CALL LATER</b> to schedule one.</p>}
+          {!tasks.length && <p className="none">No tasks. Use <b>Call later</b> to schedule one.</p>}
         </div>
       )}
     </div>

@@ -6,7 +6,7 @@ export const DEFAULT_SKIN = "telecrm";
 export const SKINS = [
   { id: "salesdesk", name: "Salesdesk", note: "Our own look: iron grey, oil yellow and paper.", off: true },
   { id: "salesmax", name: "Salesmax style", note: "White top menu, purple page bar, tiles and a work pipeline, like the Salesmax web app.", off: true },
-  { id: "telecrm", name: "TeleCRM style", note: "Deep purple and white, with the TeleCRM palette and dashboard layout." },
+  { id: "telecrm", name: "Salesdesk blue", note: "Royal blue and white, with the Salesdesk logo. The standard look, the same as the phone app." },
 ];
 let chosen = null;
 

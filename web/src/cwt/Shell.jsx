@@ -8,7 +8,8 @@ import GlobalSearch from "./GlobalSearch.jsx";
 // The frame of the TeleCRM style: a slim icon menu on the left that can open to full width, and a top bar with the workspace, follow-ups due and the account.
 // The class names are the reference web app's, so its style sheet (cwt/shell.css) applies as written.
 
-const Mark = () => <svg viewBox="0 0 28 28" aria-hidden="true"><rect x="11" y="7" width="9" height="2.6" rx="1" /><rect x="17.4" y="7" width="2.6" height="7" rx="1" /><rect x="13.2" y="11.2" width="2.6" height="4.4" rx="1" /><rect x="8.6" y="14.6" width="2.6" height="6.6" rx="1" /></svg>;
+// the Salesdesk mark: three rising steps, white on the blue tile (the same drawing as the phone app's icon)
+const Mark = () => <svg viewBox="0 0 100 100" aria-hidden="true"><path d="M8 72h22v22H8z" /><path d="M26 40h34v34H44V57H26z" /><path d="M44 6h48v51H76V23H44z" /></svg>;
 const when = (iso) => new Date(iso).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
 
 function navFor(owner) {
@@ -70,7 +71,7 @@ export default function Shell({ path, owner, session, onLogout, children }) {
         <aside className="sidebar" aria-label="Main navigation">
           <a className="home" href={hashFor(owner ? "/business" : "/my-day")} aria-label="Home" onClick={() => setMenuOpen(false)}>
             <span className="tile"><Mark /></span>
-            {expanded && <span className="word-logo">Salesdesk</span>}
+            {expanded && <span className="word-logo"><small>Devi Industries</small><b>Salesdesk</b></span>}
           </a>
           <nav>
             {nav.map((n) => (

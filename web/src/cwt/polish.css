@@ -1,0 +1,57 @@
+/* Salesdesk blue: finishing touches over the TeleCRM-style screens. Same layout and the same buttons in the same places,
+   so people coming from TeleCRM find everything where they expect it; only the look is cleaner. Loaded last. */
+
+/* ---- status chips: a soft fill, the status colour for the words and a dot (the same colours as the phone app) ---- */
+.cwt .st, .cwt .status-chip { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border: 0; border-radius: 12px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.cwt .st::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+.cwt .status-chip { height: 28px; font-size: 13px; }
+.cwt .st.st-new, .cwt .status-chip.st-new, .cwt .st.st-new-lead { background: #e4eafb; color: #1f4fd1; }
+.cwt .st.st-interested-customer, .cwt .status-chip.st-interested-customer,
+.cwt .st.st-advance-received, .cwt .status-chip.st-advance-received,
+.cwt .st.st-machine-delivered-need-to-start, .cwt .status-chip.st-machine-delivered-need-to-start,
+.cwt .st.st-won, .cwt .status-chip.st-won { background: #e6f4ea; color: #17803d; }
+.cwt .st.st-requirement-discussion, .cwt .status-chip.st-requirement-discussion,
+.cwt .st.st-requirement-discussed, .cwt .st.st-later-purchase, .cwt .status-chip.st-later-purchase { background: #fff3dc; color: #8a5200; }
+.cwt .st.st-quotation-shared, .cwt .status-chip.st-quotation-shared,
+.cwt .st.st-loan-document-collected, .cwt .status-chip.st-loan-document-collected,
+.cwt .st.st-loan-in-process, .cwt .status-chip.st-loan-in-process,
+.cwt .st.st-machine-dispatched, .cwt .status-chip.st-machine-dispatched { background: #e0eefb; color: #0b5ca8; }
+.cwt .st.st-lost, .cwt .status-chip.st-lost { background: #fde8e7; color: #a52a24; }
+
+/* ---- a colour of their own for each person's initials ---- */
+.cwt .av.c0 { background: #1f4fd1; color: #fff; } .cwt .av.c1 { background: #8e5bb5; color: #fff; }
+.cwt .av.c2 { background: #2f7fb8; color: #fff; } .cwt .av.c3 { background: #16805f; color: #fff; }
+.cwt .av.c4 { background: #d35400; color: #fff; } .cwt .av.c5 { background: #7a2e73; color: #fff; }
+.cwt .av.c6 { background: #0f6e6e; color: #fff; } .cwt .av.c7 { background: #b7472a; color: #fff; }
+.cwt .who .av { width: 26px; height: 26px; font-size: 10.5px; font-weight: 700; }
+/* the account menu's .who stacks its lines; in a table the avatar sits beside the name */
+.cwt .grid-table .who { flex-direction: row; align-items: center; gap: 8px; padding: 0; margin: 0; border: 0; font-size: 13px; color: #16152b; }
+
+/* the leads toolbar's "10 leads" count shares a class with the notification badge, which pinned it off the right edge
+   (and gave the page a sideways scrollbar): back in the toolbar where TeleCRM has it */
+.cwt .toolbar .count { position: static; min-width: 0; height: auto; padding: 0; border: 0; border-radius: 0; background: none; color: #5e5c70; font-size: 13px; font-weight: 500; line-height: normal; }
+
+/* ---- leads list ---- */
+.cwt .cwt-views .vp-btn { border: 2px solid #1f4fd1; font-weight: 700; }
+.cwt .cwt-views .vp-btn .vt-n { background: #e4eafb; color: #1f4fd1; }
+.cwt .grid-table th { border-right: 0; font-size: 12.5px; color: #5e5c70; background: #fafafc; }
+.cwt .grid-table td { height: 52px; border-right: 0; border-bottom-color: #eeedf3; }
+.cwt .lead-link { color: #16152b; font-weight: 600; font-size: 14.5px; }
+.cwt .lead-link:hover { color: #1f4fd1; text-decoration: none; }
+.cwt .next-due.late { color: #c0302b; font-weight: 600; }
+.cwt .next-due.none { color: #8a889a; }
+.cwt .created b { font-weight: 600; font-size: 13px; }
+
+/* ---- lead panel ---- */
+.cwt .head .lead-av { width: 46px; height: 46px; font-size: 17px; font-weight: 700; align-self: center; }
+.cwt .head { align-items: center; }
+.cwt .action-bar { height: auto; padding: 8px 6px; gap: 2px; background: #fafafc; }
+.cwt .action-bar > a, .cwt .action-bar > button { display: flex; flex: 1; flex-direction: column; align-items: center; gap: 6px; padding: 6px 4px; border: 0; border-radius: 10px; background: none; color: #45444f; font-size: 12px; font-weight: 600; letter-spacing: 0; text-decoration: none; font-family: inherit; }
+.cwt .action-bar svg { width: 40px; height: 40px; padding: 10px; box-sizing: border-box; border-radius: 12px; background: #f3f6fd; color: #1f4fd1; stroke-width: 1.8; }
+.cwt .action-bar > a:first-child svg { background: #22a052; color: #fff; }
+.cwt .action-bar .wa svg { background: #e6f4ea; color: #17803d; }
+.cwt .action-bar > button:hover, .cwt .action-bar > a:hover, .cwt .action-bar > button.on { background: #eef2fc; color: #1f4fd1; }
+.cwt .lower-tabs { gap: 22px; }
+.cwt .lower-tabs button { padding: 0 2px; }
+.cwt .lower-tabs button.active::after { height: 2px; }
+.cwt .lower-tabs .late { margin-left: 6px; font-size: 11px; font-weight: 700; color: #c0302b; }

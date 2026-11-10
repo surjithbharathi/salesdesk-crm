@@ -37,7 +37,7 @@
 .cwt .ic svg.dots { stroke-width: 3.4; }
 .cwt .ic.sm { color: #64748b; width: 28px; height: 28px; padding: 6px; }
 .cwt .assignee { display: inline-flex; align-items: center; gap: 8px; border: none; background: none; font-size: 14px; color: #333; padding: 0; font-family: inherit; }
-.cwt .av { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; background: #4f38a233; color: #4f38a2; font-size: 12px; flex-shrink: 0; }
+.cwt .av { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; background: #1f4fd133; color: #1f4fd1; font-size: 12px; flex-shrink: 0; }
 .cwt .drop { position: relative; }
 .cwt .menu {
   position: absolute; left: 0; top: calc(100% + 4px); z-index: 30; min-width: 200px; padding: 5px; border-radius: 6px; background: #fff;
@@ -46,7 +46,7 @@
 .cwt .menu.right { left: auto; right: 0; }
 .cwt .menu button { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: none; border-radius: 4px; background: none; text-align: left; font-size: 14px; color: #333; font-family: inherit; }
 .cwt .menu button:hover,
-.cwt .menu button.on { background: #f6f4ff; color: #4f38a2; }
+.cwt .menu button.on { background: #f3f6fd; color: #1f4fd1; }
 .cwt .menu button.danger { color: #dc2626; }
 .cwt .menu-note { padding: 8px 10px; font-size: 12px; color: #707070; }
 .cwt .dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
@@ -55,10 +55,10 @@
 .cwt .field-tabs > button:not(.ic):not(.empty-toggle) {
   position: relative; height: 40px; padding: 0 12px; border: none; background: none; font-size: 14px; font-weight: 600; color: #64748b; font-family: inherit;
 }
-.cwt .field-tabs > button.active { color: #4f38a2; }
-.cwt .field-tabs > button.active::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: #4f38a2; }
+.cwt .field-tabs > button.active { color: #1f4fd1; }
+.cwt .field-tabs > button.active::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: #1f4fd1; }
 .cwt .field-tabs em { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 18px; margin-left: 6px; padding: 0 5px; border-radius: 4px; background: #f1f5f9; color: #64748b; font-style: normal; font-size: 11px; }
-.cwt .field-tabs .active em { background: #ece9ff; color: #4f38a2; }
+.cwt .field-tabs .active em { background: #e4eafb; color: #1f4fd1; }
 .cwt .grow { flex: 1; }
 .cwt .field-search { height: 28px; width: 160px; padding: 0 8px; border: 1px solid #e0e0e0; border-radius: 6px; font-size: 13px; outline: none; }
 .cwt .empty-toggle { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 8px; border: none; background: none; color: #64748b; font-size: 12px; font-family: inherit; }
@@ -67,7 +67,7 @@
 .cwt .field-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 40px; row-gap: 14px; padding: 18px 14px 22px; }
 .cwt .field label { display: flex; align-items: center; gap: 5px; font-size: 12px; color: #707070; margin-bottom: 4px; }
 .cwt .field label svg { width: 12px; height: 12px; }
-.cwt .wa-badge { display: inline-flex; padding: 1px 4px; border-radius: 3px; background: #ece9ff; color: #4f38a2; }
+.cwt .wa-badge { display: inline-flex; padding: 1px 4px; border-radius: 3px; background: #e4eafb; color: #1f4fd1; }
 .cwt .wa-badge svg { width: 12px; height: 12px; }
 .cwt .field input,
 .cwt .field select {
@@ -84,24 +84,24 @@
 .cwt .action-bar { display: flex; justify-content: space-around; align-items: center; height: 66px; background: #fafafa; border-radius: 0 0 8px 8px; border-top: 1px solid #f0f0f0; }
 .cwt .action-bar button { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 10px; border: none; background: none; font-size: 11px; color: #555; letter-spacing: .2px; font-family: inherit; border-radius: 6px; }
 .cwt .action-bar button:hover,
-.cwt .action-bar button.on { color: #4f38a2; background: #f3f0ff; }
+.cwt .action-bar button.on { color: #1f4fd1; background: #eef2fc; }
 .cwt .action-bar svg { width: 21px; height: 21px; stroke-width: 1.6; }
 .cwt .composer { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px 14px; border-top: 1px solid #f0f0f0; }
 .cwt .composer textarea,
 .cwt .composer input { width: 100%; padding: 8px 10px; border: 1px solid #e0e0e0; border-radius: 6px; background: #f7f7f7; font-size: 14px; font-weight: 500; color: #222; font-family: inherit; outline: none; resize: vertical; }
 .cwt .composer label { font-size: 12px; color: #707070; }
 .cwt .composer .row { display: flex; justify-content: flex-end; gap: 8px; }
-.cwt .iq { display: flex; gap: 10px; align-items: flex-start; margin: 0 14px 14px; padding: 10px 12px; border-radius: 8px; background: #f6f4ff; color: #4f38a2; }
+.cwt .iq { display: flex; gap: 10px; align-items: flex-start; margin: 0 14px 14px; padding: 10px 12px; border-radius: 8px; background: #f3f6fd; color: #1f4fd1; }
 .cwt .iq svg { width: 18px; height: 18px; flex-shrink: 0; margin-top: 1px; }
 .cwt .iq p { margin: 0; color: #333; }
 .cwt .lower-head { display: flex; align-items: flex-end; justify-content: space-between; margin-top: 14px; border-bottom: 1px solid #e5e5e5; }
 .cwt .lower-tabs { display: flex; }
 .cwt .lower-tabs button { position: relative; height: 45px; padding: 0 14px; border: none; background: none; font-size: 14px; font-weight: 600; color: #64748b; font-family: inherit; }
-.cwt .lower-tabs button.active { color: #4f38a2; }
-.cwt .lower-tabs button.active::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px; background: #4f38a2; }
+.cwt .lower-tabs button.active { color: #1f4fd1; }
+.cwt .lower-tabs button.active::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px; background: #1f4fd1; }
 .cwt .action-btn {
-  display: inline-flex; align-items: center; gap: 6px; height: 34px; margin-bottom: 7px; padding: 0 10px; border: 1px solid #4f38a2; border-radius: 6px;
-  background: #fff; color: #4f38a2; font-size: 14px; font-family: inherit;
+  display: inline-flex; align-items: center; gap: 6px; height: 34px; margin-bottom: 7px; padding: 0 10px; border: 1px solid #1f4fd1; border-radius: 6px;
+  background: #fff; color: #1f4fd1; font-size: 14px; font-family: inherit;
 }
 .cwt .action-btn svg { width: 16px; height: 16px; stroke-width: 2; }
 .cwt .action-btn .cv { width: 12px; height: 12px; }
@@ -110,8 +110,8 @@
 .cwt .chip-sel { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px; border: 1px solid #dbdbdb; border-radius: 20px; background: #fff; font-size: 14px; color: #707070; }
 .cwt .chip-sel svg { width: 13px; height: 13px; }
 .cwt .chip-sel .cv { width: 11px; height: 11px; }
-.cwt .chip-sel.on { padding: 0 4px 0 10px; border-color: #4f38a2; background: #ece9ff; }
-.cwt .chip-sel select { border: none; outline: none; background: transparent; color: #4f38a2; font-size: 14px; font-family: inherit; cursor: pointer; }
+.cwt .chip-sel.on { padding: 0 4px 0 10px; border-color: #1f4fd1; background: #e4eafb; }
+.cwt .chip-sel select { border: none; outline: none; background: transparent; color: #1f4fd1; font-size: 14px; font-family: inherit; cursor: pointer; }
 .cwt .history { list-style: none; margin: 0; padding: 0; background: #fff; border-radius: 4px; box-shadow: 0 1px 2px rgba(0, 0, 0, .06); }
 .cwt .history li { display: flex; align-items: flex-start; gap: 10px; padding: 14px 14px 14px 8px; border-bottom: 1px solid #ebebeb; }
 .cwt .history li:last-child { border-bottom: none; }
@@ -120,8 +120,8 @@
 .cwt .kind-ic svg { width: 100%; height: 100%; }
 .cwt .kind-ic.ok { color: #2e7d32; }
 .cwt .kind-ic.bad { color: #c62828; }
-.cwt .kind-ic.round { border-radius: 50%; background: #ddd6fe; }
-.cwt .kind { width: 120px; flex-shrink: 0; color: #7c65f1; }
+.cwt .kind-ic.round { border-radius: 50%; background: #c9d6f6; }
+.cwt .kind { width: 120px; flex-shrink: 0; color: #3d6be0; }
 .cwt .body { flex: 1; min-width: 0; color: #333; line-height: 1.45; overflow-wrap: anywhere; }
 .cwt .call-state { font-style: italic; }
 .cwt .muted { color: #a4a4a4; font-size: 12px; }
@@ -143,8 +143,8 @@
 }
 
 /* the lead's "more" menu (archive, do not sync calls, delete, block): a clear three-dot button */
-.cwt .more-btn { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0; border: 1px solid #ddd6fe; border-radius: 6px; background: #fff; color: #4f38a2; cursor: pointer; }
-.cwt .more-btn:hover { background: #f6f4ff; }
+.cwt .more-btn { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0; border: 1px solid #c9d6f6; border-radius: 6px; background: #fff; color: #1f4fd1; cursor: pointer; }
+.cwt .more-btn:hover { background: #f3f6fd; }
 .cwt .more-btn svg.kebab { width: 18px; height: 18px; stroke-width: 3.6; stroke-linecap: round; background: none; margin: 0; padding: 0; }
 .cwt .menu button:disabled { opacity: 0.5; }
 /* a language filled in from the state, to be checked */
@@ -153,5 +153,5 @@
 .cwt .field.probable p { margin: 2px 0 6px; font-size: 14px; color: #1f2937; }
 .cwt .field.probable small { font-size: 11px; color: #6b7280; }
 .cwt .field.probable .use { display: flex; flex-wrap: wrap; gap: 6px; }
-.cwt .field.probable .use button { padding: 3px 10px; border: 1px solid #c4b5fd; border-radius: 6px; background: #f5f3ff; color: #4f38a2; font: inherit; font-size: 12px; cursor: pointer; }
+.cwt .field.probable .use button { padding: 3px 10px; border: 1px solid #c9d6f6; border-radius: 6px; background: #f3f6fd; color: #1f4fd1; font: inherit; font-size: 12px; cursor: pointer; }
 .cwt .field .heard { display: block; margin-top: 3px; font-size: 11px; color: #15803d; }

@@ -12,7 +12,7 @@
 .cwt .navw { position: relative; }
 .cwt .navw .tip { position: fixed; top: auto; margin-top: -29px; }
 .cwt .navw .nav-pop { position: fixed; top: auto; margin-top: -50px; }
-.cwt .word-logo { font-weight: 700; font-size: 18px; color: #4f38a2; transform: none; margin-left: 0; }
+.cwt .word-logo { font-weight: 700; font-size: 18px; color: #1f4fd1; transform: none; margin-left: 0; }
 .cwt .top-right .avatar { display: inline-grid; place-items: center; }
 /* names the app also uses for its own classes */
 .cwt .tag::before { content: none; display: none; }
@@ -34,10 +34,10 @@
 .cwt i.dot.st-loan-document-collected { background: #3d8fe0; }
 .cwt .st-loan-in-process { background: #0077df40; }
 .cwt i.dot.st-loan-in-process { background: #0066c0; }
-.cwt .st-advance-received { background: #7c68ee33; }
-.cwt i.dot.st-advance-received { background: #7c68ee; }
-.cwt .st-machine-dispatched { background: #7c68ee4d; }
-.cwt i.dot.st-machine-dispatched { background: #5b45d6; }
+.cwt .st-advance-received { background: #3d6be033; }
+.cwt i.dot.st-advance-received { background: #3d6be0; }
+.cwt .st-machine-dispatched { background: #3d6be04d; }
+.cwt i.dot.st-machine-dispatched { background: #1f4fd1; }
 .cwt .st-machine-delivered-need-to-start { background: #07984a26; }
 .cwt i.dot.st-machine-delivered-need-to-start { background: #0aa85a; }
 .cwt .st-won { background: #07984a33; }
@@ -147,4 +147,4 @@
 .cwt .cwt-w-98 { width: 98%; }
 .cwt .cwt-w-99 { width: 99%; }
 .cwt .cwt-w-100 { width: 100%; }
-.cwt .bar-row .bar i { display: block; height: 100%; background: #7c68ee; border-radius: 3px; }
+.cwt .bar-row .bar i { display: block; height: 100%; background: #3d6be0; border-radius: 3px; }

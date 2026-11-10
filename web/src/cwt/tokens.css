@@ -1,10 +1,10 @@
 /* Written for the reference web app; every rule sits under .cwt so it cannot leak into other screens. */
 .cwt {
   
-  --brand: #4f38a2;
-  --brand-deep: #130059;
-  --brand-modal: #230a53;
-  --brand-tint: #531cb30d;
+  --brand: #1f4fd1;
+  --brand-deep: #0f2a7a;
+  --brand-modal: #0f2a7a;
+  --brand-tint: #1f4fd10d;
   --text: #333333;
   --text-input: #2e2e2e;
   --text-muted: #6b6b6b;
@@ -16,11 +16,11 @@
   --google-bg: #f7f7f7;
   --star: #f9b403;
   --border-color: rgba(0, 0, 0, .1);
-  --hover-lightest: rgba(57, 20, 122, .05);
-  --hover-lighter: rgba(57, 20, 122, .1);
-  --hover-light: rgba(57, 20, 122, .2);
-  --dark-lavendar: rgba(79, 56, 162, .2);
-  --input-background: #f0e9fd;
+  --hover-lightest: rgba(31, 79, 209, .05);
+  --hover-lighter: rgba(31, 79, 209, .1);
+  --hover-light: rgba(31, 79, 209, .2);
+  --dark-lavendar: rgba(31, 79, 209, .2);
+  --input-background: #e8eefc;
   --error: rgba(227, 37, 38, 1);
   --error-lighter: rgba(227, 37, 38, .1);
   --info: rgba(0, 119, 223, 1);

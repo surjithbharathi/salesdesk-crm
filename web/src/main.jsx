@@ -29,6 +29,7 @@ import "./cwt/views.css";
 import "./cwt/lead-detail.css";
 import "./cwt/pages.css";
 import "./cwt/extra.css";
+import "./cwt/polish.css";
 
 createRoot(document.getElementById("root")).render(
   <ToastProvider>

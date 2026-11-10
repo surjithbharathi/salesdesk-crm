@@ -9,7 +9,9 @@ export const minutes = (m) => (m == null ? "—" : m < 60 ? `${m} min` : m < 144
 export const phoneText = (lead) => lead.phone_display || (lead.phone_e164 ? `+${lead.phone_e164}` : "No phone");
 export const initials = (name) =>
   String(name || "?").split(/\s+/).map((p) => p[0]).slice(0, 2).join("").toUpperCase();
-export const plural = (n, one, many = one + "s") => `${n} ${n === 1 ? one : many}`;
+// A colour of their own for a person's initials: always the same one for the same name (classes c0–c7 in cwt/polish.css)
+export const avClass = (name) => { let h = 0; for (const ch of String(name || "")) h = (h * 31 + ch.charCodeAt(0)) | 0; return "c" + (Math.abs(h) % 8); };
+export const plural =(n, one, many = one + "s") => `${n} ${n === 1 ? one : many}`;
 
 // A stable colour class per person, so the same lead keeps the same avatar everywhere.
 export function avatarClass(text) {

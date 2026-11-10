@@ -1,15 +1,15 @@
 /* Written for the reference web app; every rule sits under .cwt so it cannot leak into other screens. */
 .cwt .dash-head { display: flex; align-items: center; justify-content: space-between; padding-top: 20px; }
 .cwt .dash-head h1 { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 20px; font-weight: 500; color: var(--ink); }
-.cwt .head-gear { display: inline-flex; width: 22px; height: 22px; color: #5b3fb0; }
+.cwt .head-gear { display: inline-flex; width: 22px; height: 22px; color: #1f4fd1; }
 .cwt .head-gear svg,
 .cwt .tab-gear svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .cwt .dash-tabs { display: flex; align-items: center; height: 46px; margin-top: 8px; border-bottom: 1px solid var(--line-2); }
 .cwt .dash-tabs button { position: relative; height: 100%; padding: 0 14px; border: none; background: none; color: var(--ink-3); font-size: 15px; font-weight: 500; }
-.cwt .dash-tabs button.active { color: #4f38a2; }
-.cwt .dash-tabs button.active::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: #4f38a2; }
+.cwt .dash-tabs button.active { color: #1f4fd1; }
+.cwt .dash-tabs button.active::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: #1f4fd1; }
 .cwt .dash-tabs button:first-child.active::after { right: -40px; }
-.cwt .tab-gear { display: inline-flex; width: 15px; height: 15px; margin: 0 6px; color: #5b3fb0; border-left: 1px solid var(--line-2); padding-left: 0; box-sizing: content-box; }
+.cwt .tab-gear { display: inline-flex; width: 15px; height: 15px; margin: 0 6px; color: #1f4fd1; border-left: 1px solid var(--line-2); padding-left: 0; box-sizing: content-box; }
 .cwt .tab-gear { border: none; }
 .cwt .dgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; margin-top: 30px; }
 .cwt .panel { height: 476px; container-type: inline-size; }
@@ -43,7 +43,7 @@
 }
 .cwt .drop-menu button { padding: 8px 10px; border: none; border-radius: 6px; background: none; text-align: left; font-size: 14px; color: var(--ink-2); }
 .cwt .drop-menu button:hover,
-.cwt .drop-menu button.on { background: #f7f5fc; color: #4f38a2; }
+.cwt .drop-menu button.on { background: #f5f7fd; color: #1f4fd1; }
 .cwt .report-body { padding: 6px 6px 6px; }
 .cwt .report-wrap { flex: 1; min-height: 0; overflow: auto; border: 1px solid var(--line-2); border-radius: 4px; }
 .cwt .report { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 14px; color: var(--ink-2); }
@@ -57,13 +57,13 @@
 .cwt .report th.sorted { color: var(--ink); }
 .cwt .report td { height: 45px; padding: 0 12px; border-bottom: 1px solid var(--line-2); text-align: center; background: #fff; }
 .cwt .report td.num { cursor: pointer; }
-.cwt .report td.num:hover { color: #4f38a2; }
+.cwt .report td.num:hover { color: #1f4fd1; }
 .cwt .report td.zero { color: var(--ink-4); }
 .cwt .report .first { position: sticky; left: 0; z-index: 1; text-align: left; min-width: 165px; border-right: 1px solid var(--line-2); padding-left: 16px; }
 .cwt .report th.first { z-index: 3; }
 .cwt .report .last { position: sticky; right: 0; z-index: 1; border-left: 1px solid var(--line-2); min-width: 84px; font-weight: 500; color: var(--ink); }
-.cwt .report th.last { z-index: 3; color: #6366f1; }
-.cwt .report th.last .caret { border-top-color: #6366f1; }
+.cwt .report th.last { z-index: 3; color: #3d6be0; }
+.cwt .report th.last .caret { border-top-color: #3d6be0; }
 .cwt .report .go { color: var(--ink-5); margin-left: 6px; }
 .cwt .report tfoot td { position: sticky; bottom: 0; z-index: 1; height: 46px; background: #f3f4f6; border-top: 2px solid var(--line-2); border-bottom: none; font-weight: 500; color: var(--ink); }
 .cwt .report tfoot td.first { z-index: 2; color: var(--ink-3); }
