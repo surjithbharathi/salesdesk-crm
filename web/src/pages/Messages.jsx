@@ -1,12 +1,42 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useCrm } from "../crm.jsx";
+import { crmGet } from "../api.js";
 import { hashFor } from "../format.js";
 
 const stamp = (m) => m.occurredAt || m.createdAt || "";
 const when = (iso) => (iso ? new Date(iso).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) : "");
 
-// WhatsApp chats synced to leads. The CRM only reads them; replies are sent from WhatsApp itself.
+// Messages: the WhatsApp gateway's own inbox, shown inside Salesdesk (the gateway must allow this site to frame it and keep
+// its sign-in in a cookie that works inside a frame), and the chats already synced onto leads.
 export default function Messages() {
+  const [tab, setTab] = useState(() => { try { return localStorage.getItem("salesdesk-msg-tab") || "inbox"; } catch { return "inbox"; } });
+  const [inbox, setInbox] = useState(null); // null while asking, "" when the gateway is not set up
+  useEffect(() => { crmGet("wa-gateway/status").then((r) => setInbox(r.inboxUrl || "")).catch(() => setInbox("")); }, []);
+  const pick = (t) => { setTab(t); try { localStorage.setItem("salesdesk-msg-tab", t); } catch { /* this visit only */ } };
+  return (
+    <>
+      <div className="work-head msg-head">
+        <h1 className="work-title">Messages</h1>
+        <div className="msg-tabs" role="tablist">
+          <button type="button" role="tab" aria-selected={tab === "inbox"} className={tab === "inbox" ? "on" : ""} onClick={() => pick("inbox")}>WhatsApp inbox</button>
+          <button type="button" role="tab" aria-selected={tab === "leads"} className={tab === "leads" ? "on" : ""} onClick={() => pick("leads")}>Chats on leads</button>
+        </div>
+        {tab === "inbox" && inbox && <a className="msg-newtab" href={inbox} target="_blank" rel="noopener noreferrer">Open in new tab</a>}
+      </div>
+      {tab === "inbox" ? (
+        inbox === null ? <p className="muted">Loading the WhatsApp inbox…</p>
+        : !inbox ? <div className="empty"><b>The WhatsApp gateway is not connected</b>An administrator can connect it in Settings, WhatsApp gateway. Until then, chats on leads are under the other tab.</div>
+        : <>
+            <iframe className="msg-frame" src={inbox} title="WhatsApp inbox" allow="clipboard-write; microphone" referrerPolicy="strict-origin-when-cross-origin" />
+            <p className="muted msg-frame-note">If this stays blank or asks you to sign in again and again, the gateway does not yet allow Salesdesk to show it: use Open in new tab.</p>
+          </>
+      ) : <LeadChats />}
+    </>
+  );
+}
+
+// WhatsApp chats synced to leads. The CRM only reads them; replies are sent from WhatsApp itself.
+function LeadChats() {
   const crm = useCrm();
   const [open, setOpen] = useState("");
   const [find, setFind] = useState("");
@@ -27,7 +57,6 @@ export default function Messages() {
   const current = threads.find((t) => t.id === open) || shown[0];
   return (
     <>
-      <div className="work-head"><h1 className="work-title">Messages</h1><span className="work-date">WhatsApp chats synced to your leads</span></div>
       {!threads.length ? (
         <div className="empty"><b>No messages yet</b>An administrator can link WhatsApp in Settings. Chats appear here once a customer's number matches a lead. Reply from WhatsApp itself.</div>
       ) : (

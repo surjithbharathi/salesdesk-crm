@@ -827,12 +827,22 @@ const files = {
   "/style.css": ["public/style.css", "text/css"],
 };
 const oauthRate=new Map();
+// The Messages screen shows the WhatsApp gateway's own inbox in a frame; only that one address may be framed.
+let gatewayFrame = { at: 0, origin: "" };
+function gatewayOrigin() {
+  if (Date.now() - gatewayFrame.at > 30000) {
+    let origin = "";
+    try { const g = waGateway.settings(); if (g.enabled && g.baseUrl) origin = new URL(g.baseUrl).origin; } catch { /* not set up */ }
+    gatewayFrame = { at: Date.now(), origin };
+  }
+  return gatewayFrame.origin;
+}
 const server = http.createServer(async (req, res) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Cache-Control", "no-store");
   res.setHeader(
     "Content-Security-Policy",
-    "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+    `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-src ${gatewayOrigin() || "'none'"}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'`,
   );
   const send = (status, v, headers) => {
     if (headers) {
@@ -1111,7 +1121,7 @@ const server = http.createServer(async (req, res) => {
     {
       const hookUrl = `${publicOrigin || ""}/hooks/wa-gateway`;
       const needs = (permission) => identity && workspaceAccess.requirePermission(identity, permission);
-      if (url.pathname === "/api/wa-gateway/status" && req.method === "GET") { send(200, { enabled: waGateway.settings().enabled }); return; }
+      if (url.pathname === "/api/wa-gateway/status" && req.method === "GET") { const o = gatewayOrigin(); send(200, { enabled: waGateway.settings().enabled, inboxUrl: o ? o + "/app" : "" }); return; }
       if (url.pathname === "/api/wa-gateway/settings") {
         needs("integrations.manage");
         if (req.method === "GET") send(200, { ...waGateway.settings(), hookUrl });

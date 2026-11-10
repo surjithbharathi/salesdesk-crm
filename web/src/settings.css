@@ -295,3 +295,14 @@ td.right .btn + .btn, td.right .quick-actions + .btn { margin-left: 6px; }
 .smx-progress { display: grid; gap: 6px; margin: 12px 0; }
 .smx-progress progress { width: 100%; height: 12px; accent-color: var(--oil); }
 .smx-notes { margin: 8px 0; padding-left: 18px; display: grid; gap: 4px; font-size: 13px; color: var(--ink-2); }
+
+/* Messages: the WhatsApp gateway inbox in a frame, and the chats synced onto leads */
+.msg-head { align-items: center; margin-bottom: 12px; }
+.msg-head .msg-tabs { display: inline-flex; gap: 2px; padding: 3px; border-radius: 10px; background: var(--sunken, #f1f5f9); }
+.msg-head .msg-tabs button[role="tab"] { padding: 7px 14px; border: 0; border-radius: 8px; background: none; color: var(--ink-2, #475569); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+.msg-head .msg-tabs button[role="tab"].on { background: var(--surface, #fff); color: var(--ink, #0f172a); box-shadow: 0 1px 3px rgba(15, 23, 42, .12); }
+.msg-head .msg-tabs button[role="tab"]:focus-visible { outline: 2px solid var(--oil, #4f38a2); outline-offset: 2px; }
+.msg-newtab { margin-left: auto; font-size: 14px; font-weight: 600; }
+.msg-frame { display: block; width: 100%; height: calc(100vh - 170px); min-height: 480px; border: 1px solid var(--line, #e2e8f0); border-radius: 12px; background: #fff; }
+.msg-frame-note { margin: 8px 0 0; font-size: 12.5px; }
+@media (max-width: 640px) { .msg-frame { height: calc(100vh - 210px); } .msg-newtab { margin-left: 0; } }
