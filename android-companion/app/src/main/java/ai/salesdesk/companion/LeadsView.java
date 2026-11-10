@@ -11,22 +11,126 @@ import java.util.*;
 import org.json.*;
 
 /**
- * Leads: a search box that filters as you type, stage chips with their counts, then one white list where every lead shows
- * its initials, company and place (or a late follow-up in red), its stage and a call button. "New lead" floats at the bottom.
+ * Leads: a search box that filters as you type, the view picker (the same views as the web: All Active, New Lead, Assigned
+ * Today, Never Picked, Need Discussion, Interested, Is Customer, Follow-up Due, Unassigned, every pipeline stage and a few
+ * other lists, each with its count), then one white list where every lead shows its initials, company and place (or a late
+ * follow-up in red), its stage and a call button. "New lead" floats at the bottom.
  */
 final class LeadsView {
-    static String stage = "All", sort = "active";
+    static String view = "active", sort = "active";
     private static int limit = 100;
-    private static final String[][] STAGES = {{"All", "All"}, {"New", "New"}, {"Prospecting", "Discussion"}, {"Opportunity", "Interested"}, {"Quotation given", "Quotation"}, {"Closed", "Closed"}};
     private static final String[][] SORTS = {{"active", "Recently active"}, {"newest", "Newest first"}, {"oldest", "Oldest first"}, {"name", "Name A–Z"}};
     private static final int PAGE = 100;
 
+    // the same views and rules as the web's lead views (web/src/cwt/Views.jsx)
+    private static final String[][] WORK = {{"active", "All Active"}, {"fresh", "New Lead"}, {"today", "Assigned Today"}, {"neverPicked", "Never Picked"}, {"discussion", "Need Discussion"}, {"interested", "Interested"}, {"customer", "Is Customer"}, {"due", "Follow-up Due"}, {"unassigned", "Unassigned"}};
+    private static final String[] PIPELINE = {"Interested Customer", "Requirement Discussion", "Quotation Shared", "Loan Document Collected", "Loan in Process", "Advance Received", "Machine Dispatched", "Machine Delivered - Need to Start", "Won", "Later Purchase", "Lost"};
+    private static final String[][] OTHER = {{"all", "All Leads"}, {"mine", "My Leads"}, {"untouched", "Not called yet"}};
+    private static final List<String> CUSTOMER = Arrays.asList("Advance Received", "Machine Dispatched", "Machine Delivered - Need to Start", "Won");
+
     private LeadsView() {}
+
+    /** The pipeline step a lead is at, as the web shows it. */
+    static String statusOf(JSONObject l) {
+        String stage = l.optString("stage", "New");
+        if (stage.isEmpty() || stage.equals("New")) return "New";
+        String deal = l.optString("deal");
+        if (Arrays.asList(PIPELINE).contains(deal)) return deal;
+        if (stage.equals("Closed")) return "Won".equals(l.optString("disposition")) ? "Won" : "Lost".equals(l.optString("disposition")) ? "Lost" : "New";
+        switch (stage) { case "Prospecting": return "Requirement Discussion"; case "Opportunity": return "Interested Customer"; case "Quotation given": return "Quotation Shared"; default: return "New"; }
+    }
+
+    /** What the views need about each lead: calls made and answered, assigned today, and the next follow-up. */
+    private static final class Facts {
+        final Map<String, int[]> calls = new HashMap<>();
+        final Set<String> assignedToday = new HashSet<>();
+        final Map<String, Long> nextDue = new HashMap<>();
+        final String me; final long endOfDay;
+        Facts(MainActivity a) {
+            me = SecureConfig.prefs(a).getString("userId", "");
+            java.time.ZoneId z = java.time.ZoneId.systemDefault();
+            java.time.LocalDate today = java.time.LocalDate.now(z);
+            endOfDay = today.plusDays(1).atStartOfDay(z).toInstant().toEpochMilli() - 1;
+            JSONArray acts = a.rows("activities");
+            for (int i = 0; i < acts.length(); i++) {
+                JSONObject x = acts.optJSONObject(i); if (x == null) continue;
+                String id = x.optString("leadId");
+                if ("Call".equals(x.optString("type"))) { int[] c = calls.computeIfAbsent(id, k -> new int[2]); c[0]++; if (x.optLong("duration", 0) > 0) c[1]++; }
+                else if ("System".equals(x.optString("type")) && x.optString("text").toLowerCase(Locale.ROOT).contains("assign") && sameDay(a.activityTime(x), today, z)) assignedToday.add(id);
+            }
+            JSONArray leads = a.rows("leads");
+            for (int i = 0; i < leads.length(); i++) { JSONObject l = leads.optJSONObject(i); if (l != null && !l.optString("owner").isEmpty() && sameDay(Ui.ms(l.optString("createdAt")), today, z)) assignedToday.add(l.optString("id")); }
+            for (JSONObject t : MyDayView.openTasks(a)) { long d = Ui.ms(t.optString("due")); if (d > 0) nextDue.merge(t.optString("leadId"), d, Math::min); }
+        }
+        private static boolean sameDay(long t, java.time.LocalDate d, java.time.ZoneId z) { return t > 0 && java.time.Instant.ofEpochMilli(t).atZone(z).toLocalDate().equals(d); }
+    }
+
+    private interface Test { boolean ok(JSONObject l); }
+
+    private static Test testOf(String id, Facts f) {
+        if (id.startsWith("st:")) { String s = id.substring(3); return l -> statusOf(l).equals(s); }
+        Test active = l -> !"Closed".equals(l.optString("stage"));
+        switch (id) {
+            case "all": return l -> true;
+            case "mine": return l -> l.optString("owner").equals(f.me);
+            case "fresh": return l -> "New".equals(l.optString("stage", "New")) || l.optString("stage").isEmpty();
+            case "today": return l -> active.ok(l) && f.assignedToday.contains(l.optString("id"));
+            case "neverPicked": return l -> { int[] c = f.calls.get(l.optString("id")); return active.ok(l) && c != null && c[0] > 0 && c[1] == 0; };
+            case "discussion": return l -> "Prospecting".equals(l.optString("stage"));
+            case "interested": return l -> "Opportunity".equals(l.optString("stage"));
+            case "customer": return l -> l.optBoolean("repeat") || CUSTOMER.contains(statusOf(l));
+            case "due": return l -> { Long d = f.nextDue.get(l.optString("id")); return active.ok(l) && d != null && d <= f.endOfDay; };
+            case "unassigned": return l -> active.ok(l) && l.optString("owner").isEmpty();
+            case "untouched": return l -> active.ok(l) && l.optString("firstTouchAt").isEmpty() && !f.calls.containsKey(l.optString("id"));
+            default: return active;
+        }
+    }
+
+    private static String labelOf(String id) {
+        if (id.startsWith("st:")) return id.substring(3);
+        for (String[] v : WORK) if (v[0].equals(id)) return v[1];
+        for (String[] v : OTHER) if (v[0].equals(id)) return v[1];
+        return "All Active";
+    }
+
+    private static String num(int n) { return java.text.NumberFormat.getIntegerInstance(new Locale("en", "IN")).format(n); }
+
+    /** The view picker: a sheet with the work views, then every stage, then the other lists, each with its count. */
+    private static void pickView(MainActivity a, JSONArray all, Facts f) {
+        Sheet s = new Sheet(a, "Lead views", "Tap one to see its leads");
+        List<String> ids = new ArrayList<>();
+        for (String[] v : WORK) ids.add(v[0]);
+        ids.add("st:New"); for (String p : PIPELINE) ids.add("st:" + p);
+        for (String[] v : OTHER) ids.add(v[0]);
+        Map<String, Test> tests = new LinkedHashMap<>(); for (String id : ids) tests.put(id, testOf(id, f));
+        Map<String, Integer> counts = new HashMap<>();
+        for (int i = 0; i < all.length(); i++) { JSONObject l = all.optJSONObject(i); if (l == null) continue; for (Map.Entry<String, Test> e : tests.entrySet()) if (e.getValue().ok(l)) counts.merge(e.getKey(), 1, Integer::sum); }
+        LinearLayout g = null; String group = "";
+        for (String id : ids) {
+            String now = id.startsWith("st:") ? "By stage" : Arrays.stream(OTHER).anyMatch(v -> v[0].equals(id)) ? "Other lists" : "";
+            if (g == null || !now.equals(group)) {
+                group = now;
+                if (!now.isEmpty()) s.label(now);
+                g = Ui.group(a, s.body);
+            } else Ui.hairline(a, g, 16);
+            boolean on = id.equals(view);
+            LinearLayout row = a.horizontal(); row.setPadding(a.dp(16), 0, a.dp(14), 0); row.setMinimumHeight(a.dp(48));
+            if (on) row.setBackgroundColor(MainActivity.SOFT);
+            TextView t = Ui.text(a, labelOf(id), 15, on, on ? MainActivity.ACCENT : MainActivity.INK); row.addView(t, new LinearLayout.LayoutParams(0, -2, 1));
+            TextView c = Ui.text(a, num(counts.getOrDefault(id, 0)), 12, true, MainActivity.MUTED); c.setPadding(a.dp(8), a.dp(2), a.dp(8), a.dp(2)); c.setBackground(a.surface(on ? Color.WHITE : MainActivity.NEUTRAL, 10)); row.addView(c);
+            row.setFocusable(true); row.setSelected(on); row.setContentDescription(labelOf(id) + ", " + counts.getOrDefault(id, 0) + " leads");
+            row.setOnClickListener(v -> { view = id; limit = PAGE; s.close(); a.render(); });
+            g.addView(row);
+        }
+        s.buttons(null, null, "Close", s::close);
+        s.show();
+    }
 
     static void draw(MainActivity a) {
         JSONArray all = a.rows("leads");
-        Map<String, Integer> counts = new HashMap<>();
-        for (int i = 0; i < all.length(); i++) { JSONObject l = all.optJSONObject(i); if (l != null) counts.merge(key(l), 1, Integer::sum); }
+        Facts facts = new Facts(a);
+        Test test = testOf(view, facts);
+        int inView = 0; for (int i = 0; i < all.length(); i++) { JSONObject l = all.optJSONObject(i); if (l != null && test.ok(l)) inView++; }
 
         // search, filtering as you type
         LinearLayout box = a.horizontal(); box.setPadding(a.dp(14), 0, a.dp(8), 0);
@@ -37,14 +141,17 @@ final class LeadsView {
         box.addView(q, new LinearLayout.LayoutParams(0, a.dp(48), 1));
         LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-1, a.dp(50)); bp.setMargins(0, a.dp(4), 0, a.dp(10)); a.content.addView(box, bp);
 
-        // stage chips with counts
-        LinearLayout chips = Ui.chipRow(a, a.content);
-        for (String[] s : STAGES) {
-            int n = s[0].equals("All") ? all.length() : counts.getOrDefault(s[0], 0);
-            if (n == 0 && !s[0].equals("All") && !s[0].equals(stage)) continue;
-            chips.addView(Ui.choice(a, s[0].equals("All") ? "All " + n : s[1] + " " + n, stage.equals(s[0]), () -> { stage = s[0]; limit = PAGE; a.render(); }));
-        }
-        chips.addView(Ui.choice(a, "New today " + a.todayLeads(), a.leadsToday, () -> { a.leadsToday = !a.leadsToday; limit = PAGE; a.render(); }));
+        // the view picker, like the web's: the view's name and its count, tap to change
+        LinearLayout picker = a.horizontal(); picker.setPadding(a.dp(16), 0, a.dp(12), 0);
+        GradientDrawable pb = a.surface(Color.WHITE, 14); pb.setStroke(a.dp(2), MainActivity.ACCENT); picker.setBackground(pb);
+        TextView name = Ui.text(a, labelOf(view), 16, true, MainActivity.INK); name.setTypeface(android.graphics.Typeface.DEFAULT_BOLD); picker.addView(name);
+        TextView n = Ui.text(a, num(inView), 12, true, MainActivity.MUTED); n.setPadding(a.dp(8), a.dp(2), a.dp(8), a.dp(2)); n.setBackground(a.surface(MainActivity.NEUTRAL, 10));
+        LinearLayout.LayoutParams np = new LinearLayout.LayoutParams(-2, -2); np.setMarginStart(a.dp(10)); picker.addView(n, np);
+        picker.addView(new View(a), new LinearLayout.LayoutParams(0, 1, 1));
+        picker.addView(Ui.text(a, "▾", 16, false, MainActivity.MUTED));
+        picker.setFocusable(true); picker.setContentDescription("Lead view " + labelOf(view) + ", " + inView + " leads. Change view");
+        picker.setOnClickListener(v -> pickView(a, all, facts));
+        a.content.addView(picker, new LinearLayout.LayoutParams(-1, a.dp(50)));
 
         // how many match, and the order
         LinearLayout meta = a.horizontal(); meta.setPadding(a.dp(4), a.dp(2), 0, a.dp(6));
@@ -63,7 +170,7 @@ final class LeadsView {
         LinearLayout list = a.column();
         a.content.addView(list, new LinearLayout.LayoutParams(-1, -2));
         a.content.setPadding(a.content.getPaddingLeft(), a.content.getPaddingTop(), a.content.getPaddingRight(), a.dp(96));
-        Runnable fill = () -> count.setText(fill(a, list, all));
+        Runnable fill = () -> count.setText(fill(a, list, all, test));
         fill.run();
         q.addTextChangedListener(new TextWatcher() {
             public void beforeTextChanged(CharSequence s, int st, int c, int af) {}
@@ -79,11 +186,6 @@ final class LeadsView {
         a.overlay.addView(fab, fp);
     }
 
-    private static String key(JSONObject l) {
-        if (!l.optString("deal").isEmpty() && l.optString("deal").toLowerCase(Locale.ROOT).contains("quot")) return "Quotation given";
-        String s = l.optString("stage", "New"); return s.isEmpty() ? "New" : s;
-    }
-
     private static String sortLabel() { for (String[] s : SORTS) if (s[0].equals(sort)) return s[1]; return SORTS[0][1]; }
 
     // when the lead was last worked on: its newest call, note or change, else when it came in
@@ -97,15 +199,14 @@ final class LeadsView {
     }
 
     /** Fills the list and returns the count line. */
-    private static String fill(MainActivity a, LinearLayout list, JSONArray all) {
+    private static String fill(MainActivity a, LinearLayout list, JSONArray all, Test test) {
         list.removeAllViews();
         String q = a.search.toLowerCase(Locale.ROOT), digits = a.search.replaceAll("[^0-9]", "");
         Map<String, Long> late = lateByLead(a);
         List<JSONObject> shown = new ArrayList<>();
         for (int i = 0; i < all.length(); i++) {
             JSONObject l = all.optJSONObject(i); if (l == null) continue;
-            if (!stage.equals("All") && !key(l).equals(stage)) continue;
-            if (a.leadsToday && !a.isToday(l.optString("createdAt"))) continue;
+            if (!test.ok(l)) continue;
             if (!q.isEmpty()) {
                 String hay = (l.optString("name") + " " + l.optString("company") + " " + l.optString("city") + " " + l.optString("state")).toLowerCase(Locale.ROOT);
                 boolean num = digits.length() >= 3 && l.optString("phone").replaceAll("[^0-9]", "").contains(digits);
@@ -140,7 +241,8 @@ final class LeadsView {
             if (sub.isEmpty()) sub = MainActivity.prettyNumber(l.optString("phone"));
             LinearLayout row = Ui.row(a, g, Ui.avatar(a, l.optString("name"), true, 44), l.optString("name"), sub, MainActivity.INK, lateAt != null ? MainActivity.RED : MainActivity.MUTED);
             LinearLayout middle = (LinearLayout) row.getChildAt(1);
-            TextView chip = Ui.stageChip(a, l); LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-2, -2); cp.setMargins(0, a.dp(5), 0, 0); middle.addView(chip, cp);
+            String status = statusOf(l); int[] sc = Ui.stageColours(status);
+            TextView chip = Ui.chip(a, status, sc[0], sc[1]); LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-2, -2); cp.setMargins(0, a.dp(5), 0, 0); middle.addView(chip, cp);
             row.addView(Ui.callButton(a, l.optString("phone"), l.optString("name")));
             row.setFocusable(true); row.setContentDescription("Open lead " + l.optString("name"));
             row.setOnClickListener(v -> LeadScreen.open(a, l.optString("id"), l));
