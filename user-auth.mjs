@@ -114,6 +114,12 @@ export function createUserAuth({ db, getUser, now = () => Date.now() }) {
     failures.delete(name);
     return session(account, deviceId);
   }
+  // A session for someone who proved who they are another way (a WhatsApp code, Devi ERP). Only existing logins qualify.
+  function sessionForUser(userId) {
+    const account = typeof userId === "string" && db.prepare("SELECT * FROM auth_accounts WHERE user_id=?").get(userId);
+    if (!account) fail("Invalid credentials or session", 401);
+    return session(account);
+  }
   function authenticate(token) {
     if (typeof token !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(token))
       fail("Invalid credentials or session", 401);
@@ -198,6 +204,7 @@ export function createUserAuth({ db, getUser, now = () => Date.now() }) {
     bootstrap,
     createAccount,
     login,
+    sessionForUser,
     authenticate,
     revoke,
     listAccounts,

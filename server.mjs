@@ -1,5 +1,6 @@
 import {createSmtpEmail} from './smtp-email.mjs';
-import { createWaGateway } from "./wa-gateway.mjs";
+import { createWaGateway, publicHttps } from "./wa-gateway.mjs";
+import { createSigninMethods } from "./signin-methods.mjs";
 import { createTelecrmMirror } from "./telecrm-mirror.mjs";
 import { createBlockedNumbers } from "./blocked-numbers.mjs";
 import { createKpi } from "./kpi.mjs";
@@ -487,6 +488,8 @@ const telecrm = createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecor
 const waGateway = createWaGateway({ db, all, get, put, stamp, tx, log, systemUser: process.env.CRM_OWNER_USER_ID || "", keyPath: (process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname) + ".wagw-key" });
 const blocked = createBlockedNumbers(db);
 // Workflows: admins' "when this happens, do that" rules, checked every 30 seconds; WhatsApp goes out through the gateway
+// WhatsApp-code and Devi ERP sign-in, for people who already have a login
+const signin = createSigninMethods({ db, getUser: (id) => get("users", id), users: () => all("users"), userAuth, waGateway, checkUrl: publicHttps, publicOrigin, keyPath: (process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname) + ".signin-key", log: (event, detail) => console.log(JSON.stringify({ event, ...detail })) });
 const workflows = createWorkflows({ db, get, put, stamp, tx, log, users: () => all("users").filter((u) => u.active !== false), sendWhatsApp: (leadId, message) => waGateway.send(leadId, message, ""), gatewayOn: () => waGateway.settings().enabled, report: (m) => console.error(m) });
 // Removes a lead and everything recorded against it (calls and their recordings, notes, messages, chats, follow-ups, deals).
 // With block, its number is blocked first so no sync brings it back.
@@ -1034,6 +1037,7 @@ const server = http.createServer(async (req, res) => {
                 users: all("users")
                   .filter((u) => u.active)
                   .map((u) => ({ id: u.id, name: u.name })),
+          methods: userAuth.configured() ? signin.methods() : { otp: false, erp: false },
               }
             : {}),
         });
@@ -1056,7 +1060,57 @@ const server = http.createServer(async (req, res) => {
         sameOrigin();
         userAuth.revoke(sessionToken(req));
         cookie("");
+      // sign in with a 6-digit code sent on WhatsApp
+      if (action === "otp/start" && req.method === "POST") {
+        sameOrigin();
+        send(200, await signin.otpStart(await body(req)));
+        return;
+      }
+      if (action === "otp/verify" && req.method === "POST") {
+        sameOrigin();
+        const result = signin.otpVerify(await body(req));
+        cookie(result.token);
+        send(200, { user: result.user, company: result.company });
+        return;
+      }
+      // sign in with Devi ERP: off to ERPNext, which comes back to the callback with a one-time code
+      if (action === "erp/start" && req.method === "GET") {
+        const start = signin.erpStart();
+        res.writeHead(302, { Location: start.url, "Set-Cookie": `salesdesk_erp_state=${start.state}; HttpOnly; SameSite=Lax; Path=/api/auth/erp; Max-Age=600${publicOrigin ? "; Secure" : ""}`, "Cache-Control": "no-store" });
+        res.end();
+        return;
+      }
+      if (action === "erp/callback" && req.method === "GET") {
+        const clearState = `salesdesk_erp_state=; HttpOnly; SameSite=Lax; Path=/api/auth/erp; Max-Age=0${publicOrigin ? "; Secure" : ""}`;
+        let to = "/next/";
+        const headers = { "Cache-Control": "no-store" };
+        try {
+          const browserState = /(?:^|;\s*)salesdesk_erp_state=([A-Za-z0-9_-]{20,64})(?:;|$)/.exec(req.headers.cookie || "")?.[1];
+          if (url.searchParams.get("error")) bad("Devi ERP sign-in was cancelled", 401);
+          const result = await signin.erpCallback({ code: url.searchParams.get("code"), state: url.searchParams.get("state"), browserState });
+          headers["Set-Cookie"] = [clearState, `salesdesk_session=${result.token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200${publicOrigin ? "; Secure" : ""}`];
+        } catch (e) {
+          headers["Set-Cookie"] = clearState;
+          to = `/next/#/login?error=${encodeURIComponent(e.status && e.status < 500 ? e.message : "Devi ERP sign-in did not work. Try again.")}`;
+        }
+        res.writeHead(302, { ...headers, Location: to });
+        res.end();
+        return;
+      }
         send(200, { ok: true });
+      if (action === "signin-settings") {
+        if (identity.user.role !== "admin") bad("Administrator required", 403);
+        workspaceAccess.requirePermission(identity, "users.manage");
+        if (req.method === "GET") {
+          send(200, signin.settings(all("users")));
+          return;
+        }
+        if (req.method === "POST") {
+          sameOrigin();
+          send(200, await signin.save(await body(req), all("users")));
+          return;
+        }
+      }
         return;
       }
       if (action === "accounts") {

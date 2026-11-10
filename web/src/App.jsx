@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { authStatus, login, logout, AuthError, v2 } from "./api.js";
+import { authStatus, logout, AuthError, v2 } from "./api.js";
 import { parseHash, hashFor, initials } from "./format.js";
 import { useHash } from "./hooks.js";
 import Icon from "./icons.jsx";
@@ -8,6 +8,7 @@ import TeleDashboard from "./pages/TeleDashboard.jsx";
 import CwShell from "./cw/Shell.jsx";
 import CwDashboard from "./cw/Dashboard.jsx";
 import CwtShell from "./cwt/Shell.jsx";
+import Login from "./cwt/Login.jsx";
 import CwtDashboard from "./cwt/Dashboard.jsx";
 import CwtViews from "./cwt/Views.jsx";
 import { CwtCalls, CwtSearch, CwtFollowups, CwtReports } from "./cwt/Pages.jsx";
@@ -72,37 +73,6 @@ function useTheme() {
   return [dark, () => setTheme(dark ? "light" : "dark")];
 }
 
-function LoginForm({ onDone }) {
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  async function submit(event) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    setBusy(true);
-    setError("");
-    try {
-      await login(form.get("username"), form.get("password"));
-      onDone();
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <main className="screen">
-      <form className="sheet" onSubmit={submit}>
-        <h1>Salesdesk</h1>
-        <p className="muted">Sign in with your CRM account.</p>
-        <label>Username<input className="field-input" name="username" autoComplete="username" required /></label>
-        <label>Password<input className="field-input" name="password" type="password" autoComplete="current-password" required /></label>
-        {error && <p className="error" role="alert">{error}</p>}
-        <button className="btn btn-primary" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
-      </form>
-    </main>
-  );
-}
-
 export default function App() {
   const hash = useHash();
   const [session, setSession] = useState({ state: "loading" });
@@ -130,12 +100,12 @@ export default function App() {
   async function boot() {
     try {
       const status = await authStatus();
-      if (status.configured && !status.user) return setSession({ state: "login" });
+      if (status.configured && !status.user) return setSession({ state: "login", methods: status.methods || {} });
       const loaded = await v2("/me");
       setMeta(loaded);
       setSession({ state: "ready", user: status.user, company: status.company });
     } catch (e) {
-      if (e instanceof AuthError) setSession({ state: "login" });
+      if (e instanceof AuthError) setSession({ state: "login", methods: {} });
       else setSession({ state: "error", message: e.message });
     }
   }
@@ -144,7 +114,7 @@ export default function App() {
   }, []);
 
   if (session.state === "loading") return <main className="screen"><p className="muted">Loading…</p></main>;
-  if (session.state === "login") return <LoginForm onDone={boot} />;
+  if (session.state === "login") return <Login methods={session.methods} onDone={() => { if (location.hash.startsWith("#/login")) location.hash = ""; boot(); }} />;
   if (session.state === "error") return <main className="screen"><p className="error">{session.message}</p></main>;
 
   const { path, params } = parseHash();

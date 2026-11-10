@@ -57,6 +57,12 @@ export const ICONS = {
   save: 'M5 3h11l3 3v15H5zM8 3v5h7V3M8 21v-7h8v7',
   columns: 'M3 4h18v16H3zM9 4v16M15 4v16',
   arrowUp: 'M12 19V5M5 12l7-7 7 7',
+  pencil: 'M4 20h4L19 9l-4-4L4 16zM14 6l4 4',
+  check: 'M20 6L9 17l-5-5',
+  quote: 'M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M8 13h8M8 17h5',
+  arrowDown: 'M12 5v14M6 13l6 6 6-6',
+  play: 'M7.5 5v14l11-7z',
+  pause: 'M9 5.5v13M15 5.5v13',
 };
 
 export function TIcon({ name, className = "", size }) {

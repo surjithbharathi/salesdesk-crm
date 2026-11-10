@@ -228,6 +228,18 @@ export function createWaGateway({ db, all, get, put, stamp, tx, log, keyPath, sy
     tx(() => record(lead, { providerId: sent.message_id || `salesdesk:${id}`, jid: key2, direction: "Outgoing", kind: template ? "template" : "text", text: template ? `Template ${template}${params.length ? `: ${params.join(", ")}` : ""}` : text, occurredAt: when, status: "Sent", userId: actor, phoneId: fromNumber(lead, input.fromPhoneId) }));
     return { id, messageId: sent.message_id || "" };
   }
+  // A message from Salesdesk itself to a staff number (sign-in codes). Not tied to a lead and not saved in any chat.
+  async function sendSystem(phone, input = {}) {
+    if (!/^[1-9]\d{7,14}$/.test(String(phone))) fail("Invalid number");
+    const text = typeof input.text === "string" ? input.text.trim().slice(0, 500) : "";
+    const template = typeof input.template === "string" ? input.template.trim() : "";
+    if (template && !/^[a-z0-9_]{1,80}$/.test(template)) fail("Invalid template name");
+    if (!text && !template) fail("Nothing to send");
+    const params = Array.isArray(input.params) ? input.params.map((p) => String(p).slice(0, 100)).slice(0, 5) : [];
+    const s = raw();
+    const sent = await call("/api/send", { method: "POST", body: JSON.stringify({ to: String(phone), ...(template ? { template, params, language: input.language || "en" } : { text }), from_phone_id: s.defaultFromPhoneId || undefined, idempotency_key: `salesdesk:system:${randomUUID()}` }) });
+    return { messageId: sent.message_id || "" };
+  }
   // pulls the chat the gateway holds for this lead's number, both directions, and adds what is missing
   async function history(leadId) {
     const lead = get("leads", leadId);
@@ -270,5 +282,5 @@ export function createWaGateway({ db, all, get, put, stamp, tx, log, keyPath, sy
     }
     return { reachable: Boolean(health?.ok), keyOk, numbers: health?.connected_numbers ?? null, aiMode: health?.agent_mode ?? null, pendingAlerts: health?.pending_owner_alerts ?? null };
   }
-  return { settings, save, receive, send, history, test };
+  return { settings, save, receive, send, sendSystem, history, test };
 }

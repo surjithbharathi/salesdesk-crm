@@ -5,6 +5,7 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
   base: "/next/",
   plugins: [react()],
-  build: { outDir: "dist", emptyOutDir: true, sourcemap: false },
+  // fonts stay as files: the server's Content-Security-Policy refuses data: fonts
+  build: { outDir: "dist", emptyOutDir: true, sourcemap: false, assetsInlineLimit: (file) => (/\.(woff2?|ttf|otf)$/.test(file) ? false : undefined) },
   server: { port: 5173, proxy: { "/api": "http://127.0.0.1:3100" } },
 });

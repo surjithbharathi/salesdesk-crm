@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { crmSend } from "../api.js";
-import { useCrm } from "../crm.jsx";
+import { useCrm, telHref } from "../crm.jsx";
 import { useToast } from "../toast.jsx";
 import { hashFor, initials, avClass } from "../format.js";
 import { PIPELINE, pipelineStep } from "../pipeline.js";
@@ -8,9 +8,10 @@ import { TIcon } from "./icons.jsx";
 import LeadPanel from "./LeadDetail.jsx";
 import FilterPanel, { passes, conditionText } from "./FilterPanel.jsx";
 import { STATES, LANGUAGES } from "../regions.js";
+import { SourceTag, dueLabel } from "./LeadBits.jsx";
 
-// "All Views" in the TeleCRM style: view tabs, a toolbar with filters, search, columns and actions, then the lead table.
-// The class names are the reference web app's, so its style sheet (cwt/views.css) applies as written.
+// The leads list: the view picker with filters, four counters, then a card with search, columns, actions and the lead table.
+// Styles: cwt/r-leads.css (lv-*); the view picker and filter drawer keep their cwt/views.css classes.
 
 const STATUSES = ["New", ...PIPELINE.map((d) => d.name)];
 const statusOf = (l) => (l.stage === "New" ? "New" : pipelineStep(l) || "New");
@@ -34,13 +35,13 @@ const readSmart = () => { try { const v = JSON.parse(localStorage.getItem(SMART_
 const ALL_COLS = [["status", "Status"], ["assignee", "Assignee"], ["state", "State"], ["probable", "Probable State"], ["language", "Language"], ["created", "Created On"], ["phone", "Phone"], ["source", "Source"], ["value", "Deal Value"], ["next", "Next Follow-up"]];
 const readCols = () => { try { const s = localStorage.getItem("salesdesk-cwt-cols"); return new Set(s ? JSON.parse(s) : ["status", "assignee", "next", "created"]); } catch { return new Set(["status", "assignee", "next", "created"]); } };
 const ago = (t) => { const m = Math.floor((Date.now() - t) / 60000); if (m < 60) return m < 1 ? "just now" : `${m}m ago`; const h = Math.floor(m / 60); if (h < 24) return `${h}h ago`; const d = Math.floor(h / 24); return d < 30 ? `${d}d ago` : `${Math.floor(d / 30)}mo ago`; };
-const stamp = (t) => { const d = new Date(t); return `${d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} · ${d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}`; };
+const stamp = (t) => { const d = new Date(t); return `${d.toLocaleDateString("en-US", { month: "short", day: "numeric", ...(d.getFullYear() === new Date().getFullYear() ? {} : { year: "numeric" }) })} · ${d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}`; };
 const money = (v) => (v ? "₹" + Math.round(v).toLocaleString("en-IN") : "");
 
 export default function Views({ params }) {
   const crm = useCrm();
   const notify = useToast();
-  const { view: viewParam, queue = "", q: qParam = "", lead: openId = "" } = params;
+  const { view: viewParam, queue = "", q: qParam = "", lead: openId = "", compose = "" } = params;
   const [smart, setSmart] = useState(readSmart);
   const savedView = smart.find((v) => v.id === viewParam);
   const viewId = savedView ? savedView.base || "active" : OLD_VIEW[viewParam] || viewParam || QUEUE_VIEW[queue] || "active";
@@ -155,6 +156,13 @@ export default function Views({ params }) {
     for (const l of crm.leads || []) { if (l.archived) continue; for (const [id, t] of tests) if (t(l)) c[id]++; }
     return c;
   }, [crm.leads, facts, crm.nextDue, me]);
+  // open leads whose next follow-up is already past
+  const lateCount = useMemo(() => {
+    let n = 0;
+    const now = Date.now();
+    for (const l of crm.leads || []) if (!l.archived && l.stage !== "Closed" && crm.nextDue.has(l.id) && Date.parse(crm.nextDue.get(l.id)) < now) n++;
+    return n;
+  }, [crm.leads, crm.nextDue]);
   if (!crm.state) return <p className="muted">{crm.error || "Loading leads…"}</p>;
 
   const pages = Math.max(1, Math.ceil(rows.length / size));
@@ -180,7 +188,7 @@ export default function Views({ params }) {
   const toggleCol = (c) => setCols((s) => { const n = new Set(s); n.has(c) ? n.delete(c) : n.add(c); try { localStorage.setItem("salesdesk-cwt-cols", JSON.stringify([...n])); } catch { /* the choice then lasts for this visit only */ } return n; });
   const clear = () => { setConds([]); setQuery(""); };
   const refresh = () => { setSpin(true); crm.reload(); setTimeout(() => setSpin(false), 700); };
-  const open = (id) => (location.hash = hashFor("/leads", { view: viewParam || "", queue, lead: id }));
+  const open = (id, composeWith = "") => (location.hash = hashFor("/leads", { view: viewParam || "", queue, lead: id, compose: composeWith }));
   async function each(ids, body, done) {
     setBusy(true);
     try { for (const id of ids) await crmSend("PATCH", `leads/${id}`, body); await crm.reload(); setPicked(new Set()); setMenu(""); notify(done); } catch (e) { notify(e.message); } finally { setBusy(false); }
@@ -197,12 +205,20 @@ export default function Views({ params }) {
 
   const chart = STATUSES.map((s) => ({ s, n: rows.filter((l) => statusOf(l) === s).length }));
   const cmax = Math.max(1, ...chart.map((b) => b.n));
+  const kpis = [
+    ["untouched", "Never called", "plus", "blue", counts.untouched],
+    ["due", "Follow-ups due today", "alarm", "red", counts.due],
+    ["interested", "Interested", "check", "green", counts.interested],
+    [stageView("Quotation Shared"), "Quotations out", "quote", "amber", counts[stageView("Quotation Shared")]],
+  ];
+  const colCount = 3 + [...cols].filter((c) => ALL_COLS.some(([id]) => id === c)).length;
+  const now = Date.now();
 
   return (
-    <div className="cwt-views">
-      <div className="page">
-        <h1>Leads</h1>
-        <div className="view-tabs vp-bar">
+    <div className="cwt-views lv">
+      <div className="lv-page">
+        <div className="lv-head vp-bar">
+          <h1 className="lv-title">Leads</h1>
           <div className="drop vp-filter">
             <button type="button" className={`vp-ficon ${filtersOpen ? "on" : ""}`} aria-label="Filters" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(!filtersOpen)}><TIcon name="filter" />{filterCount > 0 && <em>{filterCount}</em>}</button>
             {filtersOpen && <FilterPanel defs={defs} sorts={SORTS} conds={conds} setConds={setConds} sort={sort} setSort={setSort} onClose={() => setFiltersOpen(false)} onClear={clear} onSave={(name) => saveSmart(name)} />}
@@ -227,40 +243,54 @@ export default function Views({ params }) {
           </div>
           {conds.map((c, i) => defByKey.get(c.key) && <span key={i} className="vp-chip"><button type="button" onClick={() => setFiltersOpen(true)}><TIcon name={defByKey.get(c.key).icon} /><b>{defByKey.get(c.key).label}</b> {conditionText(defByKey.get(c.key), c)}</button><button type="button" className="vp-chip-x" aria-label={`Remove ${defByKey.get(c.key).label} filter`} onClick={() => setConds(conds.filter((_, j) => j !== i))}><TIcon name="x" /></button></span>)}
           <span className="grow" />
-          <div className="mode">
-            <button type="button" className={mode === "table" ? "on" : ""} onClick={() => setMode("table")} aria-label="Table"><TIcon name="table" /></button>
-            <button type="button" className={mode === "chart" ? "on" : ""} onClick={() => setMode("chart")} aria-label="Chart"><TIcon name="barChart" /></button>
+          <div className="lv-mode" role="group" aria-label="Show as">
+            <button type="button" className={mode === "table" ? "on" : ""} aria-pressed={mode === "table"} onClick={() => setMode("table")} aria-label="Table"><TIcon name="table" /></button>
+            <button type="button" className={mode === "chart" ? "on" : ""} aria-pressed={mode === "chart"} onClick={() => setMode("chart")} aria-label="Chart"><TIcon name="barChart" /></button>
           </div>
         </div>
 
+        <div className="lv-kpis">
+          {kpis.map(([id, label, icon, tone, n]) => (
+            <button key={id} type="button" className={`r-card lv-kpi ${!savedView && viewId === id ? "on" : ""}`} aria-pressed={!savedView && viewId === id} onClick={() => pick(id)}>
+              <span className={`lv-kpi-ic ${tone}`}><TIcon name={icon} /></span>
+              <span className="lv-kpi-text">
+                <span className="lv-kpi-label">{label}</span>
+                <span className={`lv-kpi-n ${id === "due" && lateCount ? "red" : ""}`}>{(n || 0).toLocaleString("en-IN")}{id === "due" && lateCount > 0 && <small>{lateCount.toLocaleString("en-IN")} late</small>}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+
         {viewId === "report" ? (
-          <div className="table-wrap">
-            <table className="grid-table report">
-              <thead><tr><th>Assignee</th>{STATUSES.map((s) => <th key={s} className="c">{s}</th>)}<th className="c">Total</th></tr></thead>
-              <tbody>
-                {report.map((r) => <tr key={r.name}><td>{r.name}</td>{STATUSES.map((s) => <td key={s} className="c"><button type="button" className="num" onClick={() => { setConds([{ key: "assignee", op: "in", value: [r.name === "No owner" ? "" : team.find((u) => u.name === r.name)?.id || ""] }, { key: "status", op: "in", value: [s] }]); pick("all"); }}>{r.c[s]}</button></td>)}<td className="c"><b>{r.c.total}</b></td></tr>)}
-              </tbody>
-            </table>
-          </div>
+          <section className="r-card lv-card">
+            <div className="lv-scroll">
+              <table className="lv-table lv-report">
+                <thead><tr><th>Assignee</th>{STATUSES.map((s) => <th key={s} className="c">{s}</th>)}<th className="c">Total</th></tr></thead>
+                <tbody>
+                  {report.map((r) => <tr key={r.name}><td><span className="lv-person"><span className={`av ${avClass(r.name)}`}>{initials(r.name)}</span>{r.name}</span></td>{STATUSES.map((s) => <td key={s} className="c"><button type="button" className="lv-num" onClick={() => { setConds([{ key: "assignee", op: "in", value: [r.name === "No owner" ? "" : team.find((u) => u.name === r.name)?.id || ""] }, { key: "status", op: "in", value: [s] }]); pick("all"); }}>{r.c[s]}</button></td>)}<td className="c"><b>{r.c.total}</b></td></tr>)}
+                </tbody>
+              </table>
+            </div>
+          </section>
         ) : (
-          <>
-            <div className="toolbar">
-              <div className="search">
+          <section className="r-card lv-card">
+            <div className="lv-tools">
+              <div className="lv-search">
                 <div className="drop">
-                  <button type="button" className="by" onClick={() => setMenu(menu === "by" ? "" : "by")}><span className="t">T</span>{by === "name" ? "Name" : by === "phone" ? "Phone" : "Email"}<TIcon name="chevronDown" /></button>
-                  {menu === "by" && <div className="menu" onMouseLeave={() => setMenu("")}>{[["name", "Name"], ["phone", "Phone"], ["email", "Email"]].map(([k, t]) => <button key={k} type="button" onClick={() => { setBy(k); setMenu(""); }}>{t}</button>)}</div>}
+                  <button type="button" className="lv-by" aria-haspopup="menu" aria-expanded={menu === "by"} onClick={() => setMenu(menu === "by" ? "" : "by")}>{by === "name" ? "Name" : by === "phone" ? "Phone" : "Email"}<TIcon name="chevronDown" /></button>
+                  {menu === "by" && <div className="menu" onMouseLeave={() => setMenu("")}>{[["name", "Name"], ["phone", "Phone"], ["email", "Email"]].map(([k, t]) => <button key={k} type="button" className={by === k ? "on" : ""} onClick={() => { setBy(k); setMenu(""); }}>{t}</button>)}</div>}
                 </div>
                 <input placeholder="Search lead" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search lead" />
               </div>
-              <span className="count">{rows.length.toLocaleString("en-IN")} leads<button type="button" className={`ref ${spin ? "spin" : ""}`} onClick={refresh} aria-label="Refresh"><TIcon name="refresh" /></button></span>
-              {picked.size > 0 && <span className="sel">{picked.size} selected</span>}
+              <span className="lv-count">{rows.length.toLocaleString("en-IN")} leads<button type="button" className={`lv-ref ${spin ? "spin" : ""}`} onClick={refresh} aria-label="Refresh"><TIcon name="refresh" /></button></span>
+              {picked.size > 0 && <span className="lv-sel">{picked.size} selected</span>}
               <span className="grow" />
               <div className="drop">
-                <button type="button" className="tb" onClick={() => setMenu(menu === "cols" ? "" : "cols")}><TIcon name="columns" />Columns <em>{cols.size + 1}</em></button>
+                <button type="button" className="lv-btn" aria-expanded={menu === "cols"} onClick={() => setMenu(menu === "cols" ? "" : "cols")}>Columns <em>{cols.size + 1}</em></button>
                 {menu === "cols" && <div className="menu right" onMouseLeave={() => setMenu("")}>{ALL_COLS.map(([id, label]) => <label key={id} className="chk"><input type="checkbox" checked={cols.has(id)} onChange={() => toggleCol(id)} />{label}</label>)}</div>}
               </div>
               <div className="drop">
-                <button type="button" className="tb" onClick={() => setMenu(menu === "actions" ? "" : "actions")}>Actions <TIcon name="chevronDown" /></button>
+                <button type="button" className="lv-btn" aria-expanded={menu === "actions"} onClick={() => setMenu(menu === "actions" ? "" : "actions")}>Actions <TIcon name="chevronDown" /></button>
                 {menu === "actions" && (
                   <div className="menu right" onMouseLeave={() => setMenu("")}>
                     <button type="button" onClick={exportCsv}>Export leads</button>
@@ -271,64 +301,85 @@ export default function Views({ params }) {
                         <button type="button" className="danger" disabled={busy} onClick={() => confirm(`Archive ${picked.size} selected lead(s)? They leave the lists but are kept.`) && each([...picked], { archived: true }, `${picked.size} lead(s) archived`)}>Archive selected</button>
                       </>
                     )}
+                    {crm.me?.lead && picked.size === 0 && <p className="lv-menu-note">Tick leads in the table to assign or archive them.</p>}
                   </div>
                 )}
               </div>
             </div>
 
             {mode === "chart" ? (
-              <div className="chart">{chart.map((b) => <div key={b.s} className="bar-row"><span className="lbl">{b.s}</span><div className="bar"><i className={`st-${slug(b.s)} cwt-w-${Math.round((b.n / cmax) * 100)}`} /></div><b>{b.n}</b></div>)}</div>
+              <div className="lv-chart">{chart.map((b) => <div key={b.s} className="lv-bar-row"><span className="lbl">{b.s}</span><div className="lv-bar"><i className={`st-${slug(b.s)} cwt-w-${Math.round((b.n / cmax) * 100)}`} /></div><b>{b.n.toLocaleString("en-IN")}</b></div>)}</div>
             ) : (
               <>
-                <div className="table-wrap">
-                  <table className="grid-table">
+                <div className="lv-scroll">
+                  <table className="lv-table">
                     <thead><tr>
-                      <th className="cb"><input type="checkbox" checked={allChecked} onChange={toggleAll} aria-label="Select all" /></th>
-                      <th className="name-col">Name<TIcon name="filter" className="f" /></th>
-                      {cols.has("status") && <th>Status<TIcon name="filter" className="f" /></th>}
+                      <th className="lv-cb"><input type="checkbox" checked={allChecked} onChange={toggleAll} aria-label="Select all" /></th>
+                      <th>Name</th>
+                      {cols.has("status") && <th>Status</th>}
                       {cols.has("phone") && <th>Phone</th>}
                       {cols.has("state") && <th>State</th>}
                       {cols.has("probable") && <th>Probable State</th>}
                       {cols.has("language") && <th>Language</th>}
-                      {cols.has("assignee") && <th>Assignee<TIcon name="filter" className="f" /></th>}
+                      {cols.has("assignee") && <th>Assignee</th>}
                       {cols.has("source") && <th>Source</th>}
                       {cols.has("value") && <th>Deal Value</th>}
                       {cols.has("next") && <th>Next Follow-up</th>}
-                      {cols.has("created") && <th className="sortable" onClick={() => setSort({ key: "created", dir: sort.key === "created" && sort.dir === "desc" ? "asc" : "desc" })}>Created On<span className="sort"><TIcon name="filter" className="f on" /><em>1</em><svg viewBox="0 0 24 24" className={`arrow ${sort.dir === "desc" ? "" : "up"}`}><path d="M12 5v14M6 13l6 6 6-6" /></svg></span></th>}
+                      {cols.has("created") && <th className="lv-sortable" aria-sort={sort.key === "created" ? (sort.dir === "desc" ? "descending" : "ascending") : "none"}><button type="button" onClick={() => setSort({ key: "created", dir: sort.key === "created" && sort.dir === "desc" ? "asc" : "desc" })}>Created On{sort.key === "created" && <TIcon name={sort.dir === "desc" ? "arrowDown" : "arrowUp"} />}</button></th>}
+                      <th className="lv-qcol" aria-label="Quick actions" />
                     </tr></thead>
                     <tbody>
-                      {pageRows.map((l) => (
-                        <tr key={l.id} className={picked.has(l.id) ? "picked" : ""}>
-                          <td className="cb"><input type="checkbox" checked={picked.has(l.id)} onChange={() => toggle(l.id)} aria-label={`Select ${l.name}`} /></td>
-                          <td className="name-col"><button type="button" className="lead-link" onClick={() => open(l.id)}>{l.name}</button></td>
-                          {cols.has("status") && <td><span className={`st st-${slug(statusOf(l))}`}>{statusOf(l)}</span></td>}
-                          {cols.has("phone") && <td>{l.phone}</td>}
-                          {cols.has("state") && <td>{l.state || ""}</td>}
-                          {cols.has("probable") && <td>{l.state ? "" : l.probableState || ""}</td>}
-                          {cols.has("language") && <td>{l.language || ""}{l.languageGuess && l.language ? <small className="muted"> (guess)</small> : l.languageFrom === "call" ? <small className="muted"> (call)</small> : null}</td>}
-                          {cols.has("assignee") && <td>{l.owner ? <span className="who"><span className={`av ${avClass(nameOf(l.owner))}`}>{initials(nameOf(l.owner))}</span>{nameOf(l.owner)}</span> : <span className="muted">—</span>}</td>}
-                          {cols.has("source") && <td>{l.source}</td>}
-                          {cols.has("value") && <td>{money(l.value)}</td>}
-                          {cols.has("next") && <td>{crm.nextDue.get(l.id) ? <span className={`next-due ${Date.parse(crm.nextDue.get(l.id)) < Date.now() ? "late" : ""}`}>{Date.parse(crm.nextDue.get(l.id)) < Date.now() ? "Late · " : ""}{stamp(Date.parse(crm.nextDue.get(l.id)))}</span> : <span className="next-due none">Not planned</span>}</td>}
-                          {cols.has("created") && <td><span className="created"><TIcon name="calendar" /><span><b>{ago(Date.parse(l.createdAt))}</b><small>{stamp(Date.parse(l.createdAt))}</small></span></span></td>}
-                        </tr>
-                      ))}
-                      {!pageRows.length && <tr><td colSpan={9} className="empty">No leads match.</td></tr>}
+                      {pageRows.map((l) => {
+                        const next = crm.nextDue.get(l.id);
+                        const due = next ? dueLabel(next, now) : null;
+                        const sub = [l.phone, String(l.city || "").trim()].filter(Boolean).join(" · ");
+                        return (
+                          <tr key={l.id} className={picked.has(l.id) ? "picked" : ""}>
+                            <td className="lv-cb"><input type="checkbox" checked={picked.has(l.id)} onChange={() => toggle(l.id)} aria-label={`Select ${l.name}`} /></td>
+                            <td className="lv-name">
+                              <div className="lv-who">
+                                <span className={`av lv-av ${avClass(l.name)}`} aria-hidden="true">{initials(l.name)}</span>
+                                <div className="lv-who-text">
+                                  <div className="lv-line"><button type="button" className="lv-link" onClick={() => open(l.id)}>{l.name}</button><SourceTag source={l.source} /></div>
+                                  {sub && <div className="lv-sub">{sub}</div>}
+                                </div>
+                              </div>
+                            </td>
+                            {cols.has("status") && <td><span className={`st st-${slug(statusOf(l))}`}>{statusOf(l)}</span></td>}
+                            {cols.has("phone") && <td>{l.phone}</td>}
+                            {cols.has("state") && <td>{l.state || ""}</td>}
+                            {cols.has("probable") && <td>{l.state ? "" : l.probableState || ""}</td>}
+                            {cols.has("language") && <td>{l.language || ""}{l.languageGuess && l.language ? <small className="lv-muted"> (guess)</small> : l.languageFrom === "call" ? <small className="lv-muted"> (call)</small> : null}</td>}
+                            {cols.has("assignee") && <td>{l.owner ? <span className="lv-person"><span className={`av ${avClass(nameOf(l.owner))}`} aria-hidden="true">{initials(nameOf(l.owner))}</span>{nameOf(l.owner)}</span> : <span className="lv-muted">Unassigned</span>}</td>}
+                            {cols.has("source") && <td>{l.source}</td>}
+                            {cols.has("value") && <td>{money(l.value)}</td>}
+                            {cols.has("next") && <td>{due ? <span className={`lv-due ${due.tone}`} title={stamp(Date.parse(next))}>{due.text}</span> : <span className="lv-due none">Not planned</span>}</td>}
+                            {cols.has("created") && <td><span className="lv-created"><b>{ago(Date.parse(l.createdAt))}</b><small>{stamp(Date.parse(l.createdAt))}</small></span></td>}
+                            <td className="lv-qcol">
+                              <div className="lv-qa">
+                                {l.phone && <a className="lv-q call" href={telHref(l)} aria-label={`Call ${l.name}`} title="Call"><TIcon name="phone" /></a>}
+                                <button type="button" className="lv-q wa" aria-label={`WhatsApp ${l.name}`} title="WhatsApp" onClick={() => open(l.id, "wa")}><TIcon name="whatsapp" /></button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {!pageRows.length && <tr><td colSpan={colCount} className="lv-none">No leads match.</td></tr>}
                     </tbody>
                   </table>
                 </div>
-                <div className="pager">
-                  <span>{rows.length ? page * size + 1 : 0}–{Math.min((page + 1) * size, rows.length)} of {rows.length.toLocaleString("en-IN")}</span>
-                  <button type="button" disabled={page === 0} onClick={() => setPage(page - 1)} aria-label="Previous page"><TIcon name="chevronLeft" /></button>
-                  <button type="button" disabled={page >= pages - 1} onClick={() => setPage(page + 1)} aria-label="Next page"><TIcon name="chevronRight" /></button>
-                  <select value={size} onChange={(e) => { setSize(+e.target.value); setPage(0); }} aria-label="Rows per page">{[20, 50, 100].map((n) => <option key={n} value={n}>{n} / page</option>)}</select>
+                <div className="lv-pager">
+                  <span>{rows.length ? (page * size + 1).toLocaleString("en-IN") : 0}–{Math.min((page + 1) * size, rows.length).toLocaleString("en-IN")} of {rows.length.toLocaleString("en-IN")}</span>
+                  <button type="button" className="lv-btn sq" disabled={page === 0} onClick={() => setPage(page - 1)} aria-label="Previous page"><TIcon name="chevronLeft" /></button>
+                  <button type="button" className="lv-btn sq" disabled={page >= pages - 1} onClick={() => setPage(page + 1)} aria-label="Next page"><TIcon name="chevronRight" /></button>
+                  <label className="lv-btn lv-size"><select value={size} onChange={(e) => { setSize(+e.target.value); setPage(0); }} aria-label="Rows per page">{[20, 50, 100].map((n) => <option key={n} value={n}>{n} / page</option>)}</select><TIcon name="chevronDown" /></label>
                 </div>
               </>
             )}
-          </>
+          </section>
         )}
       </div>
-      {openId && <LeadPanel id={openId} ids={rows.map((l) => l.id)} onOpen={open} onClose={() => (location.hash = hashFor("/leads", { view: viewParam || "", queue }))} />}
+      {openId && <LeadPanel id={openId} ids={rows.map((l) => l.id)} onOpen={open} crumb={`Leads · ${currentLabel}`} compose={compose} onClose={() => (location.hash = hashFor("/leads", { view: viewParam || "", queue }))} />}
     </div>
   );
 }

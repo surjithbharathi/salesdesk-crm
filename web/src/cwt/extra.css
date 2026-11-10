@@ -1,7 +1,7 @@
 /* the reference app's base reset, kept inside the TeleCRM frame */
 .cwt { color-scheme: light; font-family: "Roboto Flex Variable", "Roboto Flex", system-ui, sans-serif; }
 /* .btn buttons (Settings and other shared screens) keep their own look */
-.cwt button:not(.btn) { background: none; border: 0; padding: 0; border-radius: 0; box-shadow: none; text-align: left; cursor: pointer; font: inherit; color: inherit; }
+.cwt :where(button:not(.btn)) { background: none; border: 0; padding: 0; border-radius: 0; box-shadow: none; text-align: left; cursor: pointer; font: inherit; color: inherit; }
 .cwt button:disabled { cursor: default; opacity: 0.55; }
 .cwt input, .cwt select, .cwt textarea { font: inherit; color: inherit; background: #fff; }
 .cwt table { border-collapse: collapse; }

@@ -8,6 +8,7 @@ import "@fontsource-variable/roboto-flex/wght.css";
 import "@fontsource/roboto/latin-400.css";
 import "@fontsource/roboto/latin-500.css";
 import "@fontsource/roboto/latin-700.css";
+import "@fontsource-variable/plus-jakarta-sans";
 import App from "./App.jsx";
 import { ToastProvider } from "./toast.jsx";
 import "./styles.css";
@@ -30,6 +31,11 @@ import "./cwt/lead-detail.css";
 import "./cwt/pages.css";
 import "./cwt/extra.css";
 import "./cwt/polish.css";
+import "./cwt/r-shell.css";
+import "./cwt/r-leads.css";
+import "./cwt/r-dash.css";
+import "./cwt/r-pages.css";
+import "./cwt/r-msg.css";
 
 createRoot(document.getElementById("root")).render(
   <ToastProvider>

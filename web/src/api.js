@@ -28,6 +28,10 @@ async function request(path, { method = "GET", params, body } = {}) {
 export const v2 = (path, params) => request("/api/kpi" + path, { params });
 export const authStatus = () => request("/api/auth/status");
 export const login = (username, password) => request("/api/auth/login", { method: "POST", body: { username, password } });
+export const otpStart = (mobile) => request("/api/auth/otp/start", { method: "POST", body: { mobile } });
+export const otpVerify = (mobile, code) => request("/api/auth/otp/verify", { method: "POST", body: { mobile, code } });
+export const signinSettings = () => request("/api/auth/signin-settings");
+export const saveSigninSettings = (body) => request("/api/auth/signin-settings", { method: "POST", body });
 export const logout = () => request("/api/auth/logout", { method: "POST", body: {} });
 
 // "Today" follows the browser's local day, so work queues match what the team sees on their clock.
