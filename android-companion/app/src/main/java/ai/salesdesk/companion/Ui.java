@@ -181,6 +181,24 @@ final class Ui {
         return row;
     }
 
+    /**
+     * Newer Androids draw every window edge to edge, under the status bar and the gesture bar. This pads a window's root
+     * by the bars' height, so nothing sits under the clock or the battery.
+     */
+    static void clearBars(View root, boolean top, boolean bottom) {
+        int l = root.getPaddingLeft(), t = root.getPaddingTop(), r = root.getPaddingRight(), b = root.getPaddingBottom();
+        root.setOnApplyWindowInsetsListener((v, insets) -> {
+            int it, ib, il, ir;
+            if (android.os.Build.VERSION.SDK_INT >= 30) {
+                android.graphics.Insets bars = insets.getInsets(android.view.WindowInsets.Type.systemBars() | android.view.WindowInsets.Type.ime());
+                it = bars.top; ib = bars.bottom; il = bars.left; ir = bars.right;
+            } else { it = insets.getSystemWindowInsetTop(); ib = insets.getSystemWindowInsetBottom(); il = insets.getSystemWindowInsetLeft(); ir = insets.getSystemWindowInsetRight(); }
+            v.setPadding(l + il, t + (top ? it : 0), r + ir, b + (bottom ? ib : 0));
+            return insets;
+        });
+        root.requestApplyInsets();
+    }
+
     // ---- time ----
 
     static long ms(String iso) { try { return java.time.Instant.parse(iso).toEpochMilli(); } catch (Exception e) { return 0; } }

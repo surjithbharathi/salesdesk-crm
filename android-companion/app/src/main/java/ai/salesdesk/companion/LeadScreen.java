@@ -57,7 +57,8 @@ final class LeadScreen {
     private void show() {
         dialog = new Dialog(a, android.R.style.Theme_Material_Light_NoActionBar);
         LinearLayout root = a.column();
-        root.setBackgroundColor(MainActivity.BG);
+        root.setBackgroundColor(android.graphics.Color.WHITE);
+        Ui.clearBars(root, true, true);
         header = a.column();
         header.setBackgroundColor(android.graphics.Color.WHITE);
         header.setPadding(dp(4), dp(4), dp(4), 0);

@@ -38,6 +38,7 @@ final class Sheet {
         foot = a.horizontal(); foot.setPadding(0, a.dp(10), 0, 0);
         root.addView(foot);
         dialog.setContentView(root);
+        Ui.clearBars(root, false, true);
         Window w = dialog.getWindow();
         if (w != null) {
             w.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
