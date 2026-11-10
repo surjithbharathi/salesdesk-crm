@@ -67,7 +67,7 @@ final class SimplePreferences {
             else save(sims,assignment,false,tracking);
         }).show();
     }
-    void save(JSONObject sims,String assignment,boolean consent,boolean enabled){java.util.concurrent.atomic.AtomicBoolean saved=new java.util.concurrent.atomic.AtomicBoolean();a.work(()->{try{JSONObject policy=SyncEngine.requestApi(a,"/v1/tracking-preferences","PUT",new JSONObject().put("sims",sims).put("assignment",assignment).put("consent",consent));prefs().edit().putString("trackingPolicy",policy.toString()).putLong("trackingSince",System.currentTimeMillis()).commit();saved.set(true);}catch(Exception e){a.failure(e);}},()->{if(saved.get()){a.render();a.setSyncEnabled(enabled);}});}
+    void save(JSONObject sims,String assignment,boolean consent,boolean enabled){java.util.concurrent.atomic.AtomicBoolean saved=new java.util.concurrent.atomic.AtomicBoolean();a.work(()->{try{JSONObject policy=SyncEngine.requestApi(a,"/v1/tracking-preferences","PUT",new JSONObject().put("sims",sims).put("assignment",assignment).put("consent",consent));prefs().edit().putString("trackingPolicy",policy.toString()).putLong("trackingSince",System.currentTimeMillis()).commit();saved.set(true);}catch(Exception e){a.failure(e);}},()->{if(saved.get()){a.render();a.setSyncEnabled(enabled);a.callerOffered=false;a.handler.postDelayed(a::offerCaller,1500);}});}
     void setupCaller(){
         if(android.os.Build.VERSION.SDK_INT<29){a.notice("Caller details need Android 10 or later.");a.render();return;}
         android.app.role.RoleManager roles=a.getSystemService(android.app.role.RoleManager.class);

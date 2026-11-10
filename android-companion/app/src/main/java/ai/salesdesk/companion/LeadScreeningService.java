@@ -8,6 +8,7 @@ import org.json.*;
  * Caller information only: never blocks, silences or records calls.
  * When a call comes in, a card shows at once from the leads saved on the phone, then the CRM is asked for the full picture
  * (last work, next follow-up, a colleague's lead, or the probable state of a new number) and the card is filled in.
+ * Android asks this service about some calls; CallerWatch covers the rest from the ringing state; both end in lookup().
  */
 public class LeadScreeningService extends CallScreeningService {
     @Override public void onScreenCall(Call.Details details){
@@ -15,24 +16,34 @@ public class LeadScreeningService extends CallScreeningService {
         if(details.getCallDirection()==Call.Details.DIRECTION_INCOMING)respondToCall(details,new CallResponse.Builder().setDisallowCall(false).setRejectCall(false).setSilenceCall(false).setSkipCallLog(false).setSkipNotification(false).build());
         if(details.getCallDirection()!=Call.Details.DIRECTION_INCOMING)return;
         if(!SecureConfig.loggedIn(this)||!SecureConfig.prefs(this).getBoolean("screenPop",false)||details.getHandle()==null)return;
-        String country=SecureConfig.prefs(this).getString("country","91");
-        String number=SyncEngine.normalize(details.getHandle().getSchemeSpecificPart(),country);
-        if(number.length()<6)return;
         PhoneAccountHandle account=details.getAccountHandle();String key=account==null?"":SimTracking.key(account.getId());
         if(!SimTracking.allows(this,key,true))return;
-        JSONObject quick=fromPhone(number,country);
-        if(quick!=null)CallerCard.show(this,number,quick);
-        Context app=getApplicationContext();
+        lookup(getApplicationContext(),details.getHandle().getSchemeSpecificPart());
+    }
+
+    private static String lastNumber="";
+    private static long lastAt;
+
+    /** Shows the card for an incoming number: from the phone at once, then from the CRM. A repeat within 15 s is ignored. */
+    static synchronized void lookup(Context c,String raw){
+        String country=SecureConfig.prefs(c).getString("country","91");
+        String number=SyncEngine.normalize(raw,country);
+        if(number.length()<6)return;
+        long now=System.currentTimeMillis();
+        if(number.equals(lastNumber)&&now-lastAt<15000)return;
+        lastNumber=number;lastAt=now;
+        JSONObject quick=fromPhone(c,number,country);
+        if(quick!=null)CallerCard.show(c,number,quick);
         new Thread(()->{
-            try{JSONObject card=SyncEngine.requestApi(app,"/v1/caller/"+number,"GET",null);CallerCard.show(app,number,card);}
+            try{JSONObject card=SyncEngine.requestApi(c,"/v1/caller/"+number,"GET",null);CallerCard.show(c,number,card);}
             catch(Exception ignored){/* offline: the card from the phone stays, or nothing is shown for a number not saved here */}
         }).start();
     }
 
     // the lead as saved on the phone at the last refresh, so something shows even before the CRM answers
-    private JSONObject fromPhone(String number,String country){
+    private static JSONObject fromPhone(Context c,String number,String country){
         try{
-            JSONObject workspace=new JSONObject(SecureConfig.prefs(this).getString("workspace","{}"));JSONArray leads=workspace.optJSONArray("leads");
+            JSONObject workspace=new JSONObject(SecureConfig.prefs(c).getString("workspace","{}"));JSONArray leads=workspace.optJSONArray("leads");
             if(leads==null)return null;
             for(int i=0;i<leads.length();i++){JSONObject lead=leads.optJSONObject(i);
                 if(lead==null||!number.equals(SyncEngine.normalize(lead.optString("phone"),country)))continue;
