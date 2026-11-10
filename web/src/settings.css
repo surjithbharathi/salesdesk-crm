@@ -116,9 +116,60 @@ td.right .btn + .btn, td.right .quick-actions + .btn { margin-left: 6px; }
 .sec .wf-buttons .check { padding: 6px 10px; align-items: center; }
 .sec .wf-buttons .check input { margin-top: 0; }
 .wf-examples { display: flex; flex-wrap: wrap; gap: 8px; }
-.wf-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
-.wf-row .field-input { flex: 1 1 160px; width: auto; }
-.wf-action { padding: 12px 0; border-top: 1px solid var(--line); }
-.wf-action:first-child { border-top: 0; padding-top: 0; }
-.wf-people { display: flex; flex-wrap: wrap; gap: 8px; }
 @media (max-width: 640px) { .wf-rule { flex-direction: column; } .wf-buttons { justify-content: flex-start; } }
+
+/* Workflow builder: top bar, box palette, canvas with the selected box's settings beside it */
+.wfb { display: grid; gap: 12px; min-width: 0; }
+.wfb-top { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.wfb-top .wfb-name { flex: 1 1 260px; font-size: 16px; font-weight: 600; }
+.wfb-top .check { padding: 8px 12px; background: var(--sunken); border-radius: 6px; }
+.wfb-add { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; }
+.wfb-chip { border-left: 4px solid var(--wf-c, var(--line-strong)); font-size: 13px; padding: 6px 10px; }
+.wfb-body { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 12px; min-height: 520px; }
+.wfb-canvas { overflow: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); max-height: 70vh; min-width: 0; touch-action: none; }
+.wfb-svg { display: block; user-select: none; }
+.wfb-dragging { cursor: grabbing; }
+.wfb-grid { fill: url(#wfb-dots); }
+.wfb-dot { fill: var(--line-strong); }
+.wfb-side { border: 1px solid var(--line); border-radius: 10px; padding: 14px; background: var(--surface); overflow: auto; max-height: 70vh; }
+.wfb-side h3 { margin: 0 0 10px; font-size: 16px; }
+.wfb-help { margin: 0; padding-left: 18px; display: grid; gap: 8px; font-size: 14px; color: var(--ink-2); }
+.wfb-form { display: grid; gap: 12px; }
+.wfb-form label:not(.check) { display: grid; gap: 6px; font-size: 13px; color: var(--ink-2); }
+.wfb-form p { margin: 0; font-size: 13px; }
+.wfb-cond { display: grid; gap: 6px; padding: 10px; background: var(--sunken); border-radius: 8px; }
+.wfb-people { display: grid; gap: 6px; }
+.wfb-remove { justify-self: start; color: var(--kumkum); }
+/* boxes */
+.wfn-trigger { --wf-c: var(--oil); }
+.wfn-condition { --wf-c: var(--steel); }
+.wfn-wait { --wf-c: var(--muted); }
+.wfn-action { --wf-c: var(--leaf); }
+.wfn-whatsapp { --wf-c: var(--leaf); }
+.wfn-stage, .wfn-assign { --wf-c: var(--iron, var(--leaf)); }
+.wfb-node { cursor: grab; }
+.wfb-box { fill: var(--bg); stroke: var(--line-strong); stroke-width: 1.2; }
+.wfb-node-on .wfb-box { stroke: var(--wf-c); stroke-width: 2.5; }
+.wfb-band { fill: var(--wf-c); }
+.wfb-kind { font-size: 12px; font-weight: 700; fill: var(--wf-c); letter-spacing: .02em; }
+.wfb-text { font-size: 14px; fill: var(--ink); }
+.wfb-port { fill: var(--bg); stroke: var(--wf-c); stroke-width: 2.5; }
+.wfb-in { stroke: var(--line-strong); }
+.wfb-out { cursor: crosshair; }
+.wfb-out:hover .wfb-port { fill: var(--wf-c); }
+.wfb-port-yes { stroke: var(--leaf); }
+.wfb-port-no { stroke: var(--kumkum); }
+.wfb-port-label { font-size: 11px; font-weight: 700; fill: var(--ink-2); }
+.wfb-edge { cursor: pointer; }
+.wfb-edge-hit { fill: none; stroke: transparent; stroke-width: 14; }
+.wfb-edge-line { fill: none; stroke: var(--ink-2); stroke-width: 2; }
+.wfb-edge-yes { stroke: var(--leaf); }
+.wfb-edge-no { stroke: var(--kumkum); }
+.wfb-edge-on .wfb-edge-line { stroke-width: 3.5; stroke: var(--oil); }
+.wfb-edge-draft { stroke-dasharray: 6 5; pointer-events: none; }
+.wfb-arrowhead { fill: var(--ink-2); }
+@media (max-width: 900px) { .wfb-body { grid-template-columns: 1fr; } .wfb-canvas { max-height: 60vh; } .wfb-side { max-height: none; } }
+.wfb-view { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+.wfb-full { position: fixed; inset: 0; z-index: 60; background: var(--bg); padding: 14px 16px; overflow: auto; align-content: start; }
+.wfb-full .wfb-canvas, .wfb-full .wfb-side { max-height: calc(100vh - 150px); }
+.wfb-full .wfb-body { min-height: calc(100vh - 150px); }
