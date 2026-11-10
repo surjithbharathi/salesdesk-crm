@@ -157,6 +157,13 @@ export function LeadDetail({ id }) {
               </div>
             ))}
             {!fields.length && <p className="no-fields">No fields match.</p>}
+            {fieldTab === "primary" && !raw.state && raw.probableState && (
+              <div className="field probable">
+                <label><TIcon name="pin" />Probable State</label>
+                <p>{raw.probableState} <small>from {raw.probableStateFrom === "your leads" ? "other leads with this number series" : "the mobile number series"}</small></p>
+                <div className="use">{raw.probableState.split(" / ").filter((s) => !/north east/i.test(s)).map((s) => <button key={s} type="button" disabled={busy} onClick={() => setField("state", s)}>Use {s}</button>)}</div>
+              </div>
+            )}
             <datalist id="sd-states">{STATES.map((s) => <option key={s} value={s} />)}</datalist>
             <datalist id="sd-languages">{LANGUAGES.map((l) => <option key={l} value={l} />)}</datalist>
           </div>

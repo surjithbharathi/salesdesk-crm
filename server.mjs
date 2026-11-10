@@ -15,6 +15,7 @@ import { createCallAI } from './call-ai.mjs';
 import { mergeLeads } from "./lead-merge.mjs";
 import { phoneParts, phoneKeyOf, assertUniqueLead, initializeLeadPhoneIndex } from "./lead-phone.mjs";
 import { cleanState, cleanLanguage, withRegion, regionHints } from "./lead-region.mjs";
+import { probableStates } from "./probable-state.mjs";
 import { readFile, mkdir } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
 import { randomUUID } from "node:crypto";
@@ -60,6 +61,17 @@ initializeLeadPhoneIndex(db);
   try { for (const r of rows) { const lead = JSON.parse(r.body), next = withRegion(lead, regionHints(lead)); if (next) write.run(JSON.stringify(next), r.id); } db.exec("COMMIT"); }
   catch (e) { db.exec("ROLLBACK"); console.error("Filling lead state and language failed: " + e.message); }
 }
+// leads without a state get a "probable state" from their mobile number (see probable-state.mjs); the state itself is never set
+function refreshProbableStates() {
+  try {
+    const leads = db.prepare("SELECT body FROM records WHERE kind='leads'").all().map((r) => JSON.parse(r.body));
+    const changed = probableStates(leads), write = db.prepare("UPDATE records SET body=? WHERE kind='leads' AND id=?");
+    db.exec("BEGIN");
+    try { for (const l of changed) write.run(JSON.stringify(l), l.id); db.exec("COMMIT"); } catch (e) { db.exec("ROLLBACK"); throw e; }
+  } catch (e) { console.error("Probable states failed: " + e.message); }
+}
+refreshProbableStates();
+setInterval(refreshProbableStates, 6 * 3600000).unref();
 const kinds = ["leads", "activities", "tasks", "deals", "payments", "products", "users", "lists"];
 const all = (kind) =>
   db
@@ -231,6 +243,7 @@ function validate(kind, p, old = {}) {
     s("state", 80);
     s("language", 40);
     if (Object.hasOwn(p, "state")) v.state = cleanState(v.state);
+    if (v.state) { delete v.probableState; delete v.probableStateFrom; } // a real state replaces the guess from the number
     if (Object.hasOwn(p, "language")) { v.language = cleanLanguage(v.language); delete v.languageGuess; }
     else if (Object.hasOwn(p, "state") && (v.languageGuess || !v.language)) { delete v.language; delete v.languageGuess; Object.assign(v, withRegion(v) || {}); }
     if (!v.name) bad("Lead name required");

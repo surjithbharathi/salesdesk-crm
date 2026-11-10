@@ -237,7 +237,7 @@ export default function LeadPanel({ id, onClose }) {
                   ]} />
                   <h3>Details</h3>
                   <Facts rows={[
-                    ["Company", lead.company], ["City", lead.city], ["State", lead.state], ["Language", lead.language ? lead.language + (lead.languageGuess ? " (guess)" : "") : ""], ["Email", lead.email], ["Value", lead.value ? rupees(lead.value) : ""],
+                    ["Company", lead.company], ["City", lead.city], ["State", lead.state || (lead.probableState ? `Probably ${lead.probableState} (from the number)` : "")], ["Language", lead.language ? lead.language + (lead.languageGuess ? " (guess)" : "") : ""], ["Email", lead.email], ["Value", lead.value ? rupees(lead.value) : ""],
                     ["Source", lead.source], ["Captured", lead.createdAt && day(lead.createdAt)],
                   ]} />
                   {calls.length > 0 && (

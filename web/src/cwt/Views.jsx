@@ -31,7 +31,7 @@ const LABEL = Object.fromEntries([...WORK_VIEWS, ...STAGE_VIEWS, ...OTHER_VIEWS]
 const uploadOf = (l) => l.upload?.name || (l.importedFrom === "salesmax" ? "Salesmax import" : l.importTouch || /^excel$/i.test(l.source || "") ? "TeleCRM Excel upload" : "");
 const SMART_KEY = "salesdesk-smart-views";
 const readSmart = () => { try { const v = JSON.parse(localStorage.getItem(SMART_KEY) || "[]"); return Array.isArray(v) ? v : []; } catch { return []; } };
-const ALL_COLS = [["status", "Status"], ["assignee", "Assignee"], ["state", "State"], ["language", "Language"], ["created", "Created On"], ["phone", "Phone"], ["source", "Source"], ["value", "Deal Value"], ["next", "Next Follow-up"]];
+const ALL_COLS = [["status", "Status"], ["assignee", "Assignee"], ["state", "State"], ["probable", "Probable State"], ["language", "Language"], ["created", "Created On"], ["phone", "Phone"], ["source", "Source"], ["value", "Deal Value"], ["next", "Next Follow-up"]];
 const readCols = () => { try { const s = localStorage.getItem("salesdesk-cwt-cols"); return new Set(s ? JSON.parse(s) : ["status", "assignee", "created"]); } catch { return new Set(["status", "assignee", "created"]); } };
 const ago = (t) => { const m = Math.floor((Date.now() - t) / 60000); if (m < 60) return m < 1 ? "just now" : `${m}m ago`; const h = Math.floor(m / 60); if (h < 24) return `${h}h ago`; const d = Math.floor(h / 24); return d < 30 ? `${d}d ago` : `${Math.floor(d / 30)}mo ago`; };
 const stamp = (t) => { const d = new Date(t); return `${d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} · ${d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}`; };
@@ -116,6 +116,7 @@ export default function Views({ params }) {
       { key: "status", group: "field", icon: "flow", label: "Lead Status", type: "select", options: opts(STATUSES), get: (l) => statusOf(l) },
       { key: "source", group: "field", icon: "link", label: "Lead Source", type: "select", options: opts(sources), get: (l) => l.source || "" },
       { key: "state", group: "field", icon: "pin", label: "State", type: "select", options: [...opts(states), ["", "Not set"]], get: (l) => l.state || "" },
+      { key: "probableState", group: "field", icon: "pin", label: "Probable State", type: "select", options: [...opts([...new Set((crm.leads || []).map((l) => l.probableState).filter(Boolean))].sort()), ["", "Not known"]], get: (l) => (l.state ? "" : l.probableState || "") },
       { key: "language", group: "field", icon: "message", label: "Language", type: "select", options: [...opts(languages), ["", "Not set"]], get: (l) => l.language || "" },
       { key: "city", group: "field", icon: "pin", label: "City", type: "select", options: opts(cities), get: (l) => String(l.city || "").trim() },
       { key: "created", group: "field", icon: "calendar", label: "Created On", type: "date", get: (l) => l.createdAt },
@@ -287,6 +288,7 @@ export default function Views({ params }) {
                       {cols.has("status") && <th>Status<TIcon name="filter" className="f" /></th>}
                       {cols.has("phone") && <th>Phone</th>}
                       {cols.has("state") && <th>State</th>}
+                      {cols.has("probable") && <th>Probable State</th>}
                       {cols.has("language") && <th>Language</th>}
                       {cols.has("assignee") && <th>Assignee<TIcon name="filter" className="f" /></th>}
                       {cols.has("source") && <th>Source</th>}
@@ -302,6 +304,7 @@ export default function Views({ params }) {
                           {cols.has("status") && <td><span className={`st st-${slug(statusOf(l))}`}>{statusOf(l)}</span></td>}
                           {cols.has("phone") && <td>{l.phone}</td>}
                           {cols.has("state") && <td>{l.state || ""}</td>}
+                          {cols.has("probable") && <td>{l.state ? "" : l.probableState || ""}</td>}
                           {cols.has("language") && <td>{l.language || ""}{l.languageGuess && l.language ? <small className="muted"> (guess)</small> : null}</td>}
                           {cols.has("assignee") && <td>{l.owner ? <span className="who"><span className="av">{initials(nameOf(l.owner))}</span>{nameOf(l.owner)}</span> : <span className="muted">—</span>}</td>}
                           {cols.has("source") && <td>{l.source}</td>}

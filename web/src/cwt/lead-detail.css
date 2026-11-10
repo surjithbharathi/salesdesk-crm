@@ -149,3 +149,8 @@
 .cwt .menu button:disabled { opacity: 0.5; }
 /* a language filled in from the state, to be checked */
 .cwt .field .guess { display: block; margin-top: 3px; font-size: 11px; color: #b45309; }
+/* the state guessed from the mobile number, shown apart from the real state */
+.cwt .field.probable p { margin: 2px 0 6px; font-size: 14px; color: #1f2937; }
+.cwt .field.probable small { font-size: 11px; color: #6b7280; }
+.cwt .field.probable .use { display: flex; flex-wrap: wrap; gap: 6px; }
+.cwt .field.probable .use button { padding: 3px 10px; border: 1px solid #c4b5fd; border-radius: 6px; background: #f5f3ff; color: #4f38a2; font: inherit; font-size: 12px; cursor: pointer; }

@@ -23,7 +23,7 @@ export const TRIGGERS = {
   no_activity: "A lead has no activity for some days",
 };
 // fields of every lead; TeleCRM's own fields (State, Requirement…) are added as "tc:<name>"
-export const FIELDS = { source: "Source", state: "State", language: "Language", city: "City", owner: "Owner", stage: "Stage", company: "Company", name: "Name", email: "Email", value: "Expected value", rating: "Rating" };
+export const FIELDS = { source: "Source", state: "State", probableState: "Probable state", language: "Language", city: "City", owner: "Owner", stage: "Stage", company: "Company", name: "Name", email: "Email", value: "Expected value", rating: "Rating" };
 export const OPS = { is: "is", is_not: "is not", contains: "contains", is_empty: "is empty", not_empty: "is not empty", more: "is more than", less: "is less than" };
 export const ACTIONS = { assign: "Assign the lead", stage: "Change the stage", field: "Update a lead field", task: "Create a follow-up task", whatsapp: "Send a WhatsApp message", notify: "Notify a team member", note: "Add a note", cancel_tasks: "Cancel open tasks", webhook: "Call an API (webhook)" };
 // what the "Update a lead field" box may write; owner and stage have their own boxes, TeleCRM fields belong to TeleCRM
