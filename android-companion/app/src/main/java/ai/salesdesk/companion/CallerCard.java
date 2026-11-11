@@ -32,6 +32,8 @@ final class CallerCard {
         // on a locked phone only when the person chose it (the card then sits over the ringing call screen)
         if (((android.app.KeyguardManager) c.getSystemService(Context.KEYGUARD_SERVICE)).isKeyguardLocked() && !SecureConfig.prefs(c).getBoolean("screenPopLocked", false)) return;
         new Handler(Looper.getMainLooper()).post(() -> {
+            // a number blocked in the CRM gets no card at all (and the phone's quick card for it, if one showed, goes away)
+            if (card.optBoolean("blocked")) { if (current != null && number.equals(shownFor)) dismiss(); return; }
             if (current != null && !number.equals(shownFor)) dismiss();
             Theme.load(c);
             lastNumber = number; lastCard = card;
