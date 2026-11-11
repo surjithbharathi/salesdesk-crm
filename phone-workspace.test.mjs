@@ -50,3 +50,14 @@ test("the phone copy leaves out deals and keeps only recent chats of its leads",
   assert.deepEqual(w.deals, []);
   assert.deepEqual(w.conversations.map((c) => c.id), ["c1"]);
 });
+
+test("a copy too big for the phone is shrunk until it fits", async () => {
+  const { fitPhoneWorkspace } = await import("./phone-workspace.mjs");
+  const now = Date.parse("2026-11-10T10:00:00Z"), iso = (d) => new Date(now - d * 86400000).toISOString();
+  const leads = Array.from({ length: 4000 }, (_, i) => ({ id: "l" + i, name: "Lead " + i + " ".repeat(300), stage: "New", updatedAt: iso(i % 30) }));
+  const small = fitPhoneWorkspace({ leads: leads.slice(0, 10) }, { user: { id: "u" } }, now);
+  assert.equal(small.step, 0);
+  assert.equal(JSON.parse(small.text).user.id, "u");
+  const big = fitPhoneWorkspace({ leads }, {}, now, 800000);
+  assert.ok(big.step > 0 && big.bytes <= 800000, `shrunk to ${big.bytes} at step ${big.step}`);
+});

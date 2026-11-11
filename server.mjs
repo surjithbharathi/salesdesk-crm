@@ -19,7 +19,7 @@ import { cleanState, cleanLanguage, withRegion, regionHints } from "./lead-regio
 import { probableStates } from "./probable-state.mjs";
 import { callerCard } from "./caller-card.mjs";
 import { leadScreen } from "./lead-screen.mjs";
-import { phoneWorkspace } from "./phone-workspace.mjs";
+import { fitPhoneWorkspace } from "./phone-workspace.mjs";
 import { isBlocked as numberBlocked } from "./blocked-numbers.mjs";
 import { readFile, mkdir } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
@@ -727,7 +727,11 @@ const mobileServer = http.createServer(async (req, res) => {
     }
     if (url.pathname === "/v1/workspace" && req.method === "GET") {
       if (!identity) bad("Shared user login required", 401);
-      reply(200, { ...phoneWorkspace(permittedState(scopedState(linkedState, identity.user.id), identity.user.id)), user: identity.user, company: identity.company });
+      const started = Date.now();
+      const fit = fitPhoneWorkspace(permittedState(scopedState(linkedState, identity.user.id), identity.user.id), { user: identity.user, company: identity.company });
+      console.log(JSON.stringify({ event: "phone_workspace", user: identity.user.id, bytes: fit.bytes, step: fit.step, ms: Date.now() - started }));
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(fit.text);
       return;
     }
     if (

@@ -1,9 +1,10 @@
 // What the phone app keeps: the person's working leads and recent work, with only the fields it shows. The full copy grew
 // past what a phone can download and store once TeleCRM and Salesmax history came in; older and closed things stay on the
 // server (the caller popup and the web CRM still find them).
-const PHONE_DAYS = 21, PHONE_LEADS = 4000, PHONE_ACTIVITIES = 6000, PHONE_MESSAGES = 1500;
+const FULL = { days: 21, leads: 4000, activities: 6000, messages: 1500 };
 const LEAD_FIELDS = ["id", "name", "phone", "countryCode", "mobileNumber", "phoneKey", "company", "email", "city", "state", "language", "stage", "deal", "disposition", "owner", "value", "source", "createdAt", "updatedAt", "firstTouchAt", "repeat", "needsName", "createdBy"];
-export function phoneWorkspace(st, now = Date.now()) {
+export function phoneWorkspace(st, now = Date.now(), limits = FULL) {
+  const { days: PHONE_DAYS, leads: PHONE_LEADS, activities: PHONE_ACTIVITIES, messages: PHONE_MESSAGES } = limits;
   const since = now - PHONE_DAYS * 86400000, recent = (iso) => Date.parse(iso || 0) >= since;
   const openTask = new Set((st.tasks || []).filter((t) => t.status !== "Done" && t.leadId).map((t) => t.leadId));
   const callAt = (c) => c.createdAt || (c.startedAt ? new Date(c.startedAt).toISOString() : "");
@@ -31,4 +32,16 @@ export function phoneWorkspace(st, now = Date.now()) {
     conversations: (st.conversations || []).filter((c) => kept.has(c.leadId) && recent(c.updatedAt || c.createdAt)),
     documents: [],
   };
+}
+
+// The app refuses a copy over 6 MB (and a slow phone network may not finish one that big), so the copy is shrunk step by
+// step until its JSON fits: fewer old leads, then less history. Returns the JSON text and how far it had to go.
+const STEPS = [FULL, { days: 14, leads: 3000, activities: 4000, messages: 1000 }, { days: 10, leads: 2000, activities: 2500, messages: 600 }, { days: 7, leads: 1200, activities: 1500, messages: 300 }];
+export function fitPhoneWorkspace(st, extra = {}, now = Date.now(), maxBytes = 5 * 1048576) {
+  let text = "", step = 0;
+  for (; step < STEPS.length; step++) {
+    text = JSON.stringify({ ...phoneWorkspace(st, now, STEPS[step]), ...extra });
+    if (Buffer.byteLength(text) <= maxBytes) break;
+  }
+  return { text, bytes: Buffer.byteLength(text), step: Math.min(step, STEPS.length - 1) };
 }
