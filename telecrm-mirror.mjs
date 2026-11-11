@@ -40,6 +40,8 @@ export const mapStatus = (label) => {
   if (step) { const p = PIPELINE.find((d) => d.name === step); return { deal: p.name, stage: p.stage, disposition: p.disposition }; }
   return { deal: "", stage: STAGE_BY_LABEL.get(key) || "Prospecting", disposition: "" };
 };
+// TeleCRM keeps the follow-up date in "next_follow-up_on"; older exports used "next_followup".
+const followupOf = (f) => f["next_follow-up_on"] ?? f.next_followup;
 const msOf = (v) => {
   if (v == null || v === "") return 0;
   if (typeof v === "number") return v < 1e11 ? v * 1000 : v;
@@ -261,7 +263,8 @@ export function createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecor
     let cur = ctx.byTid.get(tid) || (parts.phoneKey && ctx.byPhone.get(parts.phoneKey)) || null;
     if (cur && ctx.claimed.has(cur.id)) cur = null;
     const status = text(item.status || f.status, 100), map = mapStatus(status), owner = ctx.users.get(String(item.employeeid || f.assignee || "").toLowerCase())?.id || cur?.owner || "";
-    const { name: _n, phone: _p, email, city, place, company, lead_source, expected_revenue, lost_reason, next_followup, ...rest } = f;
+    const { name: _n, phone: _p, email, city, place, company, lead_source, expected_revenue, lost_reason, next_followup: _nf, "next_follow-up_on": _nfo, ...rest } = f;
+    const next_followup = followupOf(f);
     const created = msOf(f.created_on);
     const lead = {
       ...(cur || {}), id: cur?.id || id, name: text(f.name, 200).trim() || (parts.phone && `+${parts.phoneKey}`) || "TeleCRM lead", company: text(company, 200) || cur?.company || "",
@@ -335,7 +338,7 @@ export function createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecor
               done.add(it.id);
               counts.seen++;
               const cur = byTid.get(it.id), f = it.fields || {};
-              const same = cur && cur.telecrm.modifiedOn === (Number(f.modified_on) || 0) && cur.telecrm.lastActivityOn === (Number(f.last_activity_on) || 0) && cur.telecrm.status === text(it.status || f.status, 100) && cur.telecrm.assignee === String(it.employeeid || "").toLowerCase() && cur.telecrm.nextFollowup === (msOf(f.next_followup) || null);
+              const same = cur && cur.telecrm.modifiedOn === (Number(f.modified_on) || 0) && cur.telecrm.lastActivityOn === (Number(f.last_activity_on) || 0) && cur.telecrm.status === text(it.status || f.status, 100) && cur.telecrm.assignee === String(it.employeeid || "").toLowerCase() && cur.telecrm.nextFollowup === (msOf(followupOf(f)) || null);
               if (!same || redo) todo.push(it);
             }
             const loaded = [];

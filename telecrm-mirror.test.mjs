@@ -162,6 +162,17 @@ test("changes in TeleCRM reach the mirror: new status, new owner, a cleared foll
   assert.equal(w.all("activities").filter((x) => x.leadId === a.id).length, 1);
 });
 
+test("TeleCRM's next_follow-up_on field becomes the lead's follow-up task", async (t) => {
+  const w = world(t);
+  connect(w);
+  w.tele.leads = [lead("aaa", {}, { "next_follow-up_on": 1801000000000 })];
+  await w.mirror.sync();
+  const task = w.get("tasks", "tct-aaa");
+  assert.equal(task.status, "Open");
+  assert.equal(task.due, new Date(1801000000000).toISOString());
+  assert.equal(w.all("leads")[0].telecrm.nextFollowup, 1801000000000);
+});
+
 test("a lead already in this CRM with the same mobile number is adopted, not duplicated", async (t) => {
   const w = world(t);
   connect(w);
