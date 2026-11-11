@@ -220,5 +220,22 @@ export function createSalesmaxImport({ db, get, put, tx, users }) {
     tx(() => KINDS[kind](rows.filter((r) => r && typeof r === "object"), personOf, counts));
     return counts;
   }
-  return { importBatch };
+  // Closes the open follow-ups brought in from Salesmax that were due before `before`. Each is closed as of its own due
+  // date, so none of them shows up as "done today"; no workflow runs and nothing is written to the lead's timeline.
+  function closeOld(before) {
+    const cut = Date.parse(before);
+    if (!Number.isFinite(cut)) fail("Invalid date");
+    const stamp = new Date().toISOString();
+    let closed = 0;
+    tx(() => {
+      for (const r of db.prepare("SELECT body FROM records WHERE kind='tasks' AND json_extract(body,'$.origin')='Salesmax' AND json_extract(body,'$.status')<>'Done'").all()) {
+        const t = JSON.parse(r.body);
+        if (!(Date.parse(t.due) < cut)) continue;
+        put("tasks", { ...t, status: "Done", completedAt: t.due, result: t.result || "Closed: old Salesmax follow-up", updatedAt: stamp });
+        closed++;
+      }
+    });
+    return { closed };
+  }
+  return { importBatch, closeOld };
 }

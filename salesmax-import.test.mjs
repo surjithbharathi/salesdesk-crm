@@ -96,3 +96,20 @@ test("line breaks written as <br> in a remark become new lines, and a second imp
   assert.equal(notes.length, 1);
   assert.equal(notes[0].text, "Cold Press\nOperation Type : Automatic\nCall Duration: 0");
 });
+
+test("old open Salesmax follow-ups close as of their own due date; newer ones and other tasks stay open", () => {
+  const s = setup();
+  const t = (id, due, v = {}) => s.put("tasks", { id, leadId: "l1", title: "Follow-up", due, status: "Open", origin: "Salesmax", importedFrom: "Salesmax", ...v });
+  t("old", "2026-10-01T05:00:00.000Z");
+  t("new", "2026-11-12T05:00:00.000Z");
+  t("mine", "2026-10-01T05:00:00.000Z", { origin: "User", importedFrom: undefined });
+  t("done", "2026-09-01T05:00:00.000Z", { status: "Done", result: "Done" });
+  assert.deepEqual(s.imp.closeOld("2026-11-11T00:00:00.000Z"), { closed: 1 });
+  const old = s.get("tasks", "old");
+  assert.equal(old.status, "Done");
+  assert.equal(old.completedAt, "2026-10-01T05:00:00.000Z");
+  assert.equal(s.get("tasks", "new").status, "Open");
+  assert.equal(s.get("tasks", "mine").status, "Open");
+  assert.equal(s.get("tasks", "done").result, "Done");
+  assert.throws(() => s.imp.closeOld("nope"));
+});

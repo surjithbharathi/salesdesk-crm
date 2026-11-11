@@ -1575,6 +1575,13 @@ const server = http.createServer(async (req, res) => {
       bad("Method not allowed", 405);
     }
     if (url.pathname === "/api/deleted-leads" && req.method === "GET") {
+    // Closes the old open follow-ups that came from Salesmax (admins only)
+    if (url.pathname === "/api/import/salesmax/close-old" && req.method === "POST") {
+      if (identity && !["owner", "admin"].includes(workspaceAccess.profile(identity.user.id).role)) bad("Only an admin can do this", 403);
+      sameOrigin();
+      const p = await body(req);
+      return send(200, salesmaxImport.closeOld(String(p.before || "")));
+    }
       if (identity && !["owner", "admin"].includes(workspaceAccess.profile(identity.user.id).role)) bad("Only an admin can see deleted leads", 403);
       return send(200, blocked.deleted());
     }
