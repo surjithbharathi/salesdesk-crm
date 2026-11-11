@@ -44,10 +44,14 @@ if (
   (!publicOrigin.startsWith("https://") || new URL(publicOrigin).origin !== publicOrigin)
 )
   throw Error("PUBLIC_ORIGIN must be an HTTPS origin");
+// other addresses the same CRM answers on (for example the old one after a move to the company's own domain)
+const aliasOrigins = String(process.env.PUBLIC_ALIASES || "").split(",").map((o) => o.trim()).filter(Boolean);
+for (const o of aliasOrigins) if (!o.startsWith("https://") || new URL(o).origin !== o) throw Error("PUBLIC_ALIASES must be HTTPS origins");
 const allowedOrigins = [
   "http://localhost:" + port,
   "http://127.0.0.1:" + port,
   ...(publicOrigin ? [publicOrigin] : []),
+  ...aliasOrigins,
 ];
 const bindHost = process.env.BIND_HOST || "127.0.0.1";
 await mkdir(new URL("./data/", import.meta.url), { recursive: true });
@@ -990,6 +994,7 @@ const server = http.createServer(async (req, res) => {
         `localhost:${port}`,
         `127.0.0.1:${port}`,
         ...(publicOrigin ? [new URL(publicOrigin).host] : []),
+        ...aliasOrigins.map((o) => new URL(o).host),
       ].includes(req.headers.host)
     )
       bad("Unrecognized host", 403);

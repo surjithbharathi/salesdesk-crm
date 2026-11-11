@@ -9,7 +9,9 @@ const directory=dirname(fileURLToPath(import.meta.url));
 const dbPath=process.env.CRM_DB||join(directory,'data/crm.sqlite');
 const mainOrigin=process.env.PUBLIC_ORIGIN;
 if(!mainOrigin||new URL(mainOrigin).protocol!=='https:')throw Error('HTTPS PUBLIC_ORIGIN required for workspace gateway');
-const mainHost=new URL(mainOrigin).hostname,baseDomain=mainHost.split('.').slice(1).join('.');
+// PUBLIC_ALIASES: other addresses of the main CRM (comma-separated origins); WORKSPACE_BASE_DOMAIN keeps workspace hosts where they are
+const mainHost=new URL(mainOrigin).hostname,baseDomain=process.env.WORKSPACE_BASE_DOMAIN||mainHost.split('.').slice(1).join('.');
+const mainHosts=new Set([mainHost,...String(process.env.PUBLIC_ALIASES||'').split(',').map(o=>o.trim()).filter(Boolean).map(o=>new URL(o).hostname)]);
 const freePort=()=>new Promise((resolve,reject)=>{const socket=net.createServer();socket.on('error',reject);socket.listen(0,'127.0.0.1',()=>{const port=socket.address().port;socket.close(()=>resolve(port));});});
 const children=new Map();
 function start(key,{db,origin,port,mobilePort,master=false}){
@@ -28,7 +30,7 @@ const server=http.createServer(async(req,res)=>{
   try{
     const host=req.headers.host||'';if(host.includes(':'))fail('Unrecognized workspace host',403);
     let runtime;
-    if(host===mainHost)runtime=master;
+    if(mainHosts.has(host))runtime=master;
     else{
       const row=registry.prepare('SELECT * FROM crm_workspaces WHERE host=?').get(host);if(!row)fail('Workspace not found',404);if(row.state!=='active')fail('Workspace is suspended',403);
       runtime=await (children.get(row.id)||start(row.id,{db:join(dirname(dbPath),'workspaces',row.id,'crm.sqlite'),origin:'https://'+row.host}));
