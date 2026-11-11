@@ -40,8 +40,9 @@ export const mapStatus = (label) => {
   if (step) { const p = PIPELINE.find((d) => d.name === step); return { deal: p.name, stage: p.stage, disposition: p.disposition }; }
   return { deal: "", stage: STAGE_BY_LABEL.get(key) || "Prospecting", disposition: "" };
 };
-// TeleCRM keeps the follow-up date in "next_follow-up_on"; older exports used "next_followup".
-const followupOf = (f) => f["next_follow-up_on"] ?? f.next_followup;
+// TeleCRM's follow-up date is "next_follow-up_on". "next_followup" is a column from an old Excel upload with stale dates
+// that TeleCRM itself ignores, so it is not a follow-up here either.
+const followupOf = (f) => f["next_follow-up_on"];
 const msOf = (v) => {
   if (v == null || v === "") return 0;
   if (typeof v === "number") return v < 1e11 ? v * 1000 : v;
@@ -294,7 +295,12 @@ export function createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecor
     if (due && live) {
       rawPut("tasks", { ...(oldTask || {}), id: taskId, title: `Follow up with ${lead.name}`, leadId: lead.id, owner, status: oldTask && oldTask.due === new Date(due).toISOString() && oldTask.status === "Done" ? "Done" : "Open", due: new Date(due).toISOString(), origin: "TeleCRM", createdAt: oldTask?.createdAt || new Date(now()).toISOString(), updatedAt: new Date(now()).toISOString() });
       ctx.counts.tasks++;
-    } else if (oldTask && oldTask.status !== "Done") rawPut("tasks", { ...oldTask, status: "Done", updatedAt: new Date(now()).toISOString() });
+    } else if (oldTask && oldTask.status !== "Done") {
+      // one that was already late before today is closed as of its own date, so it does not show up as "done today"
+      const today = new Date(now()); today.setHours(0, 0, 0, 0);
+      const stamp = new Date(now()).toISOString(), was = Date.parse(oldTask.due);
+      rawPut("tasks", { ...oldTask, status: "Done", completedAt: was < today.getTime() ? oldTask.due : stamp, updatedAt: stamp });
+    }
   }
 
   async function actionsOf(s, tid) {

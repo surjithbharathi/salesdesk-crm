@@ -80,8 +80,8 @@ test("a full run mirrors people, leads, their timeline and the follow-up as a ta
   const w = world(t);
   connect(w);
   w.tele.leads = [
-    lead("aaa", { status: "Quotation Shared" }, { next_followup: 1801000000000, expected_revenue: "250000", city: "Erode" }),
-    lead("bbbb", { status: "Lost" }, { next_followup: 1801000000000, lost_reason: "Budget Issues" }),
+    lead("aaa", { status: "Quotation Shared" }, { "next_follow-up_on": 1801000000000, expected_revenue: "250000", city: "Erode" }),
+    lead("bbbb", { status: "Lost" }, { "next_follow-up_on": 1801000000000, lost_reason: "Budget Issues" }),
   ];
   const bala = "bala@deviindustries.com";
   w.tele.actions.aaa = [
@@ -145,7 +145,7 @@ test("a full run mirrors people, leads, their timeline and the follow-up as a ta
 test("changes in TeleCRM reach the mirror: new status, new owner, a cleared follow-up closes the task, new leads appear", async (t) => {
   const w = world(t);
   connect(w);
-  w.tele.leads = [lead("aaa", {}, { next_followup: 1801000000000 })];
+  w.tele.leads = [lead("aaa", {}, { "next_follow-up_on": 1801000000000 })];
   await w.mirror.sync();
   w.tick(120000);
   w.tele.leads = [{ ...lead("aaa", { status: "Advance Received", employeeid: "sathiya@deviindustries.com" }, { modified_on: 2, last_activity_on: 2 }) }, lead("cccc", {}, {})];
@@ -171,6 +171,22 @@ test("TeleCRM's next_follow-up_on field becomes the lead's follow-up task", asyn
   assert.equal(task.status, "Open");
   assert.equal(task.due, new Date(1801000000000).toISOString());
   assert.equal(w.all("leads")[0].telecrm.nextFollowup, 1801000000000);
+});
+
+test("the old Excel next_followup column is not a follow-up; a late task it left is closed as of its own date", async (t) => {
+  const w = world(t);
+  connect(w);
+  const past = 1_799_000_000_000;
+  w.tele.leads = [lead("aaa", {}, { "next_follow-up_on": past })];
+  await w.mirror.sync();
+  assert.equal(w.get("tasks", "tct-aaa").status, "Open");
+  w.tick(120000);
+  w.tele.leads = [lead("aaa", {}, { next_followup: past }), lead("bbbb", {}, { next_followup: 1801000000000 })];
+  await w.mirror.sync();
+  const closed = w.get("tasks", "tct-aaa");
+  assert.equal(closed.status, "Done");
+  assert.equal(closed.completedAt, new Date(past).toISOString(), "not counted as done today");
+  assert.equal(w.get("tasks", "tct-bbbb"), undefined);
 });
 
 test("a lead already in this CRM with the same mobile number is adopted, not duplicated", async (t) => {
