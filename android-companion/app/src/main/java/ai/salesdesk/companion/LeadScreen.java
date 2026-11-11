@@ -310,9 +310,7 @@ final class LeadScreen {
     private void call() {
         String d = digits();
         if (d.isEmpty()) { note("This lead has no phone number."); return; }
-        boolean direct = a.checkSelfPermission(android.Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED;
-        try { a.startActivity(new Intent(direct ? Intent.ACTION_CALL : Intent.ACTION_DIAL, Uri.fromParts("tel", "+" + d, null))); }
-        catch (Exception e) { a.startActivity(new Intent(Intent.ACTION_DIAL, Uri.fromParts("tel", "+" + d, null))); }
+        CompanySim.dial(a, "+" + d);
     }
 
     private void whatsApp() {

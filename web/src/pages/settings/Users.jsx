@@ -122,6 +122,8 @@ export default function Users({ access, meId }) {
   const notify = useToast();
   const [version, setVersion] = useState(0);
   const { data: users, error } = useLoad(() => crmGet("workspace/users"), [version]);
+  // each person's company SIM: the SIM the phone app always uses for CRM calls
+  const { data: sims } = useLoad(() => crmGet("click-to-call/company-sims").catch(() => ({})), [version]);
   const [editing, setEditing] = useState("");
   const [link, setLink] = useState("");
   const [busy, setBusy] = useState(false);
@@ -173,6 +175,18 @@ export default function Users({ access, meId }) {
       notify(e.message);
     }
   }
+  async function resetSim(user) {
+    if (!confirm(`Reset ${user.name}'s company SIM?
+
+Their Salesdesk app will ask them to choose the company SIM again, and CRM calls from their phone wait until they do.`)) return;
+    try {
+      await crmSend("DELETE", `click-to-call/company-sims/${user.id}`);
+      notify(`${user.name}'s company SIM was reset. Their app will ask for it again.`);
+      reload();
+    } catch (e) {
+      notify(e.message);
+    }
+  }
   if (error) return <Failed>{error.message}</Failed>;
   return (
     <>
@@ -180,7 +194,7 @@ export default function Users({ access, meId }) {
       <Section title="People" desc="Everyone who can open this CRM. Changing someone's access signs them out on their devices." status={users ? `${users.length} people` : undefined} tone="off">
         <div className="table-frame">
           <table className="grid">
-            <thead><tr><th>Name</th><th>Username</th><th>Numbers</th><th>Role</th><th>Status</th><th><span className="sr">Actions</span></th></tr></thead>
+            <thead><tr><th>Name</th><th>Username</th><th>Numbers</th><th>Company SIM</th><th>Role</th><th>Status</th><th><span className="sr">Actions</span></th></tr></thead>
             <tbody>
               {(users || []).map((u) => (
                 <React.Fragment key={u.id}>
@@ -188,6 +202,7 @@ export default function Users({ access, meId }) {
                     <td><b>{u.name}</b>{u.crmOwner && <span className="note note-warn small-note">Ultra Admin</span>}</td>
                     <td>{u.username || <span className="muted">No login</span>}</td>
                     <td>{u.numbers?.length ? u.numbers.join(", ") : <span className="muted">None</span>}</td>
+                    <td>{sims?.[u.id]?.key ? <>{sims[u.id].label} <button className="btn btn-quiet" onClick={() => resetSim(u)}>Reset</button></> : <span className="muted">Not chosen</span>}</td>
                     <td>{ROLES.find(([r]) => r === u.role)?.[1] || u.role}</td>
                     <td>{u.active ? "Active" : <span className="muted">Disabled</span>}</td>
                     <td className="right">
@@ -202,10 +217,10 @@ export default function Users({ access, meId }) {
                     </td>
                   </tr>
                   {editing === u.id && (
-                    <tr className="reasons"><td colSpan={6}><Edit user={u} access={access} onCancel={() => setEditing("")} onSaved={() => { setEditing(""); reload(); }} /></td></tr>
+                    <tr className="reasons"><td colSpan={7}><Edit user={u} access={access} onCancel={() => setEditing("")} onSaved={() => { setEditing(""); reload(); }} /></td></tr>
                   )}
                   {editing === `n:${u.id}` && (
-                    <tr className="reasons"><td colSpan={6}><Numbers user={u} onCancel={() => setEditing("")} onSaved={() => { setEditing(""); reload(); }} /></td></tr>
+                    <tr className="reasons"><td colSpan={7}><Numbers user={u} onCancel={() => setEditing("")} onSaved={() => { setEditing(""); reload(); }} /></td></tr>
                   )}
                 </React.Fragment>
               ))}

@@ -19,7 +19,7 @@ import org.json.*;
 public class MainActivity extends Activity {
     final ClickToCall clickToCall=new ClickToCall(this);
     CallSyncWatcher visibleSync;
-    @Override protected void onResume(){super.onResume();CallMonitorService.start(this);clickToCall.resume();visibleSync=new CallSyncWatcher(this);visibleSync.start();}
+    @Override protected void onResume(){super.onResume();if(SecureConfig.loggedIn(this))new Thread(()->{String was=CompanySim.key(this);CompanySim.refresh(this);if(!was.equals(CompanySim.key(this)))runOnUiThread(this::render);},"company-sim").start();CallMonitorService.start(this);clickToCall.resume();visibleSync=new CallSyncWatcher(this);visibleSync.start();}
     @Override protected void onPause(){if(visibleSync!=null){visibleSync.close();visibleSync=null;}clickToCall.pause();super.onPause();}
     static int PURPLE,ACCENT,ONACCENT,BAR,ONBAR,BARMUTED,BARACCENT,BARCHIP,PANELTRACK,PANELGOOD,PANELBAD,INK,MUTED,BG,LINE,SOFT,NEUTRAL,GOODSOFT,LEAF,RED,RADIUS=10;static boolean CONDENSED=true,LIGHTBARS=false;static{Theme.apply(Theme.DEFAULT);}
     boolean showSyncOptions,showCallingOptions,leadsToday,tasksToday=true,syncAfterCallLogPermission,pendingSimSetup,pendingRecordingSetup,pendingCallerSetup,pendingBridgeSetup;

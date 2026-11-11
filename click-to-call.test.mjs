@@ -95,3 +95,24 @@ test("Pending calls cancel if lead changes owner/number or the bridge is paused"
   assert.equal(f.service.poll("u", "phone", false).command, null);
   assert.equal(f.service.poll("u", "phone", true).command, null);
 });
+test("the company SIM is set once by the phone; only an admin reset lets a different SIM be chosen", (t) => {
+  const f = fixture(t);
+  const a = "a".repeat(64), b = "b".repeat(64);
+  assert.deepEqual(f.service.companySim("u"), { key: null, label: "", setAt: null });
+  assert.throws(() => f.service.setCompanySim("u", { key: "nope" }), /Invalid SIM/);
+  assert.equal(f.service.setCompanySim("u", { key: a, label: "Jio · SIM 1" }).label, "Jio · SIM 1");
+  assert.equal(f.service.setCompanySim("u", { key: a, label: "other name" }).label, "Jio · SIM 1");
+  assert.throws(() => f.service.setCompanySim("u", { key: b, label: "Airtel" }), (e) => e.status === 409);
+  assert.deepEqual(Object.keys(f.service.companySims()), ["u"]);
+  f.service.resetCompanySim("u");
+  assert.equal(f.service.setCompanySim("u", { key: b, label: "Airtel" }).key, b);
+});
+test("a phone without its company SIM reports it, and the web can read that status", (t) => {
+  const f = fixture(t);
+  f.service.poll("u", "phone", true);
+  const sent = request(f);
+  const claimed = f.service.poll("u", "phone", true).command;
+  assert.equal(f.service.acknowledge("u", "phone", claimed.id, "Company SIM missing").status, "Company SIM missing");
+  assert.equal(f.service.status("u", sent.id).status, "Company SIM missing");
+  assert.throws(() => f.service.status("v", sent.id), (e) => e.status === 404);
+});

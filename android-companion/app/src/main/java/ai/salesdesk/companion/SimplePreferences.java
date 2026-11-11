@@ -16,6 +16,14 @@ final class SimplePreferences {
     android.content.SharedPreferences prefs(){return SecureConfig.prefs(a);}
     void render(){
         LinearLayout sync=a.card();a.text(sync,"Calls & recordings",19,true);
+        if(!CompanySim.key(a).isEmpty()){
+            a.text(sync,"Company SIM: "+CompanySim.label(a),16,true);
+            a.caption(sync,"🔒 All CRM calls go through this SIM. Only your admin can change it.");
+        }else if(CompanySim.needed(a)){
+            a.text(sync,"Company SIM not chosen",16,true);
+            a.caption(sync,"This phone has more than one SIM. Choose the company SIM so CRM calls never go out on a personal SIM.");
+            a.primary(sync,"Choose company SIM",()->CompanySim.choose(a,null));
+        }
         a.caption(sync,prefs().getBoolean("enabled",false)?"Call tracking is on":"Call tracking is off");
         a.primary(sync,"Choose SIM & call tracking",this::chooseSims);
         toggle(sync,"Sync call recordings",prefs().getBoolean("recordingSync",true)&&hasFolder(),enabled->{
@@ -77,5 +85,5 @@ final class SimplePreferences {
         if(!android.provider.Settings.canDrawOverlays(a)){a.startActivityForResult(new Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,Uri.parse("package:"+a.getPackageName())),310);return;}
         a.pendingCallerSetup=false;prefs().edit().putBoolean("screenPop",true).remove("callerDeclined").commit();a.render();
     }
-    void enableBridge(){a.pendingBridgeSetup=false;prefs().edit().putBoolean("clickToCall",true).commit();a.clickToCall.start();a.render();}
+    void enableBridge(){a.pendingBridgeSetup=false;prefs().edit().putBoolean("clickToCall",true).commit();a.clickToCall.start();a.render();if(CompanySim.key(a).isEmpty()&&CompanySim.needed(a))CompanySim.choose(a,null);}
 }

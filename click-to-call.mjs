@@ -5,6 +5,7 @@ const fail = (message, status = 400) => {
 // canCall: a person may dial their own leads; the server also lets them dial unassigned leads, and administrators any lead
 export function createClickToCall({ db, getLead, getDevice, canCall = (userId, l) => l.owner === userId, now = () => Date.now() }) {
   db.exec(`CREATE TABLE IF NOT EXISTS call_receiver(device_id TEXT PRIMARY KEY,user_id TEXT NOT NULL,seen INTEGER NOT NULL,armed INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS company_sim(user_id TEXT PRIMARY KEY,sim_key TEXT NOT NULL,label TEXT NOT NULL,set_at INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS call_commands(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,device_id TEXT NOT NULL,request_id TEXT NOT NULL,lead_id TEXT NOT NULL,phone TEXT NOT NULL,created INTEGER NOT NULL,expires INTEGER NOT NULL,status TEXT NOT NULL,UNIQUE(user_id,request_id));`);
   const expose = (r) => ({
     id: r.id,
@@ -120,7 +121,7 @@ export function createClickToCall({ db, getLead, getDevice, canCall = (userId, l
   }
   function acknowledge(userId, deviceId, id, status) {
     checkDevice(userId, deviceId);
-    if (!["Dialer launched", "Failed"].includes(status)) fail("Invalid call status");
+    if (!["Dialer launched", "Failed", "Company SIM missing"].includes(status)) fail("Invalid call status");
     const r = db
       .prepare("SELECT * FROM call_commands WHERE id=? AND user_id=? AND device_id=?")
       .get(id, userId, deviceId);
@@ -129,5 +130,33 @@ export function createClickToCall({ db, getLead, getDevice, canCall = (userId, l
       db.prepare("UPDATE call_commands SET status=? WHERE id=?").run(status, id);
     return { status: db.prepare("SELECT status FROM call_commands WHERE id=?").get(id).status };
   }
-  return { receivers, request, poll, acknowledge };
+  // the status of one of this person's call requests, so the web screen can say what the phone did
+  function status(userId, id) {
+    expire();
+    const r = db.prepare("SELECT * FROM call_commands WHERE id=? AND user_id=?").get(id, userId);
+    if (!r) fail("Call request not found", 404);
+    return expose(r);
+  }
+  // The company SIM: the SIM a person's CRM calls always go through. The phone app sets it once; after that only an
+  // admin can clear it (resetCompanySim), so nobody switches CRM calls to a personal SIM.
+  const simOf = (r) => (r ? { key: r.sim_key, label: r.label, setAt: r.set_at } : { key: null, label: "", setAt: null });
+  function companySim(userId) {
+    return simOf(db.prepare("SELECT * FROM company_sim WHERE user_id=?").get(userId));
+  }
+  function setCompanySim(userId, { key, label } = {}) {
+    if (!/^[a-f0-9]{64}$/.test(key || "")) fail("Invalid SIM");
+    const name = String(label || "").trim().slice(0, 80) || "Company SIM";
+    const old = db.prepare("SELECT * FROM company_sim WHERE user_id=?").get(userId);
+    if (old && old.sim_key !== key) fail("Only your admin can change the company SIM", 409);
+    if (!old) db.prepare("INSERT INTO company_sim VALUES(?,?,?,?)").run(userId, key, name, now());
+    return companySim(userId);
+  }
+  function companySims() {
+    return Object.fromEntries(db.prepare("SELECT * FROM company_sim").all().map((r) => [r.user_id, simOf(r)]));
+  }
+  function resetCompanySim(userId) {
+    db.prepare("DELETE FROM company_sim WHERE user_id=?").run(userId);
+    return companySim(userId);
+  }
+  return { receivers, request, poll, acknowledge, status, companySim, setCompanySim, companySims, resetCompanySim };
 }

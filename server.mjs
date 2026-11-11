@@ -672,6 +672,15 @@ const mobileServer = http.createServer(async (req, res) => {
     }
     if(url.pathname === "/v1/admin/users" && req.method === "GET" && identity){
       if(identity.user.role !== "admin")bad("Administrator required",403);
+    // the company SIM all of this person's CRM calls go through; the app sets it once, only an admin can clear it
+    if (url.pathname === "/v1/company-sim" && identity) {
+      if (req.method === "GET") reply(200, clickToCall.companySim(identity.user.id));
+      else if (req.method === "PUT") {
+        if (req.headers["content-type"]?.split(";")[0] !== "application/json") bad("JSON required", 415);
+        reply(200, clickToCall.setCompanySim(identity.user.id, await body(req)));
+      } else bad("Method not allowed", 405);
+      return;
+    }
       workspaceAccess.requirePermission(identity,'users.manage');
       reply(200,{users:userAuth.listAccounts()});return;
     }
@@ -1380,6 +1389,16 @@ const server = http.createServer(async (req, res) => {
         let value = row ? JSON.parse(row.body) : null;
         if (value && kind === "leads") { try { value = { ...value, ...phoneParts(value.phone) }; } catch {} delete value.salesmax; }
         if (value && kind === "activities" && (value.importedFrom || (!calls && value.type === "Call") || (!messages && value.type === "Message"))) value = null;
+      const callStatus = /^\/api\/click-to-call\/status\/([a-f0-9-]{36})$/.exec(url.pathname);
+      if (callStatus && req.method === "GET") return send(200, clickToCall.status(identity.user.id, callStatus[1]));
+      // each person's company SIM (admins only); DELETE clears one so that person's app asks for it again
+      const simReset = /^\/api\/click-to-call\/company-sims(?:\/([a-zA-Z0-9-]+))?$/.exec(url.pathname);
+      if (simReset) {
+        if (!["owner", "admin"].includes(workspaceAccess.profile(identity.user.id).role)) bad("Only an admin can do this", 403);
+        if (req.method === "GET" && !simReset[1]) return send(200, clickToCall.companySims());
+        if (req.method === "DELETE" && simReset[1]) { sameOrigin(); return send(200, clickToCall.resetCompanySim(simReset[1])); }
+        bad("Method not allowed", 405);
+      }
         if (value && kind === "tasks" && value.importedFrom && value.status === "Done") value = null;
         if (value && kind === "mobileCalls" && !calls) value = null;
         if (value && (kind === "messages" || kind === "conversations") && !messages) value = null;

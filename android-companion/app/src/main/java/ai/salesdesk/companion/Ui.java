@@ -63,9 +63,7 @@ final class Ui {
         String d = String.valueOf(phone).replaceAll("[^0-9+]", "");
         if (d.isEmpty()) { a.notice("This lead has no phone number."); return; }
         if (!d.startsWith("+")) d = (d.length() == 10 ? "+" + SecureConfig.prefs(a).getString("country", "91") : "+") + d;
-        boolean direct = a.checkSelfPermission(android.Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED;
-        try { a.startActivity(new Intent(direct ? Intent.ACTION_CALL : Intent.ACTION_DIAL, Uri.fromParts("tel", d, null))); }
-        catch (Exception e) { a.startActivity(new Intent(Intent.ACTION_DIAL, Uri.fromParts("tel", d, null))); }
+        CompanySim.dial(a, d);
     }
 
     static void whatsApp(MainActivity a, String phone, String text) {

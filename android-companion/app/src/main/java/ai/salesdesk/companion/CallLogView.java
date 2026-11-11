@@ -161,9 +161,7 @@ final class CallLogView {
     private void dial(String phone) {
         String d = phone.replaceAll("[^0-9+]", ""); if (d.isEmpty()) return;
         if (!d.startsWith("+")) d = (d.length() == 10 ? "+" + SecureConfig.prefs(a).getString("country", "91") : "+") + d;
-        boolean direct = a.checkSelfPermission(android.Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED;
-        try { a.startActivity(new Intent(direct ? Intent.ACTION_CALL : Intent.ACTION_DIAL, Uri.fromParts("tel", d, null))); }
-        catch (Exception ex) { a.startActivity(new Intent(Intent.ACTION_DIAL, Uri.fromParts("tel", d, null))); }
+        CompanySim.dial(a, d);
     }
     private void whatsApp(String phone) {
         String d = phone.replaceAll("[^0-9]", ""); if (d.length() == 10) d = SecureConfig.prefs(a).getString("country", "91") + d;

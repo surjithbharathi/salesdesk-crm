@@ -29,6 +29,7 @@ public class CallBridgeService extends Service {
         if(checkSelfPermission(Manifest.permission.READ_PHONE_STATE)!=PackageManager.PERMISSION_GRANTED)return false;
         try{return !getSystemService(TelecomManager.class).isInCall();}catch(SecurityException e){return false;}catch(Exception e){return false;}
     }
+    private int polls;
     private void loop(){
         while(!stopped){
             if(!SecureConfig.loggedIn(this)||!SecureConfig.prefs(this).getBoolean("clickToCall",false)){stopSelf();return;}
@@ -44,12 +45,15 @@ public class CallBridgeService extends Service {
                         if(id.equals(SecureConfig.prefs(this).getString("lastDialCommand","")))throw new Exception("Already handled");
                         if(!SecureConfig.prefs(this).edit().putString("lastDialCommand",id).commit())throw new Exception("Receipt failed");
                         if(checkSelfPermission(Manifest.permission.CALL_PHONE)!=PackageManager.PERMISSION_GRANTED)throw new SecurityException("Call permission revoked");
-                        getSystemService(TelecomManager.class).placeCall(Uri.fromParts("tel",phone,null),new Bundle());
-                        outcome="Dialer launched";
+                        // through the company SIM only: a missing or unchosen company SIM is reported, never a personal SIM
+                        CompanySim.Result placed=CompanySim.place(this,phone);
+                        outcome=placed==CompanySim.Result.PLACED?"Dialer launched":placed==CompanySim.Result.FAILED?"Failed":"Company SIM missing";
                     }catch(Exception ignored){/* No fallback intent or retry that could dial twice. */}
                     if(user.equals(SecureConfig.prefs(this).getString("userId","")))try{SyncEngine.requestApi(this,"/v1/click-to-call/ack","POST",new JSONObject().put("id",id).put("status",outcome));}catch(Exception ignored){}
                 }
             }catch(Exception e){if(e instanceof SyncEngine.HttpError&&(((SyncEngine.HttpError)e).code==401||((SyncEngine.HttpError)e).code==403)){SecureConfig.prefs(this).edit().putBoolean("clickToCall",false).commit();stopSelf();return;}}
+            // pick up an admin's reset of the company SIM about once a minute
+            if(++polls%20==1)CompanySim.refresh(this);
             try{Thread.sleep(3000);}catch(InterruptedException ignored){return;}
         }
     }
