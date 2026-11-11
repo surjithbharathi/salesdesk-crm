@@ -32,8 +32,8 @@ export function createUserAuth({ db, getUser, now = () => Date.now() }) {
   }
   function addAccount({ userId, username, password }, role) {
     const name = usernameOf(username);
-    if (typeof password !== "string" || password.length < 12 || password.length > 200)
-      fail("Password must be 12–200 characters");
+    if (typeof password !== "string" || password.length < 8 || password.length > 200)
+      fail("Password must be 8–200 characters");
     if (typeof userId !== "string" || !getUser(userId)?.active) fail("Select an active CRM user");
     if (db.prepare("SELECT 1 FROM auth_accounts WHERE user_id=? OR username=?").get(userId, name))
       fail("User or username already has an account", 409);
@@ -175,8 +175,8 @@ export function createUserAuth({ db, getUser, now = () => Date.now() }) {
   function resetPassword({ token, password } = {}) {
     if (typeof token !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(token))
       fail("Reset link is invalid or expired", 401);
-    if (typeof password !== "string" || password.length < 12 || password.length > 200)
-      fail("Password must be 12–200 characters");
+    if (typeof password !== "string" || password.length < 8 || password.length > 200)
+      fail("Password must be 8–200 characters");
     db.exec("BEGIN IMMEDIATE");
     try {
       const reset = db.prepare("SELECT * FROM auth_resets WHERE token_hash=?").get(digest(token));

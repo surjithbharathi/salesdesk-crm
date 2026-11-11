@@ -24,7 +24,7 @@ const userOptions = (users) =>
     .map((user) => `<option value="${escape(user.id)}">${escape(user.name)}</option>`)
     .join("");
 const credentials = () =>
-  `<label>Username<input name="username" required minlength="3" maxlength="120" autocomplete="username" autocapitalize="none" spellcheck="false" pattern="[A-Za-z0-9.@_+\\-]+"></label><label>Password<input name="password" type="password" required minlength="12" maxlength="200" autocomplete="current-password"></label>`;
+  `<label>Username<input name="username" required minlength="3" maxlength="120" autocomplete="username" autocapitalize="none" spellcheck="false" pattern="[A-Za-z0-9.@_+\\-]+"></label><label>Password<input name="password" type="password" required minlength="8" maxlength="200" autocomplete="current-password"></label>`;
 
 function installAccountBar(identity, configured) {
   document.getElementById("auth-account-bar")?.remove();
@@ -118,7 +118,7 @@ export async function initializeAuth() {
     dialog.className = "auth-dialog auth-gate";
     dialog.id = "auth-login";
     const setup = !status.configured;
-    dialog.innerHTML = `<h1>Salesdesk CRM</h1><h2>${setup ? "Set up shared web & mobile login" : "Sign in to your workspace"}</h2><p>${setup ? "Create the first administrator using an existing CRM user. Each teammate can then receive their own login." : "Use the same account on your desktop and Android app."}</p><form>${setup ? `<label>Company name<input name="company" required maxlength="120" autocomplete="organization"></label><label>Administrator CRM user<select name="userId" required>${userOptions(status.users || [])}</select></label>` : ""}${credentials()}<p class="auth-error" role="alert"></p><button class="primary" type="submit">${setup ? "Create administrator" : "Sign in"}</button>${setup ? '<button type="button" name="demo">Continue demo</button>' : ""}</form><p class="muted">${setup ? "Demo mode does not enable authenticated mobile access. Passwords must be at least 12 characters." : "Contact your workspace administrator if you need an account."}</p>`;
+    dialog.innerHTML = `<h1>Salesdesk CRM</h1><h2>${setup ? "Set up shared web & mobile login" : "Sign in to your workspace"}</h2><p>${setup ? "Create the first administrator using an existing CRM user. Each teammate can then receive their own login." : "Use the same account on your desktop and Android app."}</p><form>${setup ? `<label>Company name<input name="company" required maxlength="120" autocomplete="organization"></label><label>Administrator CRM user<select name="userId" required>${userOptions(status.users || [])}</select></label>` : ""}${credentials()}<p class="auth-error" role="alert"></p><button class="primary" type="submit">${setup ? "Create administrator" : "Sign in"}</button>${setup ? '<button type="button" name="demo">Continue demo</button>' : ""}</form><p class="muted">${setup ? "Demo mode does not enable authenticated mobile access. Passwords must be at least 8 characters." : "Contact your workspace administrator if you need an account."}</p>`;
     document.body.append(dialog);
     dialog.addEventListener("cancel", (event) => event.preventDefault());
     dialog.addEventListener("click", (event) => event.stopPropagation());
