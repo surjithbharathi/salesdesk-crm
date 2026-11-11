@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { crmGet, crmState } from "./api.js";
+import { AuthError, crmGet, crmStateText } from "./api.js";
+import { clearState, readState, saveDelta, saveFull } from "./stateCache.js";
 import { pipelineStep } from "./pipeline.js";
 import { PhoneDial } from "./PhoneDial.jsx";
 
@@ -46,28 +47,46 @@ export function CrmProvider({ me, children }) {
   const [state, setState] = useState(null);
   const [error, setError] = useState("");
   const seq = useRef(null);
+  const latest = useRef(null);
+  latest.current = state;
+  const uid = me?.id || "";
   const reload = useCallback(async () => {
     try {
       if (seq.current != null) {
-        const delta = await crmGet(`state/changes?after=${seq.current}`);
+        const from = seq.current;
+        const delta = await crmGet(`state/changes?after=${from}`);
         if (!delta.full) {
           seq.current = delta.syncSeq;
-          if (Object.keys(delta.changes || {}).length || Object.keys(delta.deleted || {}).length) setState((s) => (s ? mergeChanges(s, delta) : s));
+          if (Object.keys(delta.changes || {}).length || Object.keys(delta.deleted || {}).length) {
+            setState((s) => (s ? mergeChanges(s, delta) : s));
+            if (uid) saveDelta(uid, from, delta, () => latest.current);
+          }
           setError("");
           return;
         }
       }
-      const full = await crmState();
+      const { data: full, text } = await crmStateText();
       seq.current = Number.isInteger(full.syncSeq) ? full.syncSeq : null;
       setState(full);
       setError("");
+      if (uid) saveFull(uid, seq.current, text);
     } catch (e) {
+      if (e instanceof AuthError) clearState();
       setError(e.message);
     }
-  }, []);
+  }, [uid]);
   useEffect(() => {
     let loadedAt = Date.now();
-    reload();
+    let on = true;
+    // Show the copy kept in this browser at once, then ask the server only for what changed since.
+    (uid ? readState(uid, mergeChanges) : Promise.resolve(null)).then((saved) => {
+      if (!on) return;
+      if (saved && seq.current == null) {
+        seq.current = saved.seq;
+        setState(saved.state);
+      }
+      reload();
+    });
     // Coming back to the tab refreshes the data, but not more than once a minute: on a phone every app switch
     // would otherwise download the whole CRM again.
     const refresh = () => {
@@ -76,7 +95,7 @@ export function CrmProvider({ me, children }) {
       reload();
     };
     document.addEventListener("visibilitychange", refresh);
-    return () => document.removeEventListener("visibilitychange", refresh);
+    return () => { on = false; document.removeEventListener("visibilitychange", refresh); };
   }, [reload]);
   const value = useMemo(() => {
     if (!state) return { me, state: null, error, reload };

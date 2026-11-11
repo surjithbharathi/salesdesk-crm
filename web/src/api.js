@@ -1,3 +1,5 @@
+import { clearState } from "./stateCache.js";
+
 export class AuthError extends Error {}
 export class NotEnabledError extends Error {}
 
@@ -32,7 +34,7 @@ export const otpStart = (mobile) => request("/api/auth/otp/start", { method: "PO
 export const otpVerify = (mobile, code) => request("/api/auth/otp/verify", { method: "POST", body: { mobile, code } });
 export const signinSettings = () => request("/api/auth/signin-settings");
 export const saveSigninSettings = (body) => request("/api/auth/signin-settings", { method: "POST", body });
-export const logout = () => request("/api/auth/logout", { method: "POST", body: {} });
+export const logout = () => { clearState(); return request("/api/auth/logout", { method: "POST", body: {} }); };
 
 // "Today" follows the browser's local day, so work queues match what the team sees on their clock.
 export function localDay() {
@@ -57,5 +59,15 @@ export function localMonths() {
 
 // The CRM's own record API (leads, tasks, activities, calls). The server decides what each person may see or change.
 export const crmState = () => request("/api/state");
+// The whole state with the server's text kept, so this browser can save it without serialising it again.
+export async function crmStateText() {
+  const response = await fetch(new URL("/api/state", location.origin), { credentials: "same-origin" });
+  const text = await response.text();
+  let data = {};
+  try { data = text ? JSON.parse(text) : {}; } catch { /* non-JSON error page */ }
+  if (response.status === 401) throw new AuthError(data.error || "Sign in required");
+  if (!response.ok) throw new Error(data.error || `Request failed (${response.status})`);
+  return { data, text };
+}
 export const crmSend = (method, path, body = {}) => request("/api/" + path, { method, body });
 export const crmGet = (path) => request("/api/" + path);
