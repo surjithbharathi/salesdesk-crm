@@ -39,3 +39,14 @@ test("a lead with a recent call reaches the phone even past the lead limit", () 
   assert.equal(w.leads.length, 4000);
   assert.ok(w.leads.some((l) => l.id === "called"));
 });
+
+test("the phone copy leaves out deals and keeps only recent chats of its leads", () => {
+  const now = Date.parse("2026-11-10T10:00:00Z"), iso = (d) => new Date(now - d * 86400000).toISOString();
+  const w = phoneWorkspace({
+    leads: [{ id: "l1", name: "A", stage: "New", updatedAt: iso(1) }],
+    deals: [{ id: "d1", leadId: "l1" }],
+    conversations: [{ id: "c1", leadId: "l1", updatedAt: iso(2) }, { id: "c2", leadId: "l1", updatedAt: iso(90) }, { id: "c3", leadId: "other", updatedAt: iso(1) }],
+  }, now);
+  assert.deepEqual(w.deals, []);
+  assert.deepEqual(w.conversations.map((c) => c.id), ["c1"]);
+});
