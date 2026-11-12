@@ -5,6 +5,8 @@ const fail = (message, status = 400) => {
   throw Object.assign(new Error(message), { status });
 };
 const SESSION_MS = 12 * 60 * 60 * 1000;
+// a phone stays signed in while it is used: its session lasts 60 days from the last time it reached the CRM
+const DEVICE_SESSION_MS = 60 * 24 * 60 * 60 * 1000;
 const WINDOW_MS = 5 * 60 * 1000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -55,7 +57,7 @@ export function createUserAuth({ db, getUser, now = () => Date.now() }) {
     db.prepare("INSERT INTO auth_sessions VALUES(?,?,?,?)").run(
       digest(token),
       user.id,
-      now() + SESSION_MS,
+      now() + (deviceId ? DEVICE_SESSION_MS : SESSION_MS),
       deviceId || null,
     );
     return { token, user, company: companyName(), deviceId: deviceId || null };
@@ -132,6 +134,8 @@ export function createUserAuth({ db, getUser, now = () => Date.now() }) {
       fail("Invalid credentials or session", 401);
     const entry = db.prepare("SELECT * FROM auth_sessions WHERE token_hash=?").get(digest(token));
     if (!entry || entry.expires_at <= now()) fail("Invalid credentials or session", 401);
+    if (entry.device_id && entry.expires_at - now() < DEVICE_SESSION_MS - 24 * 60 * 60 * 1000)
+      db.prepare("UPDATE auth_sessions SET expires_at=? WHERE token_hash=?").run(now() + DEVICE_SESSION_MS, entry.token_hash);
     const account = db.prepare("SELECT * FROM auth_accounts WHERE user_id=?").get(entry.user_id);
     return { user: publicUser(account), company: companyName(), deviceId: entry.device_id };
   }

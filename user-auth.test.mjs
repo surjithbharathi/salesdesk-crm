@@ -174,3 +174,20 @@ test("five failed logins throttle a username for five minutes with consistent er
   assert.equal(auth.login({ username: "manager@example.com", password }).user.id, "u1");
   assert.throws(() => auth.login({ username: "nonexistent", password }), status(401));
 });
+
+test("a phone's session lasts 60 days from its last use; a browser's ends after 12 hours", (t) => {
+  const { auth, bootstrap, advance } = fixture(t);
+  bootstrap();
+  const deviceId = "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b";
+  const phone = auth.login({ username: "manager@example.com", password, deviceId });
+  const web = auth.login({ username: "manager@example.com", password });
+  advance(13 * 60 * 60 * 1000);
+  assert.throws(() => auth.authenticate(web.token), status(401));
+  assert.equal(auth.authenticate(phone.token).deviceId, deviceId);
+  advance(50 * 24 * 60 * 60 * 1000);
+  auth.authenticate(phone.token); // used: 60 more days from here
+  advance(50 * 24 * 60 * 60 * 1000);
+  assert.equal(auth.authenticate(phone.token).deviceId, deviceId);
+  advance(61 * 24 * 60 * 60 * 1000);
+  assert.throws(() => auth.authenticate(phone.token), status(401));
+});
