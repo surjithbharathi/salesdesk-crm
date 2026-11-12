@@ -78,9 +78,14 @@ export async function transcribe(config, audio, fetcher=fetch) {
   const r=await request(url,{method:'POST',headers,body:form},fetcher);
   return r.text || r.transcript || '';
 }
+// Sarvam hands out short-lived upload and download links on whichever cloud storage it uses at the time (it moved off the
+// three hosts once listed here, which stopped every batch). Any public https storage host is accepted; never a bare IP,
+// a port, credentials in the link, or a local or internal name, so a link can never point inside this server's network.
 function storageUrl(value) {
   let url;try{url=new URL(value);}catch{fail('Invalid provider storage URL',502);}
-  if(url.protocol!=='https:'||url.username||url.password||url.port||!(/\.blob\.core\.windows\.net$/.test(url.hostname)||url.hostname==='storage.googleapis.com'||url.hostname==='api.sarvam.ai'))fail('Unsupported provider storage host',502);
+  const host=url.hostname.toLowerCase();
+  const local=!host.includes('.')||/^\[|^\d+(\.\d+){3}$/.test(host)||/(^|\.)(localhost|local|internal|intranet|lan|home|corp|localdomain)$/.test(host);
+  if(url.protocol!=='https:'||url.username||url.password||url.port||local)fail('Unsupported provider storage host'+(host?' ('+host.slice(0,80)+')':''),502);
   return url.href;
 }
 export async function sarvamBatch(config,audio,batch,checkpoint,fetcher=fetch) {

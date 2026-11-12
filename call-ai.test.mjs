@@ -63,6 +63,16 @@ test('Sarvam rejects an unexpected presigned storage destination',async()=>{
   const fetcher=async url=>json(url.endsWith('/job/v1')?{job_id:'job_safe'}:{upload_urls:{'call.m4a':{file_url:'http://127.0.0.1/private'}}});
   await assert.rejects(sarvamBatch({model:'saaras:v4',key:'key'},{bytes:Buffer.from('audio'),mime:'audio/mp4'},null,()=>{},fetcher),/storage host/);
 });
+test('Sarvam storage links on any public cloud host are used; local or internal ones never',async()=>{
+  for(const bad of ['https://127.0.0.1/x','https://localhost/x','https://metadata.internal/x','https://files:8443/x','https://s3.amazonaws.com:8443/x','https://user:pw@bucket.s3.amazonaws.com/x','https://[::1]/x']) {
+    const fetcher=async url=>json(url.endsWith('/job/v1')?{job_id:'job_safe'}:{upload_urls:{'call.m4a':{file_url:bad}}});
+    await assert.rejects(sarvamBatch({model:'saaras:v4',key:'key'},{bytes:Buffer.from('audio'),mime:'audio/mp4'},null,()=>{},fetcher),/storage host/,bad);
+  }
+  let put='';
+  const fetcher=async(url,init)=>{if(init?.method==='PUT'){put=url;return {ok:true,status:200};}if(url.endsWith('/upload-files'))return json({upload_urls:{'call.m4a':{file_url:'https://sarvam-batch.s3.ap-south-1.amazonaws.com/in/call.m4a?X-Amz-Signature=abc'}}});if(url.endsWith('/status'))return json({job_state:'Running'});return json({job_id:'job_s3'});};
+  const out=await sarvamBatch({model:'saaras:v4',key:'key'},{bytes:Buffer.from('audio'),mime:'audio/mp4'},null,()=>{},fetcher);
+  assert.equal(out.pending,true);assert.match(put,/amazonaws\.com/);
+});
 test('provider-specific catalogs exclude incompatible models and require credentials',async()=>{
   await assert.rejects(listModels({part:'iq',provider:'openai'}),/API key/);
   assert.deepEqual((await listModels({part:'stt',provider:'sarvam'})).models,['saaras:v4','saaras:v3']);
