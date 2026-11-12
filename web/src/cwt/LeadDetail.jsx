@@ -78,7 +78,9 @@ export function LeadDetail({ id, nav = null, compose: startWith = "" }) {
   const history = useLeadHistory(id);
   const acts = useMemo(() => [...(crm.activities || []).filter((a) => a.leadId === id), ...history].sort((a, b) => String(stampOf(b)).localeCompare(String(stampOf(a)))), [crm.activities, id, history]);
   // the enquiry the lead came with (IndiaMART buy lead, a TeleCRM "lead arrived" line): the latest one
-  const enquiry = useMemo(() => { for (const a of acts) { const e = fromActivity(a); if (e.kind === "buylead") return e.lead; } return null; }, [acts]);
+  // every enquiry, newest first: how the buyer came (buy lead, call, direct...) and how often
+  const enquiries = useMemo(() => acts.map((a) => [a, fromActivity(a)]).filter(([, e]) => e.kind === "buylead").map(([a, e]) => ({ ...e.lead, at: e.lead.when || stampOf(a) })), [acts]);
+  const enquiry = enquiries[0] || null;
   const shown = useMemo(() => acts.filter((a) => (tab === "calls" ? a.type === "Call" : tab === "wa" ? a.type === "Message"
     : filter === "all" || (filter === "call" && a.type === "Call") || (filter === "note" && (a.type === "Note" || a.type === "Visit")) || (filter === "message" && a.type === "Message") || (filter === "status" && a.type === "System"))).reverse(), [acts, tab, filter]);
   useEffect(() => { const el = scroller.current; if (el) el.scrollTop = el.scrollHeight; }, [id, tab, filter, shown.length]);
@@ -409,16 +411,30 @@ export function LeadDetail({ id, nav = null, compose: startWith = "" }) {
 
           {enquiry && (
             <section className="r-card ld-enq" aria-label="Enquiry">
-              <p className="ld-kicker">Enquiry · {enquiry.tag}{enquiry.kind && enquiry.kind !== "New lead" ? ` · ${enquiry.kind}` : ""}</p>
+              <p className="ld-kicker">{enquiry.tag} details</p>
               {(enquiry.product || enquiry.intro) && <p className="ld-next-title">{enquiry.product || enquiry.intro}</p>}
               {enquiry.product && enquiry.intro && <p className="ld-enq-intro">{enquiry.intro}</p>}
-              {(enquiry.specs.length > 0 || enquiry.pin || enquiry.place) && (
+              <dl className="ld-enq-rows">
+                <div><dt>Source</dt><dd>{enquiry.tag}</dd></div>
+                <div><dt>How it came</dt><dd>{(() => {
+                  const kinds = new Map();
+                  for (const q of enquiries) { const k = String(q.kind || "Enquiry").replace(/ ·.*$/, ""); kinds.set(k, (kinds.get(k) || 0) + 1); }
+                  const parts = [...kinds].map(([k, n]) => `${n} ${k.toLowerCase()}`);
+                  return enquiries.length > 1 ? `${enquiries.length} enquiries: ${parts.join(", ")}` : enquiry.kind || "Enquiry";
+                })()}</dd></div>
+                {enquiry.requirement && <div><dt>Requirement</dt><dd>{enquiry.requirement}</dd></div>}
+                {enquiry.category && <div><dt>Category</dt><dd>{enquiry.category}</dd></div>}
+                {enquiry.searched && <div><dt>Searched</dt><dd>{enquiry.searched}</dd></div>}
+                {enquiries.length > 1 && <div><dt>First / last</dt><dd>{dayLabel(enquiries[enquiries.length - 1].at)} · {dayLabel(enquiry.at)}</dd></div>}
+              </dl>
+              {(enquiries.some((q) => q.specs.length > 0) || enquiry.pin || enquiry.place) && (
                 <div className="ld-specs">
-                  {enquiry.specs.slice(0, 6).map(([k, v], i) => <span key={i} title={k}>{v}</span>)}
+                  {(() => { const seen = new Set(); return enquiries.flatMap((q) => q.specs).filter(([k]) => !seen.has(k.toLowerCase()) && seen.add(k.toLowerCase())); })().slice(0, 8).map(([k, v], i) => <span key={i} title={k}>{k.length <= 28 ? `${k}: ${v}` : v}</span>)}
                   {enquiry.place && <span title="Place">{enquiry.place}</span>}
                   {enquiry.pin && <span title="PIN code">{enquiry.pin}</span>}
                 </div>
               )}
+              {enquiry.note && <p className="ld-enq-intro">"{enquiry.note}"</p>}
             </section>
           )}
         </aside>

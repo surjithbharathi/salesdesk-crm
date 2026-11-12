@@ -87,6 +87,43 @@ export function readIndiamart(r) {
     city: line(r.SENDER_CITY, 100), state: line(r.SENDER_STATE, 80), pincode: line(r.SENDER_PINCODE, 12), address: line(r.SENDER_ADDRESS, 300),
     country: line(country, 40), product: line(r.QUERY_PRODUCT_NAME || r.QUERY_MCAT_NAME, 200), subject: line(r.SUBJECT, 300),
     message: plain(r.QUERY_MESSAGE, 2000), duration: Number.parseInt(r.CALL_DURATION, 10) || 0,
+    code: type, category: line(r.QUERY_MCAT_NAME, 200), phone2: mobileOf(r.SENDER_MOBILE_ALT, country), landline: line(r.SENDER_PHONE || r.SENDER_PHONE_ALT, 40),
+    receiver: line(r.RECEIVER_MOBILE, 40),
+  };
+}
+// What an enquiry's message says, taken apart for the lead screen. IndiaMART writes it as lines: "Requirement for X",
+// "Buyer Searched for X", "Production Capacity : 20 kg/hr", "Probable Requirement Type : Business Use",
+// "Buyer Filled Details : …", "Suppliers from Jaipur will be preferred". Each "Key : Value" becomes a spec; the
+// requirement type, the search words and the buyer's own words get their own places; other lines are kept as notes.
+const sentence = (v) => String(v || "").replace(/\b([A-Z])([a-z]+)\b/g, (w, a, b, i) => (i ? a.toLowerCase() + b : w));
+export function enquiryDetails(q, source = "indiamart") {
+  const specs = [], notes = [], seen = new Set();
+  let searched = "", requirement = "", intro = "", buyerNote = "";
+  for (const raw of String(q.message || "").split("\n")) {
+    const l = raw.trim();
+    if (!l) continue;
+    let m;
+    if (/^requirement for /i.test(l)) { if (!q.product) intro ||= l; continue; }
+    if ((m = /^buyer searched for (.+)$/i.exec(l))) { searched = m[1].trim(); continue; }
+    if ((m = /^i viewed your product,?\s*'?(.+?)'?$/i.exec(l))) { intro ||= `Viewed your product ${m[1]}`; continue; }
+    if ((m = /^([^:]{2,40}?)\s*:\s*(.+)$/.exec(l))) {
+      const k = m[1].trim(), v = m[2].trim();
+      if (/^probable requirement type$/i.test(k)) requirement = sentence(v);
+      else if (/^(buyer filled details|buyer info|additional (info|details))$/i.test(k)) buyerNote = v;
+      else if (!seen.has(k.toLowerCase()) && specs.length < 12) { seen.add(k.toLowerCase()); specs.push([k, v]); }
+      continue;
+    }
+    if (/^i am interested in /i.test(l)) { intro ||= l; continue; }
+    if (notes.length < 3) notes.push(l);
+  }
+  return {
+    source: SOURCES[source] || "IndiaMART", kind: q.type || "Enquiry", code: q.code || "", id: q.id || "", at: q.at ? new Date(q.at).toISOString() : "",
+    product: q.product || "", category: q.category && q.category !== q.product ? q.category : "",
+    subject: q.subject && q.subject !== q.product && !/^requirement for /i.test(q.subject) ? q.subject : "",
+    searched, requirement, intro, specs, buyerNote, notes, quantity: q.quantity || "",
+    name: q.name || "", company: q.company || "", mobile: q.phone || "", mobile2: q.phone2 && q.phone2 !== q.phone ? q.phone2 : "",
+    landline: q.landline || "", email: q.email || "", email2: q.email2 || "", address: q.address || "",
+    city: q.city || "", state: q.state || "", pincode: q.pincode || "", receivedOn: q.receiver || "", callSeconds: q.duration || 0,
   };
 }
 export function readTradeindia(r) {
@@ -110,6 +147,22 @@ export function createMarketplaceLeads({ db, all, get, put, stamp, tx, log, keyP
     CREATE TABLE IF NOT EXISTS marketplace_push(id INTEGER PRIMARY KEY CHECK(id=1), body TEXT);
     CREATE TABLE IF NOT EXISTS marketplace_enquiries(source TEXT NOT NULL, id TEXT NOT NULL, at INTEGER, status TEXT, lead_id TEXT, body TEXT, PRIMARY KEY(source,id))`);
   let secret, running = null, timer = null, retry = null;
+  // Enquiries noted before the enquiry was taken apart get it now, from the copy kept of each one. Runs at start and
+  // touches only notes still without it.
+  function fillOldNotes() {
+    const kept = new Map(db.prepare("SELECT source,id,body FROM marketplace_enquiries WHERE lead_id IS NOT NULL").all().map((r) => [r.source + ":" + r.id, r]));
+    if (!kept.size) return 0;
+    let n = 0;
+    for (const a of all("activities")) {
+      if (!a.marketplaceId || !a.integrationSource || a.buyLead) continue;
+      const r = kept.get(a.integrationSource + ":" + a.marketplaceId);
+      if (!r) continue;
+      try { put("activities", { ...a, buyLead: { ...enquiryDetails(JSON.parse(r.body), r.source), ...(/^Repeat enquiry/.test(a.text || "") ? { repeat: true } : {}) } }); n++; }
+      catch (e) { report(`Enquiry note ${a.id}: ${e.message}`); }
+    }
+    return n;
+  }
+  try { const n = fillOldNotes(); if (n) report(`Marketplace enquiries: ${n} older notes taken apart`); } catch (e) { report("Marketplace enquiries: " + e.message); }
   function secretKey() {
     if (secret) return secret;
     mkdirSync(dirname(keyPath), { recursive: true, mode: 0o700 });
@@ -187,7 +240,7 @@ export function createMarketplaceLeads({ db, all, get, put, stamp, tx, log, keyP
           if (!lead.state && q.state) Object.assign(fill, withRegion({ ...lead, ...fill }, { state: q.state }) || { state: cleanState(q.state) });
           if (q.name && !/\p{L}/u.test(String(lead.name || ""))) fill.name = q.name;
           put("leads", { ...lead, ...fill, lastEnquiryAt: at, updatedAt: new Date(now()).toISOString() });
-          log(lead.id, "Note", `Repeat enquiry: ${head}${said ? "\n" + said : ""}`, { integrationSource: source, marketplaceId: q.id });
+          log(lead.id, "Note", `Repeat enquiry: ${head}${said ? "\n" + said : ""}`, { integrationSource: source, marketplaceId: q.id, buyLead: { ...enquiryDetails(q, source), repeat: true } });
           status = "repeat"; leadId = lead.id;
         } else {
           let made = stamp({ name: q.name || q.company || q.phone || q.email, phone: q.phone, email: q.email, company: q.company, city: q.city, state: q.state ? cleanState(q.state) : "",
@@ -195,7 +248,7 @@ export function createMarketplaceLeads({ db, all, get, put, stamp, tx, log, keyP
             marketplace: { source, id: q.id, type: q.type, ...(q.pincode ? { pincode: q.pincode } : {}), ...(q.address ? { address: q.address } : {}) } });
           made = withRegion(made) || made;
           put("leads", made);
-          log(made.id, "Note", `${head}${said ? "\n" + said : ""}`, { integrationSource: source, marketplaceId: q.id });
+          log(made.id, "Note", `${head}${said ? "\n" + said : ""}`, { integrationSource: source, marketplaceId: q.id, buyLead: enquiryDetails(q, source) });
           status = "new lead"; leadId = made.id;
         }
       }

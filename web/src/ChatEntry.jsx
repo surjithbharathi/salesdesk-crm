@@ -69,6 +69,20 @@ export function callStatusOf(text) {
 // The stored text can be cut short, so fields are read one by one when the JSON does not parse.
 export function buyLeadOf(a) {
   let f = a.buyLead && typeof a.buyLead === "object" ? a.buyLead : null;
+  // the CRM's own IndiaMART / TradeIndia reads (push and pull) keep the enquiry already taken apart
+  if (f && Array.isArray(f.specs)) {
+    const clean = (s) => String(s ?? "").replace(/\s+/g, " ").trim();
+    return {
+      source: f.source || "IndiaMART", tag: f.source || "IndiaMART",
+      kind: /^call$/i.test(f.kind) ? (Number(f.callSeconds) > 0 ? `Call enquiry · ${secondsText(f.callSeconds)}` : "Call enquiry") : clean(f.kind).replace(/-/g, " "),
+      product: clean(f.product), category: clean(f.category), searched: clean(f.searched), requirement: clean(f.requirement),
+      intro: clean(f.intro || f.subject), specs: f.specs.filter((s) => Array.isArray(s) && s[1]).map(([k, v]) => [clean(k), clean(v)]),
+      note: clean(f.buyerNote), extra: (f.notes || []).map(clean).filter(Boolean), quantity: clean(f.quantity), repeat: Boolean(f.repeat),
+      name: clean(f.name), company: clean(f.company), mobile: clean(f.mobile), mobile2: clean(f.mobile2), landline: clean(f.landline),
+      email: clean(f.email), place: [clean(f.city), clean(f.state)].filter(Boolean).join(", "), pin: clean(f.pincode),
+      receivedOn: clean(f.receivedOn), ref: clean(f.id), when: f.at || "",
+    };
+  }
   if (!f) {
     const m = /^ACTION_\d+:\s*(\{[\s\S]*)$/.exec(String(a.text || "").trim());
     if (!m) return null;
@@ -252,15 +266,28 @@ export default function ChatEntry({ e }) {
     const l = e.lead;
     body = (
       <article className="gwchat-msg buylead">
-        <p className="bl-head"><span className="bl-tag"><SourceLogo source={l.source} />{l.tag}</span> {l.kind}</p>
+        <p className="bl-head">
+          <span className="bl-tag"><SourceLogo source={l.source} />{l.tag}</span>
+          {l.kind && <span className="bl-chip kind">{l.kind}</span>}
+          {l.requirement && <span className="bl-chip req">{l.requirement}</span>}
+          {l.repeat && <span className="bl-chip">Repeat enquiry</span>}
+        </p>
         {l.product && <p className="bl-product">{l.product}</p>}
+        {(l.searched || l.category) && <p className="bl-meta">{[l.searched && `Searched "${l.searched}"`, l.category && `Category: ${l.category}`].filter(Boolean).join(" · ")}</p>}
         {l.intro && <p>{l.intro}</p>}
-        {l.specs.length > 0 && (
-          <dl className="bl-specs">{l.specs.map(([k, v], i) => <div key={i}><dt>{k}</dt><dd>{v}</dd></div>)}</dl>
+        {(l.specs.length > 0 || l.quantity) && (
+          <dl className="bl-grid">
+            {l.quantity && <div><dt>Quantity</dt><dd>{l.quantity}</dd></div>}
+            {l.specs.map(([k, v], i) => <div key={i}><dt>{k}</dt><dd>{v}</dd></div>)}
+          </dl>
         )}
+        {l.note && <blockquote className="bl-note">{l.note}</blockquote>}
+        {(l.extra || []).map((t, i) => <p key={i} className="bl-meta">{t}</p>)}
         {(l.place || l.pin) && <p className="bl-meta">{[l.place, l.pin].filter(Boolean).join(" · ")}</p>}
-        {(l.mobile || l.email) && <p className="bl-meta">{[phoneText(l.mobile), l.email].filter(Boolean).join(" · ")}</p>}
-        <small>{l.name || e.customer || "Buyer"}{e.at ? `, ${e.at}` : ""}</small>
+        {l.company && <p className="bl-meta">{l.company}</p>}
+        {(l.mobile || l.mobile2 || l.landline || l.email) && <p className="bl-meta">{[phoneText(l.mobile), l.mobile2 && `alt ${phoneText(l.mobile2)}`, l.landline && `landline ${l.landline}`, l.email].filter(Boolean).join(" · ")}</p>}
+        {l.receivedOn && <p className="bl-meta">Came on our number {phoneText(l.receivedOn)}</p>}
+        <small>{l.name || e.customer || "Buyer"}{e.at ? `, ${e.at}` : ""}{l.ref ? ` · ID ${l.ref}` : ""}</small>
       </article>
     );
   } else {

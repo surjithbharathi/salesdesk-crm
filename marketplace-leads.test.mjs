@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createMarketplaceLeads, readIndiamart, readTradeindia, imParam, readTime, plain } from "./marketplace-leads.mjs";
+import { createMarketplaceLeads, readIndiamart, readTradeindia, imParam, readTime, plain, enquiryDetails } from "./marketplace-leads.mjs";
 import { phoneParts } from "./lead-phone.mjs";
 
 function fixture(t, now = { value: Date.UTC(2026, 10, 12, 6, 0, 0) }) {
@@ -147,4 +147,36 @@ test("IndiaMART's push makes the lead at once, only at its own address, and neve
   assert.throws(() => m.receivePush(token, { RESPONSE: im() }), /Not found/);
   m.save({ indiamart: { push: false } });
   assert.throws(() => m.receivePush(fresh, { RESPONSE: im() }), /Not found/);
+});
+
+test("an IndiaMART message is taken apart: specs, requirement type, search words and the buyer's own words", () => {
+  const q = readIndiamart(im({ QUERY_TYPE: "B", QUERY_PRODUCT_NAME: "Coconut Oil Extraction Machine", QUERY_MCAT_NAME: "Oil Extraction Machine", SENDER_MOBILE_ALT: "+91-9447055555", RECEIVER_MOBILE: "9790012345",
+    QUERY_MESSAGE: "Requirement for Coconut Oil Extraction Machine<br>Buyer Searched for coconut oil machine<br>Production Capacity : 20 kg/hr<br>Motor Power : 5 HP<br>Buyer Filled Details : Buyer is located in Kerala and prefers to discuss the motor power.<br>Probable Requirement Type : Business Use<br>Suppliers from Jaipur will be preferred" }));
+  const d = enquiryDetails(q);
+  assert.equal(d.kind, "Buy-lead");
+  assert.equal(d.product, "Coconut Oil Extraction Machine");
+  assert.equal(d.category, "Oil Extraction Machine");
+  assert.equal(d.searched, "coconut oil machine");
+  assert.equal(d.requirement, "Business use");
+  assert.deepEqual(d.specs, [["Production Capacity", "20 kg/hr"], ["Motor Power", "5 HP"]]);
+  assert.match(d.buyerNote, /located in Kerala/);
+  assert.deepEqual(d.notes, ["Suppliers from Jaipur will be preferred"]);
+  assert.equal(d.mobile2, "+919447055555");
+  assert.equal(d.receivedOn, "9790012345");
+  assert.equal(d.intro, "", "the 'Requirement for' line repeats the product");
+  assert.equal(enquiryDetails(readIndiamart(im({ QUERY_TYPE: "BIZ", QUERY_MESSAGE: "I viewed your product, 'Oil Press Machine'" }))).intro, "Viewed your product Oil Press Machine");
+});
+
+test("each enquiry note carries the enquiry taken apart, and older notes get it at the next start", async (t) => {
+  const f = fixture(t), { m, replies, all } = f;
+  m.save({ indiamart: { key: "abcdefghijklmnop1234", enabled: true } });
+  replies.push({ status: 200, body: { CODE: 200, RESPONSE: [im({ UNIQUE_QUERY_ID: "N1", SENDER_MOBILE: "+91-9876511111", QUERY_MESSAGE: "Capacity : 5 ton/day<br>Probable Requirement Type : Business Use" })] } });
+  await m.sync();
+  const note = all("activities").find((a) => a.marketplaceId === "N1");
+  assert.equal(note.buyLead.requirement, "Business use");
+  assert.deepEqual(note.buyLead.specs, [["Capacity", "5 ton/day"]]);
+  // a note from before: no buyLead yet; a fresh start fills it from the kept enquiry
+  const { buyLead, ...old } = note; f.put("activities", old);
+  createMarketplaceLeads({ db: f.db, all, get: f.get, put: f.put, stamp: (v) => v, tx: (fn) => fn(), log: () => {}, keyPath: join(mkdtempSync(join(tmpdir(), "k-")), "key"), timers: false });
+  assert.equal(all("activities").find((a) => a.marketplaceId === "N1").buyLead.specs[0][1], "5 ton/day");
 });
