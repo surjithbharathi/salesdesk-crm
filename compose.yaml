@@ -11,6 +11,7 @@ services:
       # ERPNext single sign-on (CRM button in ERP). Set the secret in Hostinger env, never in Git.
       ERP_OAUTH_ORIGIN: https://deviindustries.com
       ERP_OAUTH_CLIENT_ID: 9ph1js8ov5
+      ERP_OAUTH_REDIRECT_URI: https://crm.deviindustries.com/api/auth/erp/callback
       ERP_OAUTH_CLIENT_SECRET: ${ERP_OAUTH_CLIENT_SECRET:-}
       ERP_OAUTH_USER_MAP: ${ERP_OAUTH_USER_MAP:-}
     volumes:
