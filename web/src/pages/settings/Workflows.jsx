@@ -162,7 +162,7 @@ export default function Workflows({ users }) {
   const blank = () => setEditing({ name: "", enabled: false, flow: { nodes: [node("t", "trigger", 60, 200, { type: "lead_created" })], edges: [] } });
   return (
     <>
-      <Section title="Your workflows" desc="Each workflow starts when one thing happens to a lead, then follows the boxes you joined: checks, waits and actions. A draft does nothing until you publish it, and a published workflow never acts on things that happened before." status={rules.length ? `${on} of ${rules.length} live` : "None yet"} tone={on ? "ok" : "off"}>
+      <Section title="Your workflows" desc="Each workflow starts when something happens to a lead (one or more When boxes; any of them starts it), then follows the boxes you joined: checks, waits and actions. A draft does nothing until you publish it, and a published workflow never acts on things that happened before." status={rules.length ? `${on} of ${rules.length} live` : "None yet"} tone={on ? "ok" : "off"}>
         {rules.length ? (
           <ul className="wf-list">
             {rules.map((r) => {
@@ -171,7 +171,7 @@ export default function Workflows({ users }) {
                 <li key={r.id} className={r.enabled ? "wf-rule" : "wf-rule wf-off"}>
                   <div className="wf-text">
                     <b>{r.name} <span className={r.enabled ? "wf-pill wf-pill-live" : "wf-pill"}>{r.enabled ? "Live" : "Draft"}</span></b>
-                    <p><span className="wf-k">When</span> {triggerText(r.trigger, meta, nameOf)}</p>
+                    <p><span className="wf-k">When</span> {r.flow.nodes.filter((n) => n.type === "trigger").map((n) => triggerText(n.config, meta, nameOf)).join(", or ") || triggerText(r.trigger, meta, nameOf)}</p>
                     <p><span className="wf-k">Then</span> {steps.join(" → ")}</p>
                     <p className="muted">{r.runs ? `Started ${r.runs} time${r.runs === 1 ? "" : "s"}, last on ${when(r.lastRunAt)}` : "Has not run yet"}</p>
                   </div>
@@ -277,7 +277,9 @@ function Builder({ start, meta, users, nameOf, gateway, busy, runs, onSave, onCa
   const box = useRef(null);
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const sel = byId.get(selected);
-  const trigger = nodes.find((n) => n.type === "trigger");
+  const triggers = nodes.filter((n) => n.type === "trigger");
+  const MAX_WHEN = 5;
+  const [testFrom, setTestFrom] = useState("");
   const live = Boolean(start.id && start.enabled);
 
   // a test result belongs to the flow it was run on; changing a step or a line drops it (moving nodes does not)
@@ -338,9 +340,17 @@ function Builder({ start, meta, users, nameOf, gateway, busy, runs, onSave, onCa
   function pick(type, config) {
     const m = drawer;
     if (m.kind === "trigger") {
-      const { type: t, ...rest } = config;
-      setNodes((all) => all.map((n) => (n.type === "trigger" ? { ...n, config: { type: t, ...structuredClone(rest) } } : n)));
-      setSelected(trigger.id); setDrawer({ kind: "settings" });
+      const { type: t, ...rest } = config, next = { type: t, ...structuredClone(rest) };
+      // a new When box goes under the others, on the left; otherwise the chosen When box changes
+      if (m.add) {
+        const id = newId(), x = Math.min(...triggers.map((n) => n.x), 60), y = free(x, Math.max(...triggers.map((n) => n.y), 80) + S + 80);
+        setNodes((all) => [...all, { id, type: "trigger", x, y, config: next }]);
+        setSelected(id); setDrawer({ kind: "settings" });
+        return;
+      }
+      const target = m.node || (sel?.type === "trigger" ? sel.id : triggers[0].id);
+      setNodes((all) => all.map((n) => (n.id === target ? { ...n, config: next } : n)));
+      setSelected(target); setDrawer({ kind: "settings" });
       return;
     }
     let id;
@@ -364,7 +374,7 @@ function Builder({ start, meta, users, nameOf, gateway, busy, runs, onSave, onCa
   function remove(which = selected) {
     if (which.startsWith("edge:")) { const i = Number(which.slice(5)); setEdges((all) => all.filter((_, j) => j !== i)); setSelected(""); return; }
     const n = byId.get(which);
-    if (!n || n.type === "trigger") return;
+    if (!n || (n.type === "trigger" && triggers.length < 2)) return;
     // like n8n: the step before is joined straight to the step after when there is only one of each
     const ins = edges.filter((e) => e.to === which), outs = edges.filter((e) => e.from === which);
     setEdges((all) => [...all.filter((e) => e.from !== which && e.to !== which), ...(ins.length === 1 && outs.length === 1 ? [{ from: ins[0].from, port: ins[0].port, to: outs[0].to }] : [])]);
@@ -412,7 +422,7 @@ function Builder({ start, meta, users, nameOf, gateway, busy, runs, onSave, onCa
   async function runTest(leadId) {
     setTesting(true);
     try {
-      const r = await crmSend("POST", "workflows/test", { ...(start.id ? { id: start.id } : {}), name, flow: { nodes, edges }, leadId });
+      const r = await crmSend("POST", "workflows/test", { ...(start.id ? { id: start.id } : {}), name, flow: { nodes, edges }, leadId, from: testFrom || triggers[0]?.id || "" });
       tested.current = shape;
       setTest(r);
       const bad = Object.values(r.steps).filter((s) => s.status === "error").length;
@@ -523,6 +533,7 @@ function Builder({ start, meta, users, nameOf, gateway, busy, runs, onSave, onCa
               </g>
             </svg>
             <div className="wfc-tools-tr">
+              {triggers.length < MAX_WHEN && <button type="button" className="btn wfc-add-when" title="Another thing that also starts this workflow" onPointerDown={(e) => e.stopPropagation()} onClick={() => setDrawer({ kind: "trigger", add: true })}><TIcon name="plus" size={16} /> Add another When</button>}
               <button type="button" className="wfc-btn wfc-btn-plus" aria-label="Add a step" title="Add a step" onPointerDown={(e) => e.stopPropagation()} onClick={() => setDrawer({ kind: "add", from: sel && sel.type ? sel.id : "", port: "" })}><TIcon name="plus" size={22} /></button>
             </div>
             <div className="wfc-tools-bl" onPointerDown={(e) => e.stopPropagation()}>
@@ -546,11 +557,20 @@ function Builder({ start, meta, users, nameOf, gateway, busy, runs, onSave, onCa
                 </div>
                 {test?.steps[sel.id] && <p className={`wfd-test wfd-test-${test.steps[sel.id].status}`}>Test with {test.lead.name}: {test.steps[sel.id].text}</p>}
                 {test && !test.steps[sel.id] && <p className="wfd-test">Test with {test.lead.name}: not reached</p>}
-                {sel.type === "trigger" && <button type="button" className="btn wfd-change" onClick={() => setDrawer({ kind: "trigger" })}>Change what starts it</button>}
-                <BoxForm n={sel} meta={meta} users={users} people={people} stageOptions={stageOptions} gateway={gateway} set={(patch) => setConfig(sel.id, patch)} replace={(config) => setNodes((all) => all.map((x) => (x.id === sel.id ? { ...x, config } : x)))} onRemove={() => remove(sel.id)} />
+                {sel.type === "trigger" && <button type="button" className="btn wfd-change" onClick={() => setDrawer({ kind: "trigger", node: sel.id })}>Change what starts it</button>}
+                {sel.type === "trigger" && triggers.length < MAX_WHEN && <button type="button" className="btn wfd-change" onClick={() => setDrawer({ kind: "trigger", add: true })}>Add another When</button>}
+                {sel.type === "trigger" && triggers.length > 1 && <p className="muted wfd-note">This workflow starts when any of its {triggers.length} When boxes happens.</p>}
+                <BoxForm n={sel} meta={meta} users={users} people={people} stageOptions={stageOptions} gateway={gateway} canRemove={sel.type !== "trigger" || triggers.length > 1} set={(patch) => setConfig(sel.id, patch)} replace={(config) => setNodes((all) => all.map((x) => (x.id === sel.id ? { ...x, config } : x)))} onRemove={() => remove(sel.id)} />
               </>}
               {drawer.kind === "settings" && !sel && <div className="wfd-inner"><p className="muted">Click a step to set it up.</p></div>}
               {["add", "insert", "trigger"].includes(drawer.kind) && <Picker mode={drawer} onPick={pick} onClose={() => setDrawer(null)} />}
+              {drawer.kind === "test" && triggers.length > 1 && (
+                <label className="wfd-from">Start the test from
+                  <select className="field-input" value={testFrom || triggers[0].id} onChange={(e) => { setTestFrom(e.target.value); setTest(null); }}>
+                    {triggers.map((t) => <option key={t.id} value={t.id}>{triggerText(t.config, meta, nameOf)}</option>)}
+                  </select>
+                </label>
+              )}
               {drawer.kind === "test" && <TestPanel leads={crm?.leads || []} result={test} busy={testing} onRun={runTest} onClose={() => setDrawer(null)} onClear={() => setTest(null)} />}
             </aside>
           )}
@@ -568,7 +588,7 @@ function FieldOptions({ meta, only }) {
   </>;
 }
 
-function BoxForm({ n, meta, users, people, stageOptions, gateway, set, replace, onRemove }) {
+function BoxForm({ n, meta, users, people, stageOptions, gateway, set, replace, onRemove, canRemove = n.type !== "trigger" }) {
   const c = n.config;
   const setCond = (i, patch) => set({ conditions: c.conditions.map((x, j) => (j === i ? { ...x, ...patch } : x)) });
   return (
@@ -669,7 +689,7 @@ function BoxForm({ n, meta, users, people, stageOptions, gateway, set, replace, 
         </>}
         {c.type === "note" && <label>Note<textarea className="field-input" rows={3} maxLength={2000} value={c.text || ""} onChange={(e) => set({ text: e.target.value })} /></label>}
       </>}
-      {n.type !== "trigger" && <button type="button" className="btn btn-quiet wfb-remove" onClick={onRemove}>Remove this box</button>}
+      {canRemove && <button type="button" className="btn btn-quiet wfb-remove" onClick={onRemove}>Remove this box</button>}
     </div>
   );
 }

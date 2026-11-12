@@ -249,7 +249,10 @@ td.right .btn + .btn, td.right .quick-actions + .btn { margin-left: 6px; }
 .wfc-error .wfc-badge circle { fill: var(--kumkum); }
 .wfc-badge path { fill: none; stroke: #fff; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
 .wfc-error .wfc-sub { fill: var(--kumkum); }
-.wfc-tools-tr { position: absolute; top: 12px; right: 12px; }
+.wfc-tools-tr { position: absolute; top: 12px; right: 12px; display: flex; align-items: center; gap: 8px; }
+.wfc-add-when { display: inline-flex; align-items: center; gap: 6px; height: 36px; background: var(--surface); }
+.wfd-from { display: grid; gap: 4px; margin: 12px 16px 0; font-size: 13px; }
+.wfd-note { margin: 6px 0 0; font-size: 12.5px; }
 .wfc-tools-bl { position: absolute; left: 12px; bottom: 12px; display: flex; gap: 6px; }
 .wfc-tools-bc { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); }
 .wfc-btn { display: grid; place-items: center; min-width: 36px; height: 36px; padding: 0 8px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); color: var(--ink); cursor: pointer; font: inherit; font-size: 13px; }
@@ -258,6 +261,7 @@ td.right .btn + .btn, td.right .quick-actions + .btn { margin-left: 6px; }
 .wfc-btn-text { min-width: 52px; }
 .wfc-test { display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 10px rgba(0, 0, 0, .18); }
 .wfc-hint { position: absolute; top: 14px; left: 14px; margin: 0; font-size: 12px; pointer-events: none; }
+.wfc-drawer .wfc-hint { display: none; }
 .wfd { border-left: 1px solid var(--line); background: var(--surface); overflow: auto; padding: 14px; min-width: 0; }
 .wfd-inner { display: grid; gap: 10px; }
 .wfd-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
