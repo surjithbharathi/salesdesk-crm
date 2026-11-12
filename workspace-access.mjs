@@ -3,6 +3,8 @@ const fail=(message,status=400)=>{throw Object.assign(Error(message),{status});}
 export const PERMISSIONS=['leads.write','tasks.write','calls.read','calls.sync','messages.read','reports.read','integrations.manage','users.manage','data.export'];
 export function createWorkspaceAccess({db,get,put,userAuth,crmOwnerId='',origin='',auditActorId=''}){
   db.exec('CREATE TABLE IF NOT EXISTS workspace_roles(user_id TEXT PRIMARY KEY,role TEXT NOT NULL,permissions TEXT NOT NULL);CREATE TABLE IF NOT EXISTS workspace_access_audit(id TEXT PRIMARY KEY,actor TEXT,target TEXT,action TEXT,at TEXT)');
+  // people removed here: the TeleCRM copy must not bring them back (see telecrm-mirror.mjs syncUsers); inviting them again clears it
+  db.exec('CREATE TABLE IF NOT EXISTS removed_users(id TEXT PRIMARY KEY,email TEXT,name TEXT,at TEXT)');
   if(crmOwnerId&&get('users',crmOwnerId))db.prepare("INSERT OR IGNORE INTO workspace_roles VALUES(?,'owner','{}')").run(crmOwnerId);
   const rank=role=>({owner:4,admin:3,manager:2,member:1,viewer:0}[role]??0);
   const hierarchy=(actor,targetRole)=>{if(rank(targetRole)>rank(actor.role))fail('Cannot manage a role above your own',403);};
@@ -31,7 +33,8 @@ export function createWorkspaceAccess({db,get,put,userAuth,crmOwnerId='',origin=
       put('users',{...existing,id,name:input.name.trim(),email:input.email||existing?.email||'',role:input.role,active:true,createdAt:existing?.createdAt||new Date().toISOString()});
       userAuth.createAccount(identity,{userId:id,username:input.username,password:randomBytes(40).toString('base64url')});
       db.prepare('UPDATE auth_accounts SET role=? WHERE user_id=?').run(['owner','admin','manager'].includes(input.role)?'admin':'member',id);
-      db.prepare('INSERT INTO workspace_roles VALUES(?,?,?)').run(id,input.role,'{}');audit(identity.user.id,id,'user.invited');db.exec('COMMIT');
+      db.prepare('INSERT INTO workspace_roles VALUES(?,?,?)').run(id,input.role,'{}');audit(identity.user.id,id,'user.invited');
+      db.prepare('DELETE FROM removed_users WHERE id=? OR (email<>\'\' AND email=?)').run(id,String(input.email||'').toLowerCase());db.exec('COMMIT');
     }catch(error){db.exec('ROLLBACK');throw error;}
     const reset=userAuth.issuePasswordReset(input.username);return {userId:id,username:reset.user.username,setupUrl:origin+'/reset-password.html#token='+encodeURIComponent(reset.token),expiresAt:reset.expiresAt};
   }
@@ -84,6 +87,7 @@ export function createWorkspaceAccess({db,get,put,userAuth,crmOwnerId='',origin=
     db.exec('BEGIN IMMEDIATE');try{
       for(const kind of ['leads','tasks','deals','conversations'])counts[kind]=Number(db.prepare("UPDATE records SET body=json_set(body,'$.owner','') WHERE kind=? AND json_extract(body,'$.owner')=?").run(kind,id).changes);
       db.prepare("DELETE FROM records WHERE kind='users' AND id=?").run(id);
+      db.prepare('INSERT OR REPLACE INTO removed_users VALUES(?,?,?,?)').run(id,String(target.telecrmEmail||target.email||'').toLowerCase(),String(target.name||''),new Date().toISOString());
       for(const table of ['auth_sessions','auth_resets','auth_accounts','workspace_roles'])db.prepare('DELETE FROM '+table+' WHERE user_id=?').run(id);
       for(const table of ['call_receiver','call_commands'])if(has(table))db.prepare('DELETE FROM '+table+' WHERE user_id=?').run(id);
       audit(identity.user.id,id,'user.removed');db.exec('COMMIT');
