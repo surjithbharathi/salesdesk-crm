@@ -108,6 +108,116 @@ export function createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecor
     }
   }
 
+  // ---------------------------------------------------------------- back to TeleCRM
+  // What a person (or a workflow) changes here on a lead that came from TeleCRM goes back to TeleCRM: name, email, city,
+  // state, language, assignee, status, the follow-up date (moved or done) and notes typed here. Changes wait in an outbox
+  // and go out within a minute; TeleCRM's answer (with any field it turned down) is kept on each entry. While a lead still
+  // has changes waiting, a read from TeleCRM does not overwrite it, so the latest change wins on both sides.
+  db.exec(`CREATE TABLE IF NOT EXISTS telecrm_outbox(id INTEGER PRIMARY KEY AUTOINCREMENT, tid TEXT NOT NULL, lead_id TEXT, kind TEXT NOT NULL, body TEXT NOT NULL,
+    at INTEGER NOT NULL, tries INTEGER NOT NULL DEFAULT 0, error TEXT, done INTEGER NOT NULL DEFAULT 0);
+    CREATE TABLE IF NOT EXISTS telecrm_push_state(id INTEGER PRIMARY KEY CHECK(id=1), body TEXT)`);
+  const pushState = () => { const r = db.prepare("SELECT body FROM telecrm_push_state WHERE id=1").get(); return r ? JSON.parse(r.body) : {}; };
+  const savePushState = (v) => db.prepare("INSERT INTO telecrm_push_state VALUES(1,?) ON CONFLICT(id) DO UPDATE SET body=excluded.body").run(JSON.stringify(v));
+  const pending = (tid) => Boolean(db.prepare("SELECT 1 FROM telecrm_outbox WHERE tid=? AND done=0 AND kind='fields' LIMIT 1").get(tid));
+  const tidOfLead = (leadId) => { const l = leadId && get("leads", leadId); return l?.telecrm?.id ? String(l.telecrm.id) : ""; };
+  const istStamp = (iso) => { const d = new Date(Date.parse(iso) + 19800000), p = (n) => String(n).padStart(2, "0"); return `${p(d.getUTCDate())}/${p(d.getUTCMonth() + 1)}/${d.getUTCFullYear()} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}`; };
+  function enqueue(tid, leadId, kind, body) {
+    if (!raw().enabled) return;
+    if (kind === "fields") {
+      // fields waiting for the same lead are merged, so a quick run of edits goes out as one update with the latest values
+      const open = db.prepare("SELECT id, body FROM telecrm_outbox WHERE tid=? AND kind='fields' AND done=0 AND tries=0 ORDER BY id DESC LIMIT 1").get(tid);
+      if (open) { db.prepare("UPDATE telecrm_outbox SET body=?, at=? WHERE id=?").run(JSON.stringify({ ...JSON.parse(open.body), ...body }), now(), open.id); return; }
+    }
+    db.prepare("INSERT INTO telecrm_outbox(tid, lead_id, kind, body, at) VALUES(?,?,?,?,?)").run(tid, leadId || "", kind, JSON.stringify(body), now());
+  }
+  const userEmail = (id) => { const u = id && get("users", id); return u?.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(u.email) ? u.email.toLowerCase() : ""; };
+  // this CRM's pipeline step (or a basic stage) as the TeleCRM status label it came from
+  const STATUS_OUT = { "Interested Customer": "Intrested Customer", "Loan in Process": "Loan In Process", "Machine Delivered - Need to Start": "Machine Delivered - Need To Start" };
+  const statusOut = (l) => (l.deal ? STATUS_OUT[l.deal] || l.deal : l.stage === "New" ? "New Lead" : "");
+  // called after a record is saved here (never for what the TeleCRM read itself writes)
+  function queueChange(kind, old, next) {
+    try {
+      if (kind === "leads") {
+        const tid = next?.telecrm?.id ? String(next.telecrm.id) : "";
+        if (!tid || !old || next.mergedInto) return;
+        const fields = {};
+        for (const k of ["name", "email", "city", "state"]) if ((next[k] || "") !== (old[k] || "") && next[k]) fields[k] = String(next[k]);
+        if ((next.language || "") !== (old.language || "") && next.language) fields.customer_primary_language = next.language;
+        if ((next.owner || "") !== (old.owner || "")) { const e = userEmail(next.owner); if (e) fields.assignee = e; }
+        const st = statusOut(next);
+        if (st && st !== statusOut(old)) fields.status = st;
+        if (Object.keys(fields).length) enqueue(tid, next.id, "fields", fields);
+      } else if (kind === "tasks") {
+        if (!/^tct-/.test(next?.id || "") || !old) return;
+        const tid = tidOfLead(next.leadId) || next.id.slice(4);
+        if (next.status === "Done" && old.status !== "Done") enqueue(tid, next.leadId, "fields", { "next_follow-up_on": "" });
+        else if (next.status !== "Done" && next.due && next.due !== old.due) enqueue(tid, next.leadId, "fields", { "next_follow-up_on": istStamp(next.due) });
+      } else if (kind === "activities") {
+        // a note typed here by a person; imports, workflow notes and system lines stay here
+        if (old || next?.type !== "Note" || next.source || next.importedFrom || next.integrationSource || next.workflowId || !next.text) return;
+        const tid = tidOfLead(next.leadId);
+        if (tid) enqueue(tid, next.leadId, "note", { text: String(next.text).slice(0, 3900), by: get("users", next.userId)?.name || "", byEmail: userEmail(next.userId), at: next.createdAt || new Date(now()).toISOString(), activityId: next.id });
+      }
+    } catch (e) { log("TeleCRM outbox: " + e.message); }
+  }
+  // the TeleCRM custom action that carries notes from here ("Salesdesk Note"), found once by its name
+  async function noteAction(s) {
+    const st = pushState();
+    if (st.noteAction) return st.noteAction;
+    const r = await api(s, "GET", "/custom-actions?detail=true");
+    const list = Array.isArray(r) ? r : r.data || r.actions || [];
+    const hit = list.find((a) => /^salesdesk note$/i.test(String(a.displayName || a.name || "").trim()));
+    if (!hit) fail('Add a custom action named "Salesdesk Note" in TeleCRM (Settings, Custom Actions) with a text field', 409);
+    // its fields: an array, or kept under fieldSchema (as a list or keyed by api name)
+    const schema = hit.fieldSchema ?? hit.fields ?? [];
+    const fields = Array.isArray(schema) ? schema : Array.isArray(schema.fields) ? schema.fields : Object.entries(schema).map(([apiName, f]) => ({ apiName, ...(f && typeof f === "object" ? f : {}) }));
+    const field = fields.find((f) => /text|note/i.test(String(f.type || f.apiName || f.name || ""))) || fields[0];
+    const out = { code: String(hit.code || hit.type || hit.id), field: field?.apiName || field?.name || "note" };
+    savePushState({ ...st, noteAction: out });
+    return out;
+  }
+  let pushing = null;
+  async function push() {
+    if (pushing) return pushing;
+    pushing = (async () => {
+      const s = raw();
+      if (!s.enabled || !s.enterpriseId || !s.token) return { sent: 0 };
+      const rows = db.prepare("SELECT * FROM telecrm_outbox WHERE done=0 AND tries<5 ORDER BY id LIMIT 40").all();
+      let sent = 0;
+      for (const row of rows) {
+        const body = JSON.parse(row.body);
+        try {
+          if (row.kind === "fields") {
+            const r = await api(s, "POST", `/lead/${encodeURIComponent(row.tid)}`, { fields: body });
+            const turnedDown = (r?.remarks || []).filter((x) => x && x.status !== "UPDATED").map((x) => `${String(x.field || "").replace(/^fields\./, "")}: ${x.remark || x.status}`);
+            db.prepare("UPDATE telecrm_outbox SET done=1, tries=tries+1, error=? WHERE id=?").run(turnedDown.length ? turnedDown.join("; ").slice(0, 500) : null, row.id);
+          } else {
+            const a = await noteAction(s);
+            const text = `${body.text}${body.by ? `\n— ${body.by}, Salesdesk` : "\n— Salesdesk"}`;
+            // TeleCRM takes the action's number without "ACTION_", and who wrote it as their e-mail
+            const r = await api(s, "POST", `/lead/${encodeURIComponent(row.tid)}/action`, { actions: [{ type: a.code.replace(/^ACTION_/i, ""), created_on: istStamp(body.at), ...(body.byEmail ? { employeeid: body.byEmail } : {}), fields: { [a.field]: text } }] });
+            if (r?.actions?.[0]?.status === "IGNORED") fail("TeleCRM did not take the note: " + ((r.remarks || []).map((x) => x.remark).filter(Boolean).join("; ") || "ignored"));
+            db.prepare("UPDATE telecrm_outbox SET done=1, tries=tries+1, error=NULL WHERE id=?").run(row.id);
+          }
+          sent++;
+        } catch (e) {
+          const gone = /answered 404/.test(e.message || "");
+          db.prepare("UPDATE telecrm_outbox SET tries=?, error=? WHERE id=?").run(gone ? 5 : row.tries + 1, String(e.message || e).slice(0, 500), row.id);
+          if (/refused the token/.test(e.message || "")) break;
+        }
+      }
+      // what went out more than 30 days ago is only history
+      db.prepare("DELETE FROM telecrm_outbox WHERE done=1 AND at<?").run(now() - 30 * 86400000);
+      return { sent };
+    })().finally(() => { pushing = null; });
+    return pushing;
+  }
+  function outbox() {
+    const c = db.prepare("SELECT SUM(done=0 AND tries<5) waiting, SUM(done=0 AND tries>=5) failed, SUM(done=1) sent, SUM(done=1 AND error IS NOT NULL) partly FROM telecrm_outbox").get();
+    const recent = db.prepare("SELECT tid, lead_id leadId, kind, body, at, tries, error, done FROM telecrm_outbox ORDER BY id DESC LIMIT 20").all().map((r) => ({ ...r, body: JSON.parse(r.body) }));
+    return { waiting: c.waiting || 0, failed: c.failed || 0, sent: c.sent || 0, partly: c.partly || 0, recent };
+  }
+
   // ---------------------------------------------------------------- people
   function syncUsers(members) {
     const existing = all("users"), byEmail = new Map(), byName = new Map();
@@ -164,6 +274,8 @@ export function createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecor
     for (const a of actions) {
       try {
         const type = String(a.type || "").toUpperCase(), f = a.fields && typeof a.fields === "object" ? a.fields : {}, at = msOf(a.creationTimestamp || a.created_on || a.performed_at) || now();
+        // a note sent from here comes back as TeleCRM's "Salesdesk Note" action: the note is already on the timeline here
+        if (ctx.noteCode && type === String(ctx.noteCode).toUpperCase()) continue;
         const person = personOf(ctx, a.employeeid), base = { leadId: lead.id, source: "TeleCRM", telecrmType: type, occurredAt: iso(at), createdAt: iso(at), updatedAt: iso(at) };
         const notes = text(f.notes ?? a.text ?? a.note ?? f.note ?? f.text ?? f.message ?? "");
         const wa = WA.exec(notes);
@@ -263,6 +375,8 @@ export function createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecor
     if (parts.phoneKey && isBlocked(db, parts.phoneKey)) { ctx.counts.blocked = (ctx.counts.blocked || 0) + 1; return; }
     let cur = ctx.byTid.get(tid) || (parts.phoneKey && ctx.byPhone.get(parts.phoneKey)) || null;
     if (cur && ctx.claimed.has(cur.id)) cur = null;
+    // changes made here are still on their way to TeleCRM: the CRM's values are the latest, so this read leaves the lead alone
+    if (cur && pending(String(tid))) { ctx.claimed.add(cur.id); ctx.counts.waitingPush = (ctx.counts.waitingPush || 0) + 1; return; }
     const status = text(item.status || f.status, 100), map = mapStatus(status), owner = ctx.users.get(String(item.employeeid || f.assignee || "").toLowerCase())?.id || cur?.owner || "";
     const { name: _n, phone: _p, email, city, place, company, lead_source, expected_revenue, lost_reason, next_followup: _nf, "next_follow-up_on": _nfo, ...rest } = f;
     const next_followup = followupOf(f);
@@ -337,7 +451,7 @@ export function createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecor
         counts.users = members.length;
         const users = u.byEmail, byTid = new Map(), byPhone = new Map();
         for (const l of all("leads")) { if (l.telecrm?.id) byTid.set(l.telecrm.id, l); else if (l.phoneKey) byPhone.set(l.phoneKey, l); }
-        const ctx = { users, byTid, byPhone, claimed: new Set(), counts, uidMap: { ...(s.uidMap || {}) }, uidDirty: false };
+        const ctx = { users, byTid, byPhone, claimed: new Set(), counts, uidMap: { ...(s.uidMap || {}) }, uidDirty: false, noteCode: pushState().noteAction?.code || "" };
         const since = Math.max(0, (s.lastRun?.at || 0) - 15 * 60000);
         const queries = doFull ? [{ body: {}, max: Infinity }] : [{ body: { actions: { performed_at: { from: since, to: started + 60000 } } }, max: Infinity }, { body: {}, max: 100 }];
         const done = new Set();
@@ -380,5 +494,5 @@ export function createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecor
     })();
     return running;
   }
-  return { settings: status, save, sync, copyRecordings, isRunning: () => Boolean(running) };
+  return { settings: () => ({ ...status(), outbox: outbox() }), save, sync, copyRecordings, queueChange, push, isRunning: () => Boolean(running) };
 }

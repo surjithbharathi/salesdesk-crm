@@ -145,7 +145,16 @@ const get = (kind, id) => {
   if(!r&&kind==="leads"){const alias=db.prepare("SELECT body FROM records WHERE kind='leadAliases' AND id=?").get(id);if(alias)return get(kind,JSON.parse(alias.body).targetId);}
   const value=r?JSON.parse(r.body):null;if(value&&kind==="leads")try{return {...value,...phoneParts(value.phone)};}catch{}return value;
 };
+// what a person or a workflow saves here; the TeleCRM outbox hears about leads, follow-ups and notes (see telecrm-mirror.mjs)
+let afterPut = null;
+const TRACKED = new Set(["leads", "tasks", "activities"]);
 const put = (kind, v) => {
+  const before = afterPut && TRACKED.has(kind) ? get(kind, v.id) || null : undefined;
+  const done = basePut(kind, v);
+  if (before !== undefined) afterPut(kind, before, v);
+  return done;
+};
+const basePut = (kind, v) => {
   if(kind === "leads"){Object.assign(v,phoneParts(v.phone)); const old=get("leads",v.id);if(!old||phoneKeyOf(old)!==phoneKeyOf(v))assertUniqueLead(all,v); }
   return db
     .prepare(
@@ -1812,6 +1821,9 @@ function scheduleTelecrm() {
   }
 }
 scheduleTelecrm();
+afterPut = (kind, old, next) => telecrm.queueChange(kind, old, next);
+// changes made here go to TeleCRM every 30 seconds
+setInterval(() => telecrm.push().catch((e) => console.error("TeleCRM push: " + e.message)), 30000).unref();
 marketplace.schedule();
 workflows.tick();
 setInterval(() => workflows.tick(), 30000).unref();

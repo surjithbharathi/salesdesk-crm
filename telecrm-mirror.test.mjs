@@ -48,6 +48,12 @@ function world(t) {
     }
     if (/\/file\/download-url$/.test(path) && tele.denyFiles) return { ok: false, status: 403, json: async () => ({}) };
     if (/\/file\/download-url$/.test(path)) return ok({ download_url: "https://files.example/" + encodeURIComponent(u.searchParams.get("path")), expires_in: 3600, size: 10, content_type: "audio/mpeg" });
+    // writes back to TeleCRM: kept so tests can read what was sent
+    if (init.method === "POST" && /^\/lead\/[^/]+(\/action)?$/.test(path) && path !== "/lead/search") {
+      (tele.writes ||= []).push({ path, body: JSON.parse(init.body || "{}") });
+      return ok(path.endsWith("/action") ? { data: [{ status: "CREATED" }] } : { id: path.split("/")[2], fields: {}, ...(tele.remarks ? { remarks: tele.remarks } : {}) });
+    }
+    if (path === "/custom-actions") return ok([{ code: "ACTION_1001", displayName: "Salesmax Activity", fieldSchema: [] }, { code: "ACTION_1014", displayName: "Salesdesk Note", fieldSchema: [{ apiName: "note", type: "TEXT" }] }]);
     const m = /^\/lead\/([^/]+)$/.exec(path);
     if (m) { const acts = tele.actions[m[1]] || []; return ok({ id: m[1], actions: acts.slice(skip, skip + limit) }); }
     return { ok: false, status: 404, json: async () => ({}) };
@@ -356,4 +362,61 @@ test("a TeleCRM follow-up moved or done in the CRM stays so, until TeleCRM sets 
   assert.equal(task.due, new Date(1802000000000).toISOString());
   assert.equal(task.status, "Open");
   assert.equal(task.tcDue, undefined);
+});
+
+test("changes made here go back to TeleCRM: fields, status, assignee, follow-up and notes; the read waits for them", async (t) => {
+  const w = world(t);
+  connect(w);
+  w.tele.leads = [lead("aaa", {}, { "next_follow-up_on": 1801000000000 })];
+  await w.mirror.sync();
+  const before = w.get("leads", "tc-aaa"), sathiya = w.all("users").find((u) => u.email === "sathiya@deviindustries.com");
+  // a person moves the lead on, gives it to Sathiya and fixes the city
+  const after = { ...before, owner: sathiya.id, deal: "Quotation Shared", stage: "Quotation given", city: "Salem" };
+  w.rawPut("leads", after);
+  w.mirror.queueChange("leads", before, after);
+  // the follow-up is done, and a note is written
+  const task = w.get("tasks", "tct-aaa");
+  w.rawPut("tasks", { ...task, status: "Done" });
+  w.mirror.queueChange("tasks", task, { ...task, status: "Done" });
+  w.mirror.queueChange("activities", null, { id: "n1", type: "Note", text: "Wants 2 machines", leadId: "tc-aaa", userId: sathiya.id, createdAt: "2027-01-15T04:30:00.000Z" });
+  // an import or a workflow note is not sent
+  w.mirror.queueChange("activities", null, { id: "n2", type: "Note", text: "Repeat enquiry", leadId: "tc-aaa", integrationSource: "indiamart" });
+  assert.equal(w.mirror.settings().outbox.waiting, 2, "the field changes for one lead (lead and follow-up) are merged into one update");
+  // TeleCRM still says New Lead: a read now leaves the CRM's newer values alone
+  w.tick(120000);
+  w.tele.touched = new Set(["aaa"]);
+  w.tele.leads = [lead("aaa", {}, { "next_follow-up_on": 1801000000000, modified_on: 2 })];
+  await w.mirror.sync();
+  assert.equal(w.get("leads", "tc-aaa").deal, "Quotation Shared");
+  w.tele.remarks = [{ field: "fields.city", status: "UPDATED" }];
+  const out = await w.mirror.push();
+  assert.equal(out.sent, 2);
+  const [fields, note] = w.tele.writes;
+  assert.equal(fields.path, "/lead/aaa");
+  assert.deepEqual(fields.body.fields, { city: "Salem", assignee: "sathiya@deviindustries.com", status: "Quotation Shared", "next_follow-up_on": "" });
+  assert.equal(note.path, "/lead/aaa/action");
+  assert.equal(note.body.actions[0].type, "1014");
+  assert.equal(note.body.actions[0].employeeid, "sathiya@deviindustries.com");
+  assert.equal(note.body.actions[0].fields.note, "Wants 2 machines\n— Sathiya, Salesdesk");
+  assert.equal(note.body.actions[0].created_on, "15/01/2027 10:00:00");
+  assert.equal(w.mirror.settings().outbox.waiting, 0);
+  // the note coming back from TeleCRM is not added a second time
+  w.tele.actions.aaa = [{ id: "x1", type: "ACTION_1014", creationTimestamp: 1800000300000, fields: { note: "Wants 2 machines\n— Sathiya, Salesdesk" } }];
+  w.tele.leads = [lead("aaa", { status: "Quotation Shared", employeeid: "sathiya@deviindustries.com" }, { modified_on: 3 })];
+  w.tick(120000);
+  await w.mirror.sync();
+  assert.equal(w.all("activities").filter((a) => a.leadId === "tc-aaa" && /Wants 2 machines/.test(a.text || "")).length, 0);
+  assert.equal(w.get("leads", "tc-aaa").deal, "Quotation Shared");
+});
+
+test("a field TeleCRM turns down is kept as the outbox entry's error", async (t) => {
+  const w = world(t);
+  connect(w);
+  w.tele.leads = [lead("aaa")];
+  await w.mirror.sync();
+  const before = w.get("leads", "tc-aaa");
+  w.mirror.queueChange("leads", before, { ...before, state: "Atlantis" });
+  w.tele.remarks = [{ field: "fields.state", status: "IGNORED", remark: "Not an option" }];
+  await w.mirror.push();
+  assert.match(w.mirror.settings().outbox.recent[0].error, /state: Not an option/);
 });
