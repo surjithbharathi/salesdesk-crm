@@ -78,7 +78,7 @@ final class SimplePreferences {
     }
     // calls from before sign-in are not sent on their own; this sends the chosen days once, with their recordings
     void addOlder(){
-        String[] labels={"Last 7 days","Last 30 days","Last 90 days"};int[] days={7,30,90};
+        String[] labels={"Last 7 days","Last 30 days","Last 90 days","Last 6 months","Last 1 year"};int[] days={7,30,90,180,365};
         new android.app.AlertDialog.Builder(a).setTitle("Add older calls & recordings").setItems(labels,(d,i)->{
             long from=System.currentTimeMillis()-days[i]*86400000L;android.content.SharedPreferences p=prefs();
             p.edit().putLong("since",Math.min(p.getLong("since",System.currentTimeMillis()),from)).putLong("trackingSince",Math.min(p.getLong("trackingSince",System.currentTimeMillis()),from)).commit();
