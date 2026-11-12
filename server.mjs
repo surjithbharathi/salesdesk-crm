@@ -546,6 +546,8 @@ const rawPut = (kind, v) => db.prepare("INSERT INTO records VALUES(?,?,?) ON CON
 // IndiaMART and TradeIndia enquiries read into leads on a schedule
 const marketplace = createMarketplaceLeads({ db, all, get, put, stamp, tx, log, keyPath: (process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname) + ".marketplace-key", report: (m) => console.error(m) });
 const salesmaxImport = createSalesmaxImport({ db, get, put: rawPut, tx, users: () => all("users") });
+// Salesmax leads left without an owner (its short names, like "Bala" for Balaji) get one at each start
+try { const fixed = salesmaxImport.fixOwners(); if (fixed.leads) console.log(`Salesmax: ${fixed.leads} leads and ${fixed.tasks} follow-ups given their owner`); } catch (e) { console.error("Salesmax owners: " + e.message); }
 const telecrm = createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecording: (callId, bytes) => mobile.importRecording(callId, bytes), shareTwins: () => mobile.shareTwins(), keyPath: (process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname) + ".telecrm-key", log: (m) => console.error(m) });
 const waGateway = createWaGateway({ db, all, get, put, stamp, tx, log, systemUser: process.env.CRM_OWNER_USER_ID || "", keyPath: (process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname) + ".wagw-key" });
 // WhatsApp-code and Devi ERP sign-in, for people who already have a login

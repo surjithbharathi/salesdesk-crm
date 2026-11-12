@@ -113,3 +113,27 @@ test("old open Salesmax follow-ups close as of their own due date; newer ones an
   assert.equal(s.get("tasks", "done").result, "Done");
   assert.throws(() => s.imp.closeOld("nope"));
 });
+
+test("Salesmax's short names find the person here; a lead left without one gets its owner later", () => {
+  const db = new DatabaseSync(":memory:");
+  db.exec("CREATE TABLE records(kind TEXT,id TEXT,body TEXT,PRIMARY KEY(kind,id))");
+  initializeLeadPhoneIndex(db);
+  const get = (k, id) => { const r = db.prepare("SELECT body FROM records WHERE kind=? AND id=?").get(k, id); return r && JSON.parse(r.body); };
+  const put = (k, v) => db.prepare("INSERT INTO records VALUES(?,?,?) ON CONFLICT(kind,id) DO UPDATE SET body=excluded.body").run(k, v.id, JSON.stringify(v));
+  const tx = (fn) => { db.exec("BEGIN"); try { const r = fn(); db.exec("COMMIT"); return r; } catch (e) { db.exec("ROLLBACK"); throw e; } };
+  let people = [{ id: "u9", name: "Somebody" }];
+  const imp = createSalesmaxImport({ db, get, put, tx, users: () => people });
+  imp.importBatch("contacts", [contact({ "MOBILE NUMBER": "+919980315050", "LEAD NAME": "pratapkoralli" }), contact({ "MOBILE NUMBER": "+919980315051", "LEAD OWNER": "Pri" })]);
+  assert.equal(get("leads", "smx-919980315050").owner, "", "nobody called Bala yet");
+  // the people come in later (TeleCRM): Balaji is bala@…, and two people start with "Pri", so that one stays open
+  people = [{ id: "u1", name: "Balaji", email: "bala@deviindustries.com", active: true }, { id: "u2", name: "Priya", active: true }, { id: "u3", name: "Prince", active: true }];
+  assert.deepEqual(imp.fixOwners(), { leads: 1, tasks: 0 });
+  const lead = get("leads", "smx-919980315050");
+  assert.equal(lead.owner, "u1");
+  assert.ok(lead.importTouch, "marked as an import change, so no workflow fires");
+  assert.equal(get("leads", "smx-919980315051").owner, "");
+  // name matching on a new import: "Bala" by the start of the name too
+  people = [{ id: "u1", name: "Balaji", active: true }];
+  imp.importBatch("contacts", [contact({ "MOBILE NUMBER": "+919980315052" })]);
+  assert.equal(get("leads", "smx-919980315052").owner, "u1");
+});

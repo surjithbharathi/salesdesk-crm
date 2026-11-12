@@ -82,15 +82,42 @@ export function createSalesmaxImport({ db, get, put, tx, users }) {
     db.exec("CREATE INDEX IF NOT EXISTS activities_by_lead ON records(json_extract(body,'$.leadId')) WHERE kind='activities'");
     indexed = true;
   }
+  // Salesmax names people by a short name ("Bala") that is not always the name here ("Balaji"): the same name, then the
+  // same first word, then the e-mail's name (bala@…), then one name starting with the other. A guess is taken only when it
+  // points at exactly one person, so a short name shared by two people stays unassigned.
   const people = () => {
-    const list = users();
+    const list = users().filter((x) => x.active !== false && !x.mergedInto);
+    const one = (hits) => (hits.length === 1 ? hits[0] : null);
+    const mail = (x) => norm(String(x.email || "").split("@")[0]);
     return (name) => {
-      const n = norm(name);
+      const n = norm(name), first = n.split(" ")[0];
       if (!n) return "";
-      const u = list.find((x) => norm(x.name) === n) || list.find((x) => norm(x.name).split(" ")[0] === n.split(" ")[0] && n.split(" ")[0].length > 2);
+      const u = list.find((x) => norm(x.name) === n)
+        || (first.length > 2 && one(list.filter((x) => norm(x.name).split(" ")[0] === first)))
+        || (first.length > 2 && one(list.filter((x) => mail(x) === n || mail(x) === first)))
+        || (first.length > 2 && one(list.filter((x) => { const f = norm(x.name).split(" ")[0]; return f.length > 2 && (f.startsWith(first) || first.startsWith(f)); })));
       return u?.id || "";
     };
   };
+  // Leads brought in from Salesmax before a name could be matched get their owner now, from the name Salesmax gave
+  // (kept on the lead), and so do their open follow-ups. Marked as an import change, so no "assigned" workflow fires.
+  function fixOwners() {
+    const personOf = people(), at = new Date().toISOString();
+    let leads = 0, tasks = 0;
+    tx(() => {
+      for (const r of db.prepare("SELECT body FROM records WHERE kind='leads' AND json_extract(body,'$.importedFrom')=? AND COALESCE(json_extract(body,'$.owner'),'')='' AND json_extract(body,'$.salesmax.owner')<>''").all(FROM)) {
+        const lead = JSON.parse(r.body), owner = personOf(lead.salesmax?.owner);
+        if (!owner || lead.mergedInto) continue;
+        put("leads", { ...lead, owner, importTouch: at, updatedAt: at });
+        leads++;
+        for (const t of db.prepare("SELECT body FROM records WHERE kind='tasks' AND json_extract(body,'$.leadId')=? AND COALESCE(json_extract(body,'$.owner'),'')=''").all(lead.id)) {
+          put("tasks", { ...JSON.parse(t.body), owner, updatedAt: at });
+          tasks++;
+        }
+      }
+    });
+    return { leads, tasks };
+  }
   const leadByKey = (key) => {
     // the "<>''" lets SQLite use the unique phone index, which only holds leads with a number
     const r = db.prepare("SELECT body FROM records WHERE kind='leads' AND json_extract(body,'$.phoneKey')=? AND json_extract(body,'$.phoneKey')<>''").get(key);
@@ -237,5 +264,5 @@ export function createSalesmaxImport({ db, get, put, tx, users }) {
     });
     return { closed };
   }
-  return { importBatch, closeOld };
+  return { importBatch, closeOld, fixOwners };
 }
