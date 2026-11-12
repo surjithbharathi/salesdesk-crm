@@ -265,7 +265,24 @@ export function createCallAI({db,keyPath,all,get,playback,fetcher=fetch,onLangua
   const timer=setInterval(()=>void tick(),10000);timer.unref();
   // the finished summary (or transcript) of one recording, for the caller card; the caller decides who may see it
   const spokenOf=id=>{try{const j=readJob(id);return j.status==='complete'?{summary:j.summary||'',transcript:j.transcript||''}:null;}catch{return null;}};
-  return {publicSettings,save,enqueue,tick,vaultList,saveKey,spokenOf,async models(input){
+  // what Settings > Call AI shows: whether recordings still arrive, how many summaries are done, waiting or failed, and the latest jobs
+  function status(){
+    const counts={};for(const r of db.prepare('SELECT status,COUNT(*) n FROM call_ai_jobs GROUP BY status').all())counts[r.status]=r.n;
+    const at=c=>Number(c.startedAt)||Date.parse(c.createdAt||'')||0, now=Date.now(), week=now-7*86400000;
+    const calls=(all?all('mobileCalls'):[]).filter(c=>c.recordingId), byRec=new Map(calls.map(c=>[c.recordingId,c]));
+    const last=calls.reduce((m,c)=>Math.max(m,at(c)),0), recent=calls.filter(c=>at(c)>=week);
+    const jobs=db.prepare('SELECT recording_id,lead_id,status FROM call_ai_jobs ORDER BY rowid DESC LIMIT 60').all().map(r=>{
+      let j={};try{j=readJob(r.recording_id);}catch{/* unreadable job: shown with its status only */}
+      const c=byRec.get(r.recording_id);
+      return {recordingId:r.recording_id,leadId:r.lead_id||'',leadName:(r.lead_id&&get?get('leads',r.lead_id)?.name:'')||'',status:r.status,error:r.status==='error'?String(j.error||''):'',
+        updatedAt:j.updatedAt||'',callAt:c?new Date(at(c)).toISOString():'',source:c?(c.deviceId==='telecrm'?'TeleCRM':'Phone'):''};
+    }).sort((a,b)=>String(b.updatedAt||b.callAt).localeCompare(String(a.updatedAt||a.callAt))).slice(0,20);
+    const c=rawSettings();
+    return {enabled:Boolean(c.enabled),automatic:Boolean(c.automatic),lastRecordingAt:last?new Date(last).toISOString():null,
+      week:{total:recent.length,phone:recent.filter(x=>x.deviceId!=='telecrm').length,telecrm:recent.filter(x=>x.deviceId==='telecrm').length},
+      done:counts.complete||0,waiting:(counts.queued||0)+(counts.waiting||0)+(counts.processing||0),failed:counts.error||0,jobs};
+  }
+  return {publicSettings,save,enqueue,tick,vaultList,saveKey,spokenOf,status,async models(input){
     if(typeof input.key!=='undefined'&&(typeof input.key!=='string'||input.key.length>4096))fail('Invalid API key');
     const saved=settings()[input.part];
     return listModels({...input,key:input.keyId?resolveKey(input.keyId,input.provider):(input.key||(canonicalProvider(saved?.provider)===canonicalProvider(input.provider)?saved.key:''))},fetcher);
