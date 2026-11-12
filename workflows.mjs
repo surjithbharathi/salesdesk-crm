@@ -10,6 +10,7 @@ import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { PIPELINE } from "./pipeline.mjs";
 import { privateAddress } from "./wa-gateway.mjs";
+import { CIRCLE_STATE, circleOf, mobileOf } from "./probable-state.mjs";
 import { cleanState, cleanLanguage, withRegion } from "./lead-region.mjs";
 
 const fail = (message, status = 400) => { throw Object.assign(new Error(message), { status }); };
@@ -37,6 +38,9 @@ export function valueOf(lead, key) {
   if (key === "stage") return stageOf(lead);
   if (key === "rating") return shown(lead.telecrm?.rating ?? lead.rating ?? "");
   if (key.startsWith("tc:")) return shown(lead.telecrm?.fields?.[key.slice(3)]);
+  // a new lead has no probable state yet (it is filled every few hours), so a flow works it out from the number's telecom circle
+  if (key === "probableState" && !lead.state && !lead.probableState) return CIRCLE_STATE[circleOf(mobileOf(lead))] || "";
+  if (key === "probableState" && lead.state) return "";
   return shown(lead[key]);
 }
 // webhook addresses: https on the public internet only, so a flow cannot reach anything inside the server
