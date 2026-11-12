@@ -82,6 +82,8 @@ final class SimplePreferences {
         new android.app.AlertDialog.Builder(a).setTitle("Add older calls & recordings").setItems(labels,(d,i)->{
             long from=System.currentTimeMillis()-days[i]*86400000L;android.content.SharedPreferences p=prefs();
             p.edit().putLong("since",Math.min(p.getLong("since",System.currentTimeMillis()),from)).putLong("trackingSince",Math.min(p.getLong("trackingSince",System.currentTimeMillis()),from)).commit();
+            // calls the CRM turned down before (often a lead that belonged to someone else then) are tried again
+            try(QueueDb q=new QueueDb(a)){q.getWritableDatabase().execSQL("UPDATE calls SET uploaded=0 WHERE uploaded=-1 AND started>=?",new Object[]{from});}catch(Exception ignored){}
             a.notice("Adding calls from the "+labels[i].toLowerCase()+" on the SIMs you chose. Recordings follow in the background.");a.sync();
         }).setNegativeButton("Cancel",null).show();
     }

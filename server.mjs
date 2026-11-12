@@ -893,6 +893,8 @@ const mobileServer = http.createServer(async (req, res) => {
     }
     bad("Not found", 404);
   } catch (e) {
+    // a phone that stops syncing can be traced: every refused request is written to the server log (no bodies, no tokens)
+    if (e.status !== 401) console.error(`Device API ${e.status || 500} ${req.method} ${String(req.url || "").split("?")[0].slice(0, 120)}: ${e.status ? e.message : String(e.stack || e.message).slice(0, 300).replace(/\s+/g, " ")}`);
     reply(e.status || 500, { error: e.status ? e.message : "Device sync failed" });
   }
 });

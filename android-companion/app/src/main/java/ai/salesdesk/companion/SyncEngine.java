@@ -48,6 +48,7 @@ final class SyncEngine {
         File file=File.createTempFile("crm-recording-",".audio",c.getCacheDir());boolean complete=false;
         try{int code=connection.getResponseCode();if(code!=200)throw new HttpError(code);try(InputStream in=connection.getInputStream();OutputStream out=new FileOutputStream(file)){byte[] buf=new byte[8192];int n,total=0;while((n=in.read(buf))!=-1){total+=n;if(total>20*1024*1024)throw new IOException("Recording exceeds 20 MiB");out.write(buf,0,n);}}complete=true;return file;}finally{connection.disconnect();if(!complete)file.delete();}
     }
+    static long sizeOf(Context c,Uri uri){try(Cursor cur=c.getContentResolver().query(uri,new String[]{android.provider.OpenableColumns.SIZE},null,null,null)){return cur!=null&&cur.moveToFirst()&&!cur.isNull(0)?cur.getLong(0):0;}catch(Exception e){return 0;}}
     static ArrayList<JSONObject> calls(SQLiteDatabase db) throws Exception {
         ArrayList<JSONObject> list = new ArrayList<>();
         try (Cursor cur = db.rawQuery("SELECT * FROM calls WHERE uploaded=0 ORDER BY started DESC LIMIT 500", null)) { while (cur.moveToNext()) { JSONObject row=new JSONObject(); for (String col : cur.getColumnNames()) row.put(col, cur.isNull(cur.getColumnIndexOrThrow(col)) ? "" : cur.getString(cur.getColumnIndexOrThrow(col))); list.add(row); } }
@@ -158,13 +159,13 @@ final class SyncEngine {
                     ContentValues v=new ContentValues(); v.put("local_id",log.getString(0)+"-"+start); v.put("phone",phone);v.put("account",account); v.put("started",start); v.put("duration",seconds); v.put("direction",direction); db.insertWithOnConflict("calls",null,v,SQLiteDatabase.CONFLICT_IGNORE);
                 }
             }
-            int synced=0, uploaded=0, refused=0;
+            int synced=0, uploaded=0, refused=0, skipped=0;
             if(!online) { SecureConfig.prefs(c).edit().putString("status","Offline: business calls queued locally using the last assigned-lead list. Retry when connected.").apply(); return; }
             for(JSONObject row:calls(db)) {
                 check(c); if(!SimTracking.allows(c,row.optString("account"),phones.contains(row.getString("phone"))))continue;
                 String remote=row.getString("remote_id");
                 if(remote.isEmpty()) { JSONObject payload=new JSONObject().put("localId",row.getString("local_id")).put("phone",row.getString("phone")).put("startedAt",row.getLong("started")).put("duration",row.getLong("duration")).put("direction",row.getString("direction")).put("accountId",row.optString("account")); if(namesOn(c)&&!named.contains(row.getString("phone"))){String name=savedName(c,row.getString("phone"));if(name.trim().isEmpty())name=logged.getOrDefault(row.getString("phone"),"");if(!name.trim().isEmpty())payload.put("name",name);}
-                    try{remote=new JSONObject(request(c,"/v1/calls","POST",payload.toString().getBytes("UTF-8"),Collections.singletonMap("Content-Type","application/json"))).getString("id");}catch(HttpError e){if(e.code==403){ContentValues excluded=new ContentValues();excluded.put("uploaded",-1);db.update("calls",excluded,"local_id=?",new String[]{row.getString("local_id")});continue;}throw e;} ContentValues v=new ContentValues(); v.put("remote_id",remote); db.update("calls",v,"local_id=?",new String[]{row.getString("local_id")}); synced++;CallPrompts.afterCall(c,remote,row.getString("phone"),row.getLong("duration")); }
+                    try{remote=new JSONObject(request(c,"/v1/calls","POST",payload.toString().getBytes("UTF-8"),Collections.singletonMap("Content-Type","application/json"))).getString("id");}catch(HttpError e){if(e.code==401)throw e;if(e.code>=400&&e.code<500){ContentValues excluded=new ContentValues();excluded.put("uploaded",-1);db.update("calls",excluded,"local_id=?",new String[]{row.getString("local_id")});continue;}skipped++;continue;} ContentValues v=new ContentValues(); v.put("remote_id",remote); db.update("calls",v,"local_id=?",new String[]{row.getString("local_id")}); synced++;CallPrompts.afterCall(c,remote,row.getString("phone"),row.getLong("duration")); }
             }
             fillNames(c,targets,logged,country);
             // Publish call logs first: scanning/reading audio must not delay the CRM timeline.
@@ -181,6 +182,7 @@ final class SyncEngine {
                 String remote=row.getString("remote_id");
                 if(remote.isEmpty() || row.getString("uri").isEmpty()) continue;
                 Uri uri=Uri.parse(row.getString("uri")); long seconds=duration(c,uri); if(seconds<1) continue;
+                if(sizeOf(c,uri)>20L*1024*1024){ ContentValues big=new ContentValues(); big.put("uploaded",-2); db.update("calls",big,"local_id=?",new String[]{row.getString("local_id")}); refused++; continue; }
                 byte[] bytes; try(InputStream in=c.getContentResolver().openInputStream(uri); ByteArrayOutputStream out=new ByteArrayOutputStream()) { if(in==null) continue; byte[] buf=new byte[8192]; int n; while((n=in.read(buf))!=-1) { check(c); if(out.size()+n>20*1024*1024) throw new Exception("Recording exceeds 20 MiB"); out.write(buf,0,n); } bytes=out.toByteArray(); }
                 Map<String,String> headers=new HashMap<>(); headers.put("Content-Type","application/octet-stream"); headers.put("X-Match-Mode",row.getString("mode")); headers.put("X-Audio-Duration",String.valueOf(seconds)); headers.put("X-File-Modified",String.valueOf(modified(c,uri)));
                 // A recording the CRM turns down for good (needs a manual match, already on another call, too big) is set aside,
@@ -189,7 +191,7 @@ final class SyncEngine {
                 catch(HttpError e) { if(e.code==400||e.code==403||e.code==404||e.code==409||e.code==413){ ContentValues skip=new ContentValues(); skip.put("uploaded",-2); db.update("calls",skip,"local_id=?",new String[]{row.getString("local_id")}); refused++; continue; } throw e; }
                 ContentValues v=new ContentValues(); v.put("uploaded",1); db.update("calls",v,"local_id=?",new String[]{row.getString("local_id")}); uploaded++;
             }
-            SecureConfig.prefs(c).edit().putString("status","Updated "+android.text.format.DateFormat.getTimeFormat(c).format(new java.util.Date())+" · "+synced+" new calls · "+uploaded+" recordings"+(refused>0?" · "+refused+" recordings need a manual match":"")).apply();
+            SecureConfig.prefs(c).edit().putString("status","Updated "+android.text.format.DateFormat.getTimeFormat(c).format(new java.util.Date())+" · "+synced+" new calls · "+uploaded+" recordings"+(refused>0?" · "+refused+" recordings need a manual match":"")+(skipped>0?" · "+skipped+" calls will be retried":"")).apply();
         } finally { running.set(false); }
     }
 }
