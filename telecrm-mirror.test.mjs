@@ -165,7 +165,31 @@ test("changes in TeleCRM reach the mirror: new status, new owner, a cleared foll
   assert.equal(w.all("users").find((u) => u.id === a.owner).email, "sathiya@deviindustries.com");
   assert.equal(w.get("tasks", "tct-aaa").status, "Done");
   assert.ok(w.all("leads").some((l) => l.telecrm.id === "cccc"));
-  assert.equal(w.all("activities").filter((x) => x.leadId === a.id).length, 1);
+  const said = w.all("activities").filter((x) => x.leadId === a.id).map((x) => x.text || x.description || "");
+  assert.equal(said.length, 2);
+  assert.ok(said.some((x) => /^Owner changed: .+ → .+ · reason: changed in TeleCRM$/.test(x)), said.join(" | "));
+});
+
+test("a lead first linked to TeleCRM keeps the owner given here and TeleCRM is told; TeleCRM's old assignee never undoes it", async (t) => {
+  const w = world(t);
+  connect(w);
+  await w.mirror.sync();
+  const sathiya = w.all("users").find((u) => u.email === "sathiya@deviindustries.com");
+  w.rawPut("leads", { id: "mine", name: "From WhatsApp", phone: "+919876511111", phoneKey: "919876511111", countryCode: "91", mobileNumber: "9876511111", owner: sathiya.id, stage: "New", deal: "", disposition: "" });
+  w.tick(120000);
+  w.tele.leads = [lead("aaa", {}, { phone: "919876511111", modified_on: 2 })];
+  w.tele.touched = new Set(["aaa"]);
+  await w.mirror.sync();
+  assert.equal(w.get("leads", "mine").owner, sathiya.id, "the workflow's owner stays");
+  assert.equal(w.mirror.settings().outbox.waiting, 1);
+  await w.mirror.push();
+  assert.deepEqual(w.tele.writes.at(-1).body.fields, { assignee: "sathiya@deviindustries.com" });
+  w.tick(120000);
+  w.tele.leads = [lead("aaa", {}, { phone: "919876511111", modified_on: 3 })];
+  w.tele.touched = new Set(["aaa"]);
+  await w.mirror.sync();
+  assert.equal(w.get("leads", "mine").owner, sathiya.id, "TeleCRM still showing the old assignee does not move it back");
+  assert.ok(!w.all("activities").some((x) => x.leadId === "mine" && /Owner changed/.test(x.text || "")));
 });
 
 test("TeleCRM's next_follow-up_on field becomes the lead's follow-up task", async (t) => {

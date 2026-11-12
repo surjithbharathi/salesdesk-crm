@@ -379,7 +379,13 @@ export function createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecor
     if (cur && ctx.claimed.has(cur.id)) cur = null;
     // changes made here are still on their way to TeleCRM: the CRM's values are the latest, so this read leaves the lead alone
     if (cur && pending(String(tid))) { ctx.claimed.add(cur.id); ctx.counts.waitingPush = (ctx.counts.waitingPush || 0) + 1; return; }
-    const status = text(item.status || f.status, 100), map = mapStatus(status), owner = ctx.users.get(String(item.employeeid || f.assignee || "").toLowerCase())?.id || cur?.owner || "";
+    const status = text(item.status || f.status, 100), map = mapStatus(status);
+    // the owner: TeleCRM's assignee for a new lead, or when someone changes the assignee in TeleCRM. A lead first linked to one
+    // already here keeps the owner given here (a workflow, a person), and TeleCRM is told. An assignee TeleCRM still has from
+    // before never undoes a change made here.
+    const tcAssignee = String(item.employeeid || f.assignee || "").toLowerCase(), tcOwner = ctx.users.get(tcAssignee)?.id || "";
+    const firstLink = Boolean(cur && !cur.telecrm?.id), tcSame = Boolean(cur?.telecrm?.id) && (cur.telecrm.assignee || "") === tcAssignee;
+    const owner = !cur ? tcOwner : firstLink || tcSame ? cur.owner || tcOwner : tcOwner || cur.owner || "";
     const { name: _n, phone: _p, email, city, place, company, lead_source, expected_revenue, lost_reason, next_followup: _nf, "next_follow-up_on": _nfo, ...rest } = f;
     const next_followup = followupOf(f);
     const created = msOf(f.created_on);
@@ -392,7 +398,7 @@ export function createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecor
       stage: map.stage, deal: map.deal, disposition: map.disposition, archived: false, repeat: norm(status) === "regular customer" || Boolean(cur?.repeat), list: cur?.list || "",
       firstTouchAt: cur?.firstTouchAt ?? (msOf(f.first_attempted_call || f.first_call) ? new Date(msOf(f.first_attempted_call || f.first_call)).toISOString() : null),
       createdAt: cur?.createdAt || (created ? new Date(created).toISOString() : new Date(now()).toISOString()), updatedAt: new Date(now()).toISOString(),
-      telecrm: { id: tid, status, rating: item.rating ?? 0, score: item.score ?? 0, assignee: String(item.employeeid || "").toLowerCase(), lostReason: text(lost_reason, 200), nextFollowup: msOf(next_followup) || null, modifiedOn: Number(f.modified_on) || 0, lastActivityOn: Number(f.last_activity_on) || 0, syncedAt: now(), fields: rest, phoneRaw: f.phone ? text(f.phone, 40) : "" },
+      telecrm: { id: tid, status, rating: item.rating ?? 0, score: item.score ?? 0, assignee: tcAssignee, lostReason: text(lost_reason, 200), nextFollowup: msOf(next_followup) || null, modifiedOn: Number(f.modified_on) || 0, lastActivityOn: Number(f.last_activity_on) || 0, syncedAt: now(), fields: rest, phoneRaw: f.phone ? text(f.phone, 40) : "" },
     };
     ctx.claimed.add(lead.id);
     // TeleCRM's State (and a language field, if one exists) fill an empty state / language here; what a person set stays
@@ -405,6 +411,11 @@ export function createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecor
     }
     ctx.byTid.set(tid, lead);
     if (lead.phoneKey) ctx.byPhone.set(lead.phoneKey, lead);
+    if (cur && (cur.owner || "") !== owner) {
+      const t = new Date(now()).toISOString(), who = (uid) => (uid && get("users", uid)?.name) || "nobody";
+      rawPut("activities", { id: "tco-" + tid + "-" + now(), leadId: lead.id, type: "System", text: `Owner changed: ${who(cur.owner)} → ${who(owner)} · reason: changed in TeleCRM`, createdAt: t, updatedAt: t });
+    }
+    if (firstLink && owner && owner !== tcOwner) { const e = userEmail(owner); if (e) enqueue(String(tid), lead.id, "fields", { assignee: e }); }
     importActions(lead, actions, ctx);
     // the follow-up date is the task: it stays open while the lead is live and is closed when TeleCRM clears it or the deal ends
     const due = msOf(next_followup), taskId = "tct-" + tid, oldTask = get("tasks", taskId), live = !map.disposition;
