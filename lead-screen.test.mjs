@@ -50,3 +50,13 @@ test("unassigned leads open for everyone, a colleague's lead only for an adminis
   assert.equal(leadScreen(w, "theirs", { id: "u1", admin: true }).lead.ownerName, "Priya");
   assert.throws(() => leadScreen(w, "nope", { id: "u1", admin: true }), /not found/);
 });
+
+test("the owner can be changed by the lead's owner, an admin, or anyone for a lead nobody owns; the team comes along", () => {
+  const w = world();
+  assert.equal(leadScreen(w, "mine", { id: "u1", admin: false }).canAssign, true);
+  assert.equal(leadScreen(w, "free", { id: "u2", admin: false }).canAssign, true);
+  assert.equal(leadScreen(w, "theirs", { id: "u1", admin: true }).canAssign, true);
+  assert.deepEqual(leadScreen(w, "mine", { id: "u1", admin: false }).team, [{ id: "u1", name: "Surjith" }, { id: "u2", name: "Priya" }]);
+  const inactive = { ...w, users: () => [{ id: "u1", name: "Surjith" }, { id: "u3", name: "Left", active: false }] };
+  assert.deepEqual(leadScreen(inactive, "mine", { id: "u1", admin: false }).team.map((u) => u.id), ["u1"]);
+});

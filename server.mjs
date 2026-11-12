@@ -793,6 +793,20 @@ const mobileServer = http.createServer(async (req, res) => {
         if ((req.method === "PATCH") !== Boolean(id)) bad("Unsupported route", 405);
         const old = id ? get(kind, id) : null;
         if (id && !old) bad("Record not found", 404);
+        if (kind === "leads" && "owner" in p) {
+          // a new owner from the phone: the lead's owner, an administrator, or anyone for a lead nobody owns yet
+          if (!old) bad("Save the lead first, then choose its owner");
+          if (Object.keys(p).length > 1) bad("Change the owner on its own");
+          const admin = identity.user.role === "admin" || ["owner", "admin"].includes(workspaceAccess.profile(userId).role);
+          if (old.owner && old.owner !== userId && !admin) bad("Only the lead's owner or an admin can change the owner", 403);
+          const to = typeof p.owner === "string" ? get("users", p.owner) : null;
+          if (!to || to.active === false) bad("Choose an active team member");
+          if (to.id === old.owner) return old;
+          const record = { ...old, owner: to.id, updatedAt: now() };
+          put("leads", record);
+          log(record.id, "System", `Owner changed: ${get("users", old.owner)?.name || "nobody"} → ${to.name} · reason: changed by ${identity.user.name || "someone"} on the phone`, { userId });
+          return record;
+        }
         if (kind === "leads") {
           if (old) ownLead(userId, id);
           const allowed = ["name", "phone", "countryCode", "mobileNumber", "company", "email", "city", "state", "language", "stage", "value"];
