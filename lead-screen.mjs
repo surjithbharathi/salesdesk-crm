@@ -35,5 +35,8 @@ export function leadScreen({ db, get, users }, id, viewer) {
     // the lead menu: the owner (or an administrator) may archive; only an administrator may delete or block
     canArchive: lead.owner === viewer.id || Boolean(viewer.admin),
     canDelete: Boolean(viewer.admin),
+    // the owner can be changed by the lead's owner, an administrator, or anyone for a lead nobody owns yet
+    canAssign: lead.owner === viewer.id || Boolean(viewer.admin) || !lead.owner,
+    team: everyone.filter((u) => u.active !== false).map((u) => ({ id: u.id, name: u.name || u.username || "" })).filter((u) => u.name),
   };
 }

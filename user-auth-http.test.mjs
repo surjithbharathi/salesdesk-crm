@@ -215,8 +215,14 @@ test("shared company login protects browser and mobile data with user scoping", 
     403,
   );
   assert.equal(
-    (await request(mobile, `/v1/leads/${createdLead.data.id}`, "PATCH", { owner }, auth)).status,
+    (await request(mobile, `/v1/leads/${excludedLead.data.id}`, "PATCH", { owner: member }, auth)).status,
+    403,
+    "a member cannot take or move a colleague's lead",
+  );
+  assert.equal(
+    (await request(mobile, `/v1/leads/${createdLead.data.id}`, "PATCH", { owner, name: "x" }, auth)).status,
     400,
+    "the owner is changed on its own",
   );
   assert.equal(
     (

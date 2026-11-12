@@ -164,6 +164,8 @@ final class LeadScreen {
         chips.addView(stage);
         String owner = lead.optString("ownerName");
         TextView ow = Ui.chip(a, owner.isEmpty() ? (lead.optString("owner").isEmpty() ? "Unassigned" : "Owner") : owner, MainActivity.NEUTRAL, 0xff45525c); ow.setPadding(dp(10), dp(5), dp(10), dp(5)); chips.addView(ow);
+        // the owner, as on the web: the lead's owner, an admin, or anyone for a lead nobody owns can give it to someone else
+        if (data != null && data.optBoolean("canAssign") && data.optJSONArray("team") != null) { ow.setText(ow.getText() + "  \u25BE"); ow.setOnClickListener(v -> chooseOwner()); ow.setContentDescription("Owner " + (owner.isEmpty() ? "none" : owner) + ". Change owner"); }
         names.addView(chips);
         who.addView(names, new LinearLayout.LayoutParams(0, -2, 1));
         header.addView(who);
@@ -402,6 +404,31 @@ final class LeadScreen {
             .setPositiveButton("Save", (d, w) -> save("PATCH", "/v1/leads/" + id, put(key, e.getText().toString().trim()), label + " saved")).show();
     }
 
+    private void chooseOwner() {
+        org.json.JSONArray team = data.optJSONArray("team"); if (team == null || team.length() == 0) return;
+        String[] names = new String[team.length()], ids = new String[team.length()]; int current = -1;
+        for (int i = 0; i < team.length(); i++) { JSONObject u = team.optJSONObject(i); ids[i] = u == null ? "" : u.optString("id"); names[i] = u == null ? "" : u.optString("name"); if (ids[i].equals(lead.optString("owner"))) current = i; }
+        new AlertDialog.Builder(a).setTitle("Owner").setSingleChoiceItems(names, current, (d, w) -> {
+            d.dismiss();
+            if (ids[w].equals(lead.optString("owner"))) return;
+            String mine = SecureConfig.prefs(a).getString("userId", "");
+            new AlertDialog.Builder(a).setMessage("Give this lead to " + names[w] + "?" + (ids[w].equals(mine) ? "" : " It leaves your list unless you are an admin."))
+                .setNegativeButton("Cancel", null).setPositiveButton("Give", (d2, w2) -> giveTo(ids[w], names[w], !ids[w].equals(mine) && !data.optBoolean("canDelete"))).show();
+        }).setNegativeButton("Cancel", null).show();
+    }
+    // a lead given to a colleague leaves a member's list, so the screen closes instead of showing it as someone else's
+    private void giveTo(String userId, String name, boolean leaves) {
+        new Thread(() -> {
+            try {
+                SyncEngine.requestApi(a, "/v1/leads/" + id, "PATCH", put("owner", userId));
+                a.runOnUiThread(() -> { android.widget.Toast.makeText(a, "Owner changed to " + name, android.widget.Toast.LENGTH_SHORT).show(); if (leaves && dialog.isShowing()) dialog.dismiss(); });
+                if (!leaves) load();
+                try { a.loadWorkspace(); a.runOnUiThread(a::render); } catch (Exception ignored) { /* the change is saved */ }
+            } catch (Exception e) {
+                a.runOnUiThread(() -> note(problem(e)));
+            }
+        }).start();
+    }
     private static JSONObject put(String... pairs) {
         JSONObject o = new JSONObject();
         try { for (int i = 0; i + 1 < pairs.length; i += 2) o.put(pairs[i], pairs[i + 1]); } catch (Exception ignored) {}
