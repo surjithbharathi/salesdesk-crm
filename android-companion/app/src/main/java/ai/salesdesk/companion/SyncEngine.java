@@ -186,7 +186,7 @@ final class SyncEngine {
                 // A recording the CRM turns down for good (needs a manual match, already on another call, too big) is set aside,
                 // so it cannot hold back every recording after it; a dropped connection still stops and retries later.
                 try { request(c,"/v1/calls/"+remote+"/recording","PUT",bytes,headers); }
-                catch(HttpError e) { if(e.code==400||e.code==404||e.code==409||e.code==413){ ContentValues skip=new ContentValues(); skip.put("uploaded",-2); db.update("calls",skip,"local_id=?",new String[]{row.getString("local_id")}); refused++; continue; } throw e; }
+                catch(HttpError e) { if(e.code==400||e.code==403||e.code==404||e.code==409||e.code==413){ ContentValues skip=new ContentValues(); skip.put("uploaded",-2); db.update("calls",skip,"local_id=?",new String[]{row.getString("local_id")}); refused++; continue; } throw e; }
                 ContentValues v=new ContentValues(); v.put("uploaded",1); db.update("calls",v,"local_id=?",new String[]{row.getString("local_id")}); uploaded++;
             }
             SecureConfig.prefs(c).edit().putString("status","Updated "+android.text.format.DateFormat.getTimeFormat(c).format(new java.util.Date())+" · "+synced+" new calls · "+uploaded+" recordings"+(refused>0?" · "+refused+" recordings need a manual match":"")).apply();

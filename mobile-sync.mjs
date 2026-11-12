@@ -193,11 +193,14 @@ export function createMobileSync({ db, all, get, put, stamp, tx, log, keyPath, o
   function recording(d, callId, bytes, meta) {
     const c = get("mobileCalls", callId);
     const policy=preferences(d);
-    if(c && Object.keys(policy.sims).length && (!policy.sims[c.accountId] || policy.sims[c.accountId] === "off"))fail("SIM tracking disabled",403);
-    if(c && policy.sims[c.accountId] === "leads" && !targets(d).some(l=>l.id===c.leadId))fail("Call not accessible",403);
+    // A refused recording is 409, not 403: the phone skips that one file and carries on. A 403 makes the app stop all sync
+    // and ask the person to sign in again. A lead that moved to another owner (a workflow, an import)
+    // refuses an old recording this way, so a reassignment never stops the phone.
+    if(c && Object.keys(policy.sims).length && (!policy.sims[c.accountId] || policy.sims[c.accountId] === "off"))fail("SIM tracking disabled",409);
+    if(c && policy.sims[c.accountId] === "leads" && !targets(d).some(l=>l.id===c.leadId))fail("Call not accessible",409);
     const lead = c && get("leads", c.leadId);
     if (!c || c.deviceId !== d.id || (!targets(d).some((l) => l.id === c.leadId) && !(c.owner === d.owner && lead?.owner === "" && lead.createdBy === d.owner)))
-      fail("Call not accessible", 403);
+      fail("Call not accessible", 409);
     if (!bytes.length || bytes.length > MAX_AUDIO) fail("Recording must be 1 byte–20 MiB", 413);
     const sha = hash(bytes),
       existing = db.prepare("SELECT id,sha FROM mobile_audio WHERE call_id=?").get(c.id);
