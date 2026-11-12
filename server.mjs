@@ -1014,6 +1014,17 @@ const server = http.createServer(async (req, res) => {
       ].includes(req.headers.host)
     )
       bad("Unrecognized host", 403);
+    // IndiaMART's push API: each new enquiry arrives here at once. The long random part of the address is the only key,
+    // since IndiaMART signs nothing; anything else answers "Not found".
+    const indiamartPush = /^\/hooks\/indiamart\/([a-f0-9]{32})$/.exec(url.pathname);
+    if (indiamartPush) {
+      if (req.method !== "POST") bad("Method not allowed", 405);
+      const text = (await rawBody(req)).toString("utf8");
+      let payload;
+      try { payload = JSON.parse(text || "{}"); } catch { payload = Object.fromEntries(new URLSearchParams(text)); }
+      send(200, marketplace.receivePush(indiamartPush[1], payload));
+      return;
+    }
     if(url.pathname.startsWith('/.well-known/')){
       res.setHeader('Access-Control-Allow-Origin','*');
       if(!['GET','HEAD'].includes(req.method))bad('Method not allowed',405);

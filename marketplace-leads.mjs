@@ -13,7 +13,11 @@
 //   Answers a list of enquiries (rfi_id, sender_name, sender_mobile, sender_email, sender_co, sender_city, sender_state,
 //   sender_country, subject, message, product_name, generated_date, generated_time, inquiry_type…). Field names are read
 //   loosely, since TradeIndia does not publish them.
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+// IndiaMART Lead Manager push API (https://help.indiamart.com/knowledge-base/integration-of-indiamarts-lead-manager-crm-push-api-with-third-party-crms-real-time-push-of-leads):
+//   IndiaMART POSTs each new enquiry, the moment it comes, to the address made here: {CODE:200, STATUS, RESPONSE:{same fields
+//   as the pull API}}. It wants HTTP 200 back and tries again later otherwise. IndiaMART signs nothing, so the address itself
+//   carries a long random part that only this CRM and the IndiaMART account know; a new one can be made at any time.
+import { createCipheriv, createDecipheriv, randomBytes, timingSafeEqual } from "node:crypto";
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { phoneParts, phoneKeyOf } from "./lead-phone.mjs";
@@ -28,7 +32,7 @@ const SOURCES = { indiamart: "IndiaMART", tradeindia: "TradeIndia" };
 const IM_TYPES = { W: "Direct enquiry", B: "Buy-lead", P: "Call", BIZ: "Catalogue enquiry", V: "Catalogue view", WA: "WhatsApp enquiry" };
 const DEFAULTS = {
   intervalMinutes: 15, owner: "",
-  indiamart: { enabled: false, key: "", backfillDays: 7, cursor: 0, lastRun: null },
+  indiamart: { enabled: false, key: "", backfillDays: 7, cursor: 0, lastRun: null, push: false, pushToken: "" },
   tradeindia: { enabled: false, userid: "", profileId: "", key: "", backfillDays: 7, cursor: 0, lastRun: null },
 };
 const fail = (message, status = 400) => { throw Object.assign(Error(message), { status }); };
@@ -103,6 +107,7 @@ export function readTradeindia(r) {
 
 export function createMarketplaceLeads({ db, all, get, put, stamp, tx, log, keyPath, now = () => Date.now(), fetchImpl = (...a) => globalThis.fetch(...a), report = () => {}, timers = true }) {
   db.exec(`CREATE TABLE IF NOT EXISTS marketplace_settings(id INTEGER PRIMARY KEY CHECK(id=1), body BLOB);
+    CREATE TABLE IF NOT EXISTS marketplace_push(id INTEGER PRIMARY KEY CHECK(id=1), body TEXT);
     CREATE TABLE IF NOT EXISTS marketplace_enquiries(source TEXT NOT NULL, id TEXT NOT NULL, at INTEGER, status TEXT, lead_id TEXT, body TEXT, PRIMARY KEY(source,id))`);
   let secret, running = null, timer = null, retry = null;
   function secretKey() {
@@ -133,10 +138,11 @@ export function createMarketplaceLeads({ db, all, get, put, stamp, tx, log, keyP
     const s = raw(), side = (k, extra) => { const c = counts(k); return { enabled: s[k].enabled, backfillDays: s[k].backfillDays, readUpTo: s[k].cursor || null, lastRun: s[k].lastRun, enquiries: c.n || 0, leadsMade: c.made || 0, recent: recent(k), ...extra }; };
     return {
       intervalMinutes: s.intervalMinutes, owner: s.owner, running: Boolean(running),
-      indiamart: side("indiamart", { hasKey: Boolean(s.indiamart.key) }),
+      indiamart: side("indiamart", { hasKey: Boolean(s.indiamart.key), push: s.indiamart.push, pushPath: s.indiamart.push && s.indiamart.pushToken ? `/hooks/indiamart/${s.indiamart.pushToken}` : null, lastPush: lastPush() }),
       tradeindia: side("tradeindia", { hasKey: Boolean(s.tradeindia.key), userid: s.tradeindia.userid, profileId: s.tradeindia.profileId }),
     };
   }
+  const lastPush = () => { const r = db.prepare("SELECT body FROM marketplace_push WHERE id=1").get(); return r ? JSON.parse(r.body) : null; };
   const days = (v) => { const n = Number(v); if (!Number.isInteger(n) || n < 1 || n > 90) fail("Choose between 1 and 90 days"); return n; };
   function save(input = {}) {
     const s = raw();
@@ -145,6 +151,8 @@ export function createMarketplaceLeads({ db, all, get, put, stamp, tx, log, keyP
     const im = input.indiamart || {}, ti = input.tradeindia || {};
     if (typeof im.key === "string" && im.key.trim()) { const k = im.key.trim(); if (!/^[A-Za-z0-9+/=_-]{16,200}$/.test(k)) fail("That IndiaMART CRM key does not look right"); s.indiamart.key = k; }
     if ("backfillDays" in im) { const n = days(im.backfillDays); if (n !== s.indiamart.backfillDays) { s.indiamart.backfillDays = n; s.indiamart.cursor = 0; } }
+    if ("push" in im) { s.indiamart.push = im.push === true; if (s.indiamart.push && !s.indiamart.pushToken) s.indiamart.pushToken = randomBytes(16).toString("hex"); }
+    if (im.newPushAddress === true) s.indiamart.pushToken = randomBytes(16).toString("hex");
     if ("enabled" in im) { if (im.enabled === true && !s.indiamart.key) fail("Add the IndiaMART CRM key first"); s.indiamart.enabled = im.enabled === true; }
     for (const [k, f] of [["userid", "userid"], ["profileId", "profile id"]])
       if (typeof ti[k] === "string" && ti[k].trim() !== s.tradeindia[k]) { const v = ti[k].trim(); if (v && !/^[A-Za-z0-9_-]{1,40}$/.test(v)) fail(`That TradeIndia ${f} does not look right`); s.tradeindia[k] = v; }
@@ -261,6 +269,20 @@ export function createMarketplaceLeads({ db, all, get, put, stamp, tx, log, keyP
     return { ...out, from: start, to: end, message: istDate(end) < istDate(at) ? "Catching up on older enquiries" : "Up to date" };
   }
   // Reads both sites (those switched on, or the one asked for). One read at a time.
+  // IndiaMART's push: one enquiry (or a list) at a time, the moment it comes. The pull reads stay as a back-up; an enquiry
+  // already taken by either is never taken twice. IndiaMART's own test sends a made-up buyer (a number like 99999 99999),
+  // which is answered but not made into a lead.
+  function receivePush(token, payload) {
+    const s = raw(), t = s.indiamart.pushToken;
+    if (!s.indiamart.push || !t || typeof token !== "string" || token.length !== t.length || !timingSafeEqual(Buffer.from(token), Buffer.from(t))) fail("Not found", 404);
+    const body = payload?.RESPONSE ?? payload;
+    const rows = (Array.isArray(body) ? body : [body]).filter((r) => r && typeof r === "object" && pick(r, "UNIQUE_QUERY_ID"));
+    const real = rows.filter((r) => !/^(?:0{10}|1{10}|2{10}|3{10}|4{10}|5{10}|6{10}|7{10}|8{10}|9{10})$/.test(String(readIndiamart(r).phone || "").slice(-10)));
+    const out = takeAll("indiamart", real, readIndiamart, s.owner || "");
+    const note = { at: now(), ...out, enquiries: rows.length, tests: rows.length - real.length };
+    db.prepare("INSERT INTO marketplace_push VALUES(1,?) ON CONFLICT(id) DO UPDATE SET body=excluded.body").run(JSON.stringify(note));
+    return { CODE: 200, STATUS: "SUCCESS" };
+  }
   async function sync(only = "") {
     if (running) return running;
     running = (async () => {
@@ -296,5 +318,5 @@ export function createMarketplaceLeads({ db, all, get, put, stamp, tx, log, keyP
     timer = setTimeout(() => { sync().catch(() => {}); timer = setInterval(() => sync().catch(() => {}), s.intervalMinutes * MIN); timer.unref?.(); }, 7 * MIN);
     timer.unref?.();
   }
-  return { settings, save, sync, schedule, isRunning: () => Boolean(running) };
+  return { settings, save, sync, schedule, receivePush, isRunning: () => Boolean(running) };
 }
