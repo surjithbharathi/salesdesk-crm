@@ -225,16 +225,29 @@ export function createCallAI({db,keyPath,all,get,playback,fetcher=fetch,onLangua
   // Settings > Call AI "Retry failed": each failed job starts again from the recording (a new provider request)
   function retryFailed(){let n=0;for(const row of db.prepare("SELECT recording_id,lead_id FROM call_ai_jobs WHERE status='error'").all()){let job={};try{job=readJob(row.recording_id);}catch{/* unreadable: start clean */}store(row.recording_id,row.lead_id,{recordingId:row.recording_id,leadId:row.lead_id,status:'queued',retriedAt:new Date().toISOString(),updatedAt:new Date().toISOString()});n++;}return {retried:n};}
   let busy=false;
+  // Up to CONCURRENT jobs run at once: a Sarvam hand-over (create, upload, start) can take minutes, and one job at a time
+  // left dozens of recordings waiting for hours. Each step is written to the server log with how long it took.
+  const CONCURRENT=3, active=new Set();
+  const note=(id,what,t0)=>console.log(`Call AI ${String(id).slice(0,8)} ${what}${t0?` (${Math.round((Date.now()-t0)/1000)}s)`:''}`);
   async function tick() {
-    if(busy)return;busy=true;
+    if(busy)return;busy=true;const started=[];
     try {
       const config=settings();if(!config.enabled)return;
       if(config.automatic)for(const call of all('mobileCalls')) {
         if(!call.recordingId || String(call.createdAt||'')<config.enabledSince || readJob(call.recordingId).status!=='not_started')continue;
         store(call.recordingId,call.leadId,{status:'queued',recordingId:call.recordingId,leadId:call.leadId});
       }
-      const row=db.prepare("SELECT recording_id,lead_id FROM call_ai_jobs WHERE status IN ('queued','waiting') ORDER BY status='waiting',rowid LIMIT 1").get();if(!row)return;
-      const id=row.recording_id;let job=readJob(id);store(id,row.lead_id,{...job,status:'processing'});
+      while(active.size<CONCURRENT){
+        const row=db.prepare("SELECT recording_id,lead_id FROM call_ai_jobs WHERE status IN ('queued','waiting') ORDER BY status='waiting',rowid LIMIT 1").get();if(!row)break;
+        const job=readJob(row.recording_id);store(row.recording_id,row.lead_id,{...job,status:'processing'});
+        active.add(row.recording_id);
+        started.push(run(row,job,config).finally(()=>active.delete(row.recording_id)));
+      }
+    } finally {busy=false;}
+    await Promise.allSettled(started); // the interval keeps filling free places meanwhile
+  }
+  async function run(row,job,config) {
+      const id=row.recording_id,t0=Date.now();
       try {
         let transcript=job.transcript;
         if(config.stt.provider==='openai-audio'&&!transcript){
@@ -248,8 +261,10 @@ export function createCallAI({db,keyPath,all,get,playback,fetcher=fetch,onLangua
           if(job.batch&&config.stt.provider!=='sarvam')fail('Restore the Sarvam provider configuration to resume this batch job.');
           if(config.stt.provider==='sarvam') {
             if(Number(call?.duration)>7200)fail('Sarvam batch supports recordings up to two hours.');
+            const phase=job.batch?.phase||'new';
             const result=await sarvamBatch(config.stt,playback(id),job.batch,batch=>{job={...job,batch};store(id,row.lead_id,{...job,status:'processing'});},fetcher);
-            if(result.pending){store(id,row.lead_id,{...job,status:'waiting',updatedAt:new Date().toISOString()});return;}
+            if(result.pending){if(phase!=='running')note(id,`Sarvam batch ${phase} -> running`,t0);store(id,row.lead_id,{...job,status:'waiting',updatedAt:new Date().toISOString()});return;}
+            note(id,'Sarvam transcript ready',t0);
             transcript=result.transcript;
           } else transcript=await transcribe(config.stt,playback(id),fetcher);
           if(typeof transcript!=='string'||!transcript.trim()||transcript.length>180000)fail('Provider returned an empty or oversized transcript',502);
@@ -262,8 +277,8 @@ export function createCallAI({db,keyPath,all,get,playback,fetcher=fetch,onLangua
         }
         const customerLanguage=learnLanguage(row.lead_id,{transcript,summary});
         store(id,row.lead_id,{...job,summary,customerLanguage,status:'complete',iqProvider:config.iqEnabled?config.iq.provider:'',iqModel:config.iqEnabled?config.iq.model:'',error:'',updatedAt:new Date().toISOString()});
-      } catch(e) {store(id,row.lead_id,{...job,status:'error',error:e.status?e.message:'Provider connection failed or timed out. Check credentials and network.',updatedAt:new Date().toISOString()});}
-    } finally {busy=false;}
+        note(id,'complete',t0);
+      } catch(e) {note(id,'failed: '+(e.status?e.message:String(e?.message||e)).slice(0,160),t0);store(id,row.lead_id,{...job,status:'error',error:e.status?e.message:'Provider connection failed or timed out. Check credentials and network.',updatedAt:new Date().toISOString()});}
   }
   const timer=setInterval(()=>void tick(),10000);timer.unref();
   // the finished summary (or transcript) of one recording, for the caller card; the caller decides who may see it
