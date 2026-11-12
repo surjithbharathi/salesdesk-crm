@@ -269,5 +269,8 @@ export function createCallAI({db,keyPath,all,get,playback,fetcher=fetch,onLangua
     if(typeof input.key!=='undefined'&&(typeof input.key!=='string'||input.key.length>4096))fail('Invalid API key');
     const saved=settings()[input.part];
     return listModels({...input,key:input.keyId?resolveKey(input.keyId,input.provider):(input.key||(canonicalProvider(saved?.provider)===canonicalProvider(input.provider)?saved.key:''))},fetcher);
-  },result(id,identity){recording(id,identity);return readJob(id);},close(){clearInterval(timer);}};
+  },result(id,identity){recording(id,identity);return readJob(id);},close(){clearInterval(timer);},
+  // for AI tasks (server only, never sent to a browser): the summary model with its key, and the summaries finished since a time
+  iqConfig(){const c=settings();return c.iq?.key&&c.iq?.model?c.iq:null;},
+  summariesSince(ms){const out=[];for(const row of db.prepare("SELECT recording_id,lead_id FROM call_ai_jobs WHERE status='complete'").all()){const j=readJob(row.recording_id);const at=Date.parse(j.updatedAt||0);if(at>=ms&&j.summary)out.push({recordingId:row.recording_id,leadId:row.lead_id,summary:String(j.summary),at});}return out;}};
 }

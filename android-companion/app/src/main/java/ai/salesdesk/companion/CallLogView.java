@@ -90,7 +90,7 @@ final class CallLogView {
         arrow.setTextColor(missed ? MainActivity.RED : dir.equals("Outgoing") ? 0xFF2980B9 : CALLBACK);
         sub.addView(arrow);
         String detail = dir.equals("Outgoing") && secs == 0 ? "Not answered" : missed ? (dir.equals("Rejected") ? "Rejected" : "Missed") : talk(secs);
-        if (!known) detail += "  ·  Not a lead";
+        if (!known && leadIdFor(phone).isEmpty()) detail += "  ·  Not a lead";
         if (hasRecording(e)) detail += "  ·  🎙";
         TextView info = new TextView(a); info.setText("  " + detail); info.setTextSize(13); info.setTextColor(MainActivity.MUTED); info.setSingleLine(true); info.setEllipsize(TextUtils.TruncateAt.END);
         sub.addView(info);
@@ -127,7 +127,7 @@ final class CallLogView {
         box.addView(status);
         LinearLayout actions = new LinearLayout(a); actions.setPadding(0, a.dp(8), 0, 0);
         android.widget.HorizontalScrollView scroll = new android.widget.HorizontalScrollView(a); scroll.setHorizontalScrollBarEnabled(false); scroll.addView(actions);
-        String lead = r.optString("leadId");
+        String lead = r.optString("leadId").isEmpty() ? leadIdFor(phone) : r.optString("leadId");
         if (!lead.isEmpty()) pill(actions, "Open lead", () -> LeadScreen.open(a, lead, null));
         else if (!known) pill(actions, "Add as lead", () -> a.leadForm(phone));
         if (!recording.isEmpty()) pill(actions, "▶ Recording", () -> a.remotePlay(recording));
@@ -157,6 +157,22 @@ final class CallLogView {
         return recording;
     }
     private boolean hasRecording(Entry e) { return !recordingOf(e).isEmpty() || (e.local && (!e.r.optString("uri").isEmpty() || e.r.optInt("uploaded") == 1)); }
+
+    // leads by number (last ten digits), built once per screen
+    private java.util.Map<String, String> leadByNumber;
+    private String leadIdFor(String phone) {
+        if (leadByNumber == null) {
+            leadByNumber = new java.util.HashMap<>();
+            org.json.JSONArray ls = a.rows("leads");
+            for (int i = 0; i < ls.length(); i++) {
+                org.json.JSONObject l = ls.optJSONObject(i); if (l == null) continue;
+                String d = l.optString("phone").replaceAll("\\D", "");
+                if (d.length() >= 10) leadByNumber.putIfAbsent(d.substring(d.length() - 10), l.optString("id"));
+            }
+        }
+        String d = String.valueOf(phone).replaceAll("\\D", "");
+        return d.length() >= 10 ? leadByNumber.getOrDefault(d.substring(d.length() - 10), "") : "";
+    }
 
     private void dial(String phone) {
         String d = phone.replaceAll("[^0-9+]", ""); if (d.isEmpty()) return;

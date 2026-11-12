@@ -57,7 +57,7 @@ final class TodoView {
     // ---- AI to-dos ----
 
     static final class Item {
-        String key, why, title, sub, quote, phone, leadId, leadName, action; int whyColor, icon;
+        String key, why, title, sub, quote, phone, leadId, leadName, action, serverId; int whyColor, icon;
     }
 
     private static void drawAi(MainActivity a, List<Item> items) {
@@ -72,19 +72,22 @@ final class TodoView {
             card.addView(why);
             TextView title = Ui.text(a, it.title, 16, true, MainActivity.INK); title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD); title.setPadding(0, a.dp(6), 0, 0); card.addView(title);
             if (it.sub != null && !it.sub.isEmpty()) { TextView s = Ui.text(a, it.sub, 13, false, MainActivity.MUTED); s.setPadding(0, a.dp(3), 0, 0); card.addView(s); }
+            if (it.quote != null && !it.quote.isEmpty()) { TextView q = Ui.text(a, "\u201C" + it.quote + "\u201D", 13, false, MainActivity.INK); q.setPadding(a.dp(10), a.dp(6), 0, a.dp(2)); GradientDrawable bar = new GradientDrawable(); bar.setColor(0xfff3f0ff); bar.setCornerRadius(a.dp(8)); q.setBackground(bar); LinearLayout.LayoutParams qp = new LinearLayout.LayoutParams(-1, -2); qp.setMargins(0, a.dp(8), 0, 0); card.addView(q, qp); }
             LinearLayout acts = a.horizontal(); acts.setPadding(0, a.dp(10), 0, 0);
             TextView main;
             if ("call".equals(it.action)) {
                 main = Ui.pill(a, it.leadId == null ? "Call back" : "Call now", true, Ui.CALL, () -> Ui.dial(a, it.phone));
                 main.setCompoundDrawablesRelativeWithIntrinsicBounds(MyDayView.tinted(a, R.drawable.ic_phone, Color.WHITE), null, null, null); main.setCompoundDrawablePadding(a.dp(6));
-            } else main = Ui.pill(a, "Add follow-up", true, MainActivity.ACCENT, () -> FollowUpSheet.open(a, it.leadId, it.leadName, it.title.startsWith("Follow up on") ? "Follow up on the quotation" : "Check in", () -> { dismiss(a, it.key, 30 * DAY); a.render(); }));
+            } else if ("whatsapp".equals(it.action) && it.phone != null && !it.phone.isEmpty()) {
+                main = Ui.pill(a, "WhatsApp", true, 0xff25a35e, () -> { try { a.startActivity(new android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://wa.me/" + it.phone.replaceAll("\\D", "")))); } catch (Exception e) { a.notice("WhatsApp is not on this phone."); } });
+            } else main = Ui.pill(a, "Add follow-up", true, MainActivity.ACCENT, () -> FollowUpSheet.open(a, it.leadId, it.leadName, it.serverId != null ? it.title : it.title.startsWith("Follow up on") ? "Follow up on the quotation" : "Check in", () -> { dismiss(a, it.key, 30 * DAY); serverDismiss(a, it.serverId); a.render(); }));
             main.setTextSize(13); main.setMinHeight(a.dp(40));
             acts.addView(main, new LinearLayout.LayoutParams(-2, a.dp(40)));
             if (it.leadId == null && it.phone != null) { TextView add = Ui.pill(a, "Add as lead", false, MainActivity.ACCENT, () -> a.leadForm(it.phone)); add.setTextSize(13); LinearLayout.LayoutParams ap = new LinearLayout.LayoutParams(-2, a.dp(40)); ap.setMarginStart(a.dp(8)); acts.addView(add, ap); }
             acts.addView(new View(a), new LinearLayout.LayoutParams(0, 1, 1));
             boolean later = it.key.startsWith("new:");
             TextView ghost = Ui.text(a, later ? "Later" : "Dismiss", 13, true, MainActivity.MUTED); ghost.setGravity(Gravity.CENTER); ghost.setPadding(a.dp(12), 0, a.dp(8), 0); ghost.setMinHeight(a.dp(40));
-            ghost.setFocusable(true); ghost.setOnClickListener(v -> { dismiss(a, it.key, later ? 3 * HOUR : 30 * DAY); a.render(); });
+            ghost.setFocusable(true); ghost.setOnClickListener(v -> { dismiss(a, it.key, later ? 3 * HOUR : 30 * DAY); if (!later) serverDismiss(a, it.serverId); a.render(); });
             acts.addView(ghost);
             card.addView(acts);
             if (it.leadId != null) { card.setFocusable(true); card.setOnClickListener(v -> LeadScreen.open(a, it.leadId, MyDayView.leadsById(a).get(it.leadId))); }
@@ -96,6 +99,29 @@ final class TodoView {
     static List<Item> aiTodos(MainActivity a) {
         List<Item> out = new ArrayList<>();
         long now = System.currentTimeMillis();
+        JSONArray server = a.workspace.optJSONArray("aiTasks");
+        if (server != null) {
+            JSONObject gone = dismissed(a);
+            for (int i = 0; i < server.length(); i++) {
+                JSONObject x = server.optJSONObject(i); if (x == null) continue;
+                Item it = new Item(); it.serverId = x.optString("id"); it.key = "srv:" + it.serverId;
+                if (gone.optLong(it.key, 0) > now) continue;
+                String kind = x.optString("kind"), act = x.optString("action");
+                boolean fromCall = kind.equals("call");
+                it.icon = fromCall ? R.drawable.ic_sparkle : kind.equals("missed") ? R.drawable.ic_phone : R.drawable.ic_clock;
+                it.whyColor = fromCall ? 0xff5b3fc4 : kind.equals("missed") ? MainActivity.RED : 0xff8a5200;
+                long due = Ui.ms(x.optString("due")), at = Ui.ms(x.optString("at"));
+                it.why = fromCall ? "From the call" + (due > 0 ? " · due " + Ui.dayLabel(due) + " " + Ui.clock(due) : "")
+                    : x.optString("why") + (at > 0 ? " · " + (Ui.dayLabel(at).equals("Today") ? Ui.clock(at) : Ui.dayLabel(at)) : "");
+                it.title = x.optString("title");
+                it.sub = a.joined(x.optString("leadName"), a.joined(x.optString("stage"), x.optString("city")));
+                it.quote = fromCall ? x.optString("why") : null;
+                it.phone = x.optString("phone"); it.leadId = x.optString("leadId").isEmpty() ? null : x.optString("leadId"); it.leadName = x.optString("leadName");
+                it.action = act.equals("whatsapp") ? "whatsapp" : (act.equals("call") || !fromCall) && !kind.equals("quiet") ? "call" : "plan";
+                out.add(it);
+            }
+            return out;
+        }
         Map<String, JSONObject> leads = MyDayView.leadsById(a);
         String country = SecureConfig.prefs(a).getString("country", "91");
 
@@ -217,6 +243,10 @@ final class TodoView {
         return list;
     }
 
+    static void serverDismiss(MainActivity a, String id) {
+        if (id == null || id.isEmpty()) return;
+        new Thread(() -> { try { SyncEngine.requestApi(a, "/v1/ai-tasks/" + java.net.URLEncoder.encode(id, "UTF-8") + "/dismiss", "POST", new JSONObject()); } catch (Exception ignored) { } }).start();
+    }
     private static JSONObject dismissed(MainActivity a) { try { return new JSONObject(SecureConfig.prefs(a).getString("aiDismissed", "{}")); } catch (Exception e) { return new JSONObject(); } }
 
     static void dismiss(MainActivity a, String key, long forMs) {

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { crmSend } from "../api.js";
+import { crmGet, crmSend } from "../api.js";
 import { useCrm } from "../crm.jsx";
 import { useToast } from "../toast.jsx";
 import { avClass, initials } from "../format.js";
@@ -7,6 +7,7 @@ import { TIcon } from "./icons.jsx";
 import LeadPanel from "./LeadDetail.jsx";
 import { DAY, addDays, dayStart, dayText, mondayOf, monthStart, telOf, timeText } from "./PageUtil.js";
 import DateTimePicker from "../DateTimePicker.jsx";
+import AiTasks from "./AiTasks.jsx";
 
 // Follow Ups: open follow-ups in three columns (Late, Today, Upcoming), narrowed by a date filter and, for owners, by staff.
 
@@ -170,6 +171,10 @@ export default function CwtFollowups() {
   const [creating, setCreating] = useState(false);
   const [openId, setOpenId] = useState("");
   const [busy, setBusy] = useState("");
+  // the page shows the planned follow-ups, or the AI tasks (what to do next, picked up from calls and leads)
+  const [view, setView] = useState(() => (/[?&]view=ai\b/.test(location.hash) ? "ai" : "followups"));
+  const [aiCount, setAiCount] = useState(null);
+  useEffect(() => { if (view === "followups") crmGet("ai-tasks").then((d) => setAiCount(d.items.length)).catch(() => {}); }, [view]);
 
   const range = filter.key === "custom" ? [filter.from, filter.to] : presetRange(filter.key);
   const mine = useMemo(() => (crm.state ? crm.tasks.filter((t) => !assignee || t.owner === assignee) : []), [crm.state, crm.tasks, assignee]);
@@ -261,6 +266,23 @@ export default function CwtFollowups() {
         <button type="button" className="r-btn lg" onClick={() => setCreating(true)}><TIcon name="plus" />New follow-up</button>
       </div>
 
+      <div className="ait-switch" role="tablist" aria-label="Follow-ups or AI tasks">
+        <button type="button" role="tab" aria-selected={view === "followups"} className={view === "followups" ? "on" : ""} onClick={() => setView("followups")}>Follow-ups <em>{open.length}</em></button>
+        <button type="button" role="tab" aria-selected={view === "ai"} className={view === "ai" ? "on" : ""} onClick={() => setView("ai")}><TIcon name="sparkle" />AI tasks {aiCount != null && <em className="ai">{aiCount}</em>}</button>
+        <span className="fu-gap" />
+        {view === "ai" && team.length > 0 && (
+          <label className="r-chip r-select fu-staff">
+            <span className={`av fu-av ${picked ? avClass(picked.name) : "all"}`} aria-hidden="true">{picked ? initials(picked.name) : <TIcon name="user" />}</span>
+            <select value={assignee} onChange={(e) => setAssignee(e.target.value)} aria-label="Staff">
+              <option value="">All staff</option>
+              {team.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+            </select>
+            <TIcon name="chevronDown" />
+          </label>
+        )}
+      </div>
+
+      {view === "ai" ? <AiTasks assignee={assignee} onOpenLead={setOpenId} onCount={setAiCount} /> : <>
       <div className="fu-filters">
         {PRESETS.map(([k, label]) => <button key={k} type="button" className={`r-chip ${filter.key === k ? "on" : ""}`} aria-pressed={filter.key === k} onClick={() => { setFilter({ key: k }); setPop(false); }}>{label}</button>)}
         <span className="fu-datewrap">
@@ -302,6 +324,7 @@ export default function CwtFollowups() {
           </section>
         ))}
       </div>
+      </>}
       {creating && <NewFollowup onClose={() => setCreating(false)} />}
       {openId && <LeadPanel id={openId} onClose={() => setOpenId("")} />}
     </div>
