@@ -90,8 +90,14 @@ final class LeadScreen {
     private void load() {
         new Thread(() -> {
             try {
-                JSONObject r = SyncEngine.requestApi(a, "/v1/leads/" + id, "GET", null);
-                a.runOnUiThread(() -> { data = r; lead = r.optJSONObject("lead") == null ? lead : r.optJSONObject("lead"); if (dialog.isShowing()) draw(); });
+                // while the CRM restarts it can answer "not found" or 502 for a few seconds: try again before saying so
+                JSONObject r = null;
+                for (int attempt = 0; r == null; attempt++) {
+                    try { r = SyncEngine.requestApi(a, "/v1/leads/" + id, "GET", null); }
+                    catch (SyncEngine.HttpError e) { boolean passing = e.code == 404 || SyncEngine.restarting(e); if (!passing || attempt >= 3) throw e; Thread.sleep(4000); }
+                }
+                final JSONObject loaded = r;
+                a.runOnUiThread(() -> { data = loaded; lead = loaded.optJSONObject("lead") == null ? lead : loaded.optJSONObject("lead"); if (dialog.isShowing()) draw(); });
             } catch (Exception e) {
                 a.runOnUiThread(() -> { if (dialog.isShowing()) { data = new JSONObject(); draw(); note(problem(e)); } });
             }
@@ -103,6 +109,7 @@ final class LeadScreen {
             int code = ((SyncEngine.HttpError) e).code;
             if (code == 403) return "Only the lead's owner can do this.";
             if (code == 404) return "This lead is no longer in the CRM.";
+            if (code >= 502 && code <= 504) return SyncEngine.RESTARTING;
             if (code == 409) return "Another lead already has this number.";
         }
         return "Could not reach the CRM. Check the connection and try again.";
