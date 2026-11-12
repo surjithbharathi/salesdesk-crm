@@ -157,5 +157,6 @@ test('status says when the last recording came, counts done, waiting and failed 
     assert.equal(s.jobs.length,3);
     const r2=s.jobs.find(j=>j.recordingId==='r2');
     assert.deepEqual([r2.leadName,r2.source,r2.status],['Kavin Traders','TeleCRM','error']);
+    assert.deepEqual(s.failedJobs.map(j=>j.recordingId),['r2'],'every failed job is listed, however old');
   }finally{api.close();db.close();rmSync(dir,{recursive:true,force:true});}
 });

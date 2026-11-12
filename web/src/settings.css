@@ -325,3 +325,4 @@ td.right .btn + .btn, td.right .quick-actions + .btn { margin-left: 6px; }
 .cai-job-complete { color: var(--leaf); }
 .cai-job-error { color: var(--kumkum); }
 .cai-job-queued, .cai-job-waiting, .cai-job-processing { color: var(--oil-ink); }
+.cai-head { margin-top: 12px; font-weight: 600; font-size: 13px; }
