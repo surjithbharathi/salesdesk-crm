@@ -15,3 +15,12 @@ PUBLIC_ORIGIN enables exact HTTPS host/origin checks and Secure cookies. Public 
 Android is built with `-PcrmApiOrigin=https://salesdesk-crm.srv1696974.hstgr.cloud`; end users enter username/password only. Changing endpoint requires a fresh login and pauses previous sync/calling consent. Call/recording compatibility and background calling still require permission/real-device verification. Mobile binary changes require reinstall/update of the APK; redeploying the web server alone does not update installed Android code.
 
 Before a major upgrade, back up the SQLite database consistently plus adjacent encryption keys in private storage. Never restore a stale local snapshot over live production data during ordinary code updates. Keep past images/commits for code rollback; database rollback/migrations require a separate backup decision. No automatic rollback or GitHub Actions SSH secrets are provisioned by this flow.
+
+## ERPNext single sign-on (CRM button)
+
+Clicking **CRM** on the ERPNext desktop opens `<PUBLIC_ORIGIN>/api/auth/erp/start`. Salesdesk redirects to ERPNext's OAuth authorize page; ERPNext (already signed in) returns a code to `/api/auth/erp/callback`; Salesdesk exchanges it with the client secret, reads the user's email from `openid_profile`, and opens a normal 12-hour Salesdesk session.
+
+- ERPNext: **OAuth Client** `Salesdesk` (client ID `9ph1js8ov5`), grant type Authorization Code, scope `openid`. Its redirect URI must equal `<PUBLIC_ORIGIN>/api/auth/erp/callback` exactly (or set `ERP_OAUTH_REDIRECT_URI`). Tick **Skip Authorization** so users are not asked to "Allow" every time.
+- Salesdesk env: `ERP_OAUTH_ORIGIN`, `ERP_OAUTH_CLIENT_ID`, `ERP_OAUTH_CLIENT_SECRET` (secret only in Hostinger env). Without all three, ERP login is disabled and the endpoints return 404.
+- User matching: the ERP email must equal the Salesdesk login username (usernames may be emails). Otherwise map explicitly with `ERP_OAUTH_USER_MAP="erp@email=salesdesk-username,..."`. Unmatched users see "No active Salesdesk account" and are not signed in; ERP login never creates accounts.
+- ERPNext desktop: set the **CRM** Desktop Icon link to `<PUBLIC_ORIGIN>/api/auth/erp/start`.

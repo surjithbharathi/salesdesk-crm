@@ -8,6 +8,11 @@ services:
       PUBLIC_ORIGIN: https://salesdesk-crm.srv1696974.hstgr.cloud
       BIND_HOST: 0.0.0.0
       CRM_DB: /app/data/crm.sqlite
+      # ERPNext single sign-on (CRM button in ERP). Set the secret in Hostinger env, never in Git.
+      ERP_OAUTH_ORIGIN: https://deviindustries.com
+      ERP_OAUTH_CLIENT_ID: 9ph1js8ov5
+      ERP_OAUTH_CLIENT_SECRET: ${ERP_OAUTH_CLIENT_SECRET:-}
+      ERP_OAUTH_USER_MAP: ${ERP_OAUTH_USER_MAP:-}
     volumes:
       - /opt/salesdesk-crm/data:/app/data
     mem_limit: 768m
