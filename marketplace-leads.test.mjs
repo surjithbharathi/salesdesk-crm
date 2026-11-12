@@ -180,3 +180,14 @@ test("each enquiry note carries the enquiry taken apart, and older notes get it 
   createMarketplaceLeads({ db: f.db, all, get: f.get, put: f.put, stamp: (v) => v, tx: (fn) => fn(), log: () => {}, keyPath: join(mkdtempSync(join(tmpdir(), "k-")), "key"), timers: false });
   assert.equal(all("activities").find((a) => a.marketplaceId === "N1").buyLead.specs[0][1], "5 ton/day");
 });
+
+test("a one-line IndiaMART message is split at each known key", () => {
+  const d = enquiryDetails(readIndiamart(im({ QUERY_MESSAGE: "Buyer Searched for small oil extraction machine and small rice mill Machine Type: Semi-Automatic Motor Power: 1 HP Probable Requirement Type: Business Use Production Capacity: 10 kg/hr Usage/Application: Oil Production" })));
+  assert.equal(d.searched, "small oil extraction machine and small rice mill");
+  assert.equal(d.requirement, "Business use");
+  assert.deepEqual(d.specs, [["Machine Type", "Semi-Automatic"], ["Motor Power", "1 HP"], ["Production Capacity", "10 kg/hr"], ["Usage/Application", "Oil Production"]]);
+  const i = enquiryDetails(readIndiamart(im({ QUERY_MESSAGE: "I am interested in Automatic Copra Cutter & Oil Cake Shredder, Capacity: 1-5 ton/day<br>Number of Bolts : 4" })));
+  assert.equal(i.intro, "I am interested in Automatic Copra Cutter & Oil Cake Shredder");
+  assert.deepEqual(i.specs, [["Capacity", "1-5 ton/day"], ["Number of Bolts", "4"]]);
+  assert.equal(d.v, 2);
+});
