@@ -73,3 +73,13 @@ test("signals: a missed call not returned and a new lead not called; accept plan
   const left = w.ai.list("u1").items.map((i) => i.title);
   assert.deepEqual(left, ["First call to Ravi"]);
 });
+
+test("a quiet lead shows from 3 to 14 days without contact", () => {
+  const w = world();
+  const t = w.time.now, day = 86400000;
+  for (const [id, days] of [["Q1", 2], ["Q2", 5], ["Q3", 20]]) {
+    w.put("leads", { id, name: id, phone: "+9198000001" + id.slice(1), owner: "u1", stage: "Opportunity", deal: "Interested Customer", createdAt: new Date(t - 90 * day).toISOString(), updatedAt: new Date(t - 90 * day).toISOString() });
+    w.put("activities", { id: "a" + id, leadId: id, type: "Call", direction: "Outgoing", duration: 30, occurredAt: new Date(t - days * day).toISOString(), createdAt: new Date(t - days * day).toISOString() });
+  }
+  assert.deepEqual(w.ai.list("u1").items.filter((i) => i.kind === "quiet").map((i) => i.leadId), ["Q2"]);
+});
