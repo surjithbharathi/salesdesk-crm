@@ -93,7 +93,7 @@ public class MainActivity extends Activity {
             caption(box,skin[2]);
         }
     }
-    void render(){applyBars();syncStatus=null;root=column();root.setBackgroundColor(BG);root.setOnApplyWindowInsetsListener((v,insets)->{if(android.os.Build.VERSION.SDK_INT>=30){android.graphics.Insets bars=insets.getInsets(WindowInsets.Type.systemBars());v.setPadding(bars.left,bars.top,bars.right,bars.bottom);}else v.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());return insets;});setContentView(root);root.requestApplyInsets();if(!SecureConfig.loggedIn(this)){login();return;}
+    void render(){applyBars();syncStatus=null;root=column();root.setBackgroundColor(BG);root.setOnApplyWindowInsetsListener((v,insets)->{if(android.os.Build.VERSION.SDK_INT>=30){android.graphics.Insets bars=insets.getInsets(WindowInsets.Type.systemBars()),ime=insets.getInsets(WindowInsets.Type.ime());v.setPadding(bars.left,bars.top,bars.right,Math.max(bars.bottom,ime.bottom));}else v.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());return insets;});setContentView(root);root.requestApplyInsets();if(!SecureConfig.loggedIn(this)){login();return;}
         // the top bar: a large title on white (My day shows the date over a greeting) and one round refresh button
         LinearLayout bar=horizontal();bar.setBackgroundColor(BG);bar.setPadding(dp(18),dp(14),dp(14),dp(6));LinearLayout heading=column();
         String[] title=titleFor(screen);
@@ -142,10 +142,11 @@ public class MainActivity extends Activity {
         LinearLayout logo=horizontal();ImageView mark=glyph(R.drawable.ic_mark,Color.WHITE);mark.clearColorFilter();mark.setPadding(dp(14),dp(14),dp(14),dp(14));mark.setBackground(surface(ACCENT,16));logo.addView(mark,new LinearLayout.LayoutParams(dp(64),dp(64)));
         View rule=new View(this);rule.setBackgroundColor(0xffb8b8c0);LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(dp(2),dp(52));rp.setMargins(dp(14),0,dp(14),0);logo.addView(rule,rp);
         LinearLayout words=column();TextView company=Ui.text(this,"Devi Industries",17,true,INK);words.addView(company);TextView product=Ui.text(this,"Salesdesk",34,true,ACCENT);product.setTypeface(Typeface.create("sans-serif",Typeface.BOLD));product.setIncludeFontPadding(false);words.addView(product);logo.addView(words);banner.addView(logo);
-        TextView tag=Ui.text(this,"Calls, follow-ups and daily goals for the Devi Industries team.",15,false,MUTED);tag.setPadding(0,dp(18),0,0);banner.addView(tag);root.addView(banner);ScrollView scroll=new ScrollView(this);LinearLayout b=column();b.setPadding(dp(26),dp(24),dp(26),dp(24));scroll.addView(b);root.addView(scroll);
+        TextView tag=Ui.text(this,"Calls, follow-ups and daily goals for the Devi Industries team.",15,false,MUTED);tag.setPadding(0,dp(18),0,0);banner.addView(tag);ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);LinearLayout page=column();page.addView(banner);LinearLayout b=column();b.setPadding(dp(26),dp(24),dp(26),dp(24));page.addView(b);scroll.addView(page);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1f));
         text(b,"Sign in",26,true);
         caption(b,"Use the same username and password as web CRM. Your company connection is already configured — no IP address or server link needed.");
         EditText user=input(b,"Username",""),password=input(b,"Password","");user.setInputType(33);password.setInputType(129);
+        View.OnFocusChangeListener keepInView=(field,has)->{if(has)scroll.postDelayed(()->{android.graphics.Rect r=new android.graphics.Rect();field.getDrawingRect(r);scroll.offsetDescendantRectToMyCoords(field,r);scroll.smoothScrollTo(0,Math.max(0,r.bottom+dp(96)-scroll.getHeight()));},300);};user.setOnFocusChangeListener(keepInView);password.setOnFocusChangeListener(keepInView);
         primary(b,"Sign in",()->{
             String username=user.getText().toString().trim(),secret=password.getText().toString();if(username.isEmpty()||secret.isEmpty()){notice("Enter your CRM username and password.");return;}password.setText("");
             SecureConfig.prefs(this).edit().putString("endpoint",BuildConfig.CRM_API_ORIGIN).commit();
