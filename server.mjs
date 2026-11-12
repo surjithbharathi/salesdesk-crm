@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { createExtensions } from "./extensions.mjs";
 import { encryptedAuth } from "./whatsapp-auth.mjs";
 import { createWhatsApp, phoneDigits } from "./whatsapp.mjs";
+import { createDnt } from "./dnt.mjs";
 import { createMobileSync, MAX_AUDIO } from "./mobile-sync.mjs";
 import { createUserAuth } from "./user-auth.mjs";
 import { scopedState } from "./user-scope.mjs";
@@ -50,6 +51,7 @@ const put = (kind, v) =>
     .run(kind, v.id, JSON.stringify(v));
 const now = () => new Date().toISOString();
 const stamp = (p) => ({ ...p, id: randomUUID(), createdAt: now(), updatedAt: now() });
+const dnt = createDnt({ db, countryCode: process.env.DEFAULT_COUNTRY_CODE || "91" });
 function tx(fn) {
   db.exec("BEGIN IMMEDIATE");
   try {
@@ -190,6 +192,8 @@ function validate(kind, p, old = {}) {
       s(k, 200);
     if (!v.name) bad("Lead name required");
     if (v.phone && !/^[+\d ()-]{7,30}$/.test(v.phone)) bad("Invalid phone");
+    if (v.phone && v.phone !== old.phone && dnt.has(v.phone))
+      bad("This number is on the Do Not Track list", 422);
     if (v.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.email)) bad("Invalid email");
     n("value");
     r("owner", "users");
@@ -288,6 +292,7 @@ const mobile = createMobileSync({
   stamp,
   tx,
   log,
+  isDnt: (phone) => dnt.has(phone),
   keyPath:
     (process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname) + ".mobile-key",
 });
@@ -540,6 +545,7 @@ const whatsapp = createWhatsApp({
     };
   },
   receive(message) {
+    if (dnt.has(message.phone)) return true;
     const matches = all("leads").filter(
       (l) => !l.archived && phoneDigits(l.phone) === message.phone,
     );
@@ -874,16 +880,43 @@ const server = http.createServer(async (req, res) => {
       }
       bad("Unknown WhatsApp operation", 404);
     }
+    if (url.pathname === "/api/dnt" && req.method === "GET") {
+      const q = url.searchParams;
+      const page = dnt.list({ q: q.get("q") || "", limit: q.get("limit"), offset: q.get("offset") });
+      const leadKeys = new Set(all("leads").map((l) => dnt.key(l.phone)).filter(Boolean));
+      const overlap = db
+        .prepare("SELECT key FROM dnt_numbers")
+        .all()
+        .filter((r) => leadKeys.has(r.key)).length;
+      send(200, { ...page, count: dnt.count(), existingLeadMatches: overlap });
+      return;
+    }
+    if (url.pathname === "/api/dnt" && req.method === "POST") {
+      sameOrigin();
+      const p = await body(req);
+      send(200, dnt.add(p.numbers, { source: p.source || "Manual", addedBy: identity?.user?.name || "" }));
+      return;
+    }
+    if (url.pathname === "/api/dnt/remove" && req.method === "POST") {
+      sameOrigin();
+      send(200, dnt.remove((await body(req)).numbers));
+      return;
+    }
     if (url.pathname === "/api/import" && req.method === "POST") {
       const p = await body(req);
       if (!Array.isArray(p.leads) || !p.leads.length || p.leads.length > 500)
         bad("Import 1–500 leads");
       const result = tx(() => {
         let added = 0,
-          skipped = 0;
+          skipped = 0,
+          dntBlocked = 0;
         const phones = new Set(all("leads").map((l) => l.phone.replace(/\D/g, "")));
         for (const row of p.leads) {
           if (!row || typeof row !== "object" || Array.isArray(row)) bad("Invalid row");
+          if (typeof row.phone === "string" && dnt.has(row.phone)) {
+            dntBlocked++;
+            continue;
+          }
           const v = validate("leads", row),
             phone = v.phone.replace(/\D/g, "");
           if (phone && phones.has(phone)) {
@@ -897,7 +930,7 @@ const server = http.createServer(async (req, res) => {
           if (phone) phones.add(phone);
           added++;
         }
-        return { added, skipped };
+        return { added, skipped, dntBlocked };
       });
       send(200, result);
       return;

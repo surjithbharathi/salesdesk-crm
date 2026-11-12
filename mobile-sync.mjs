@@ -17,7 +17,7 @@ export function audioType(bytes) {
     return "audio/mpeg";
   fail("Unsupported recording format");
 }
-export function createMobileSync({ db, all, get, put, stamp, tx, log, keyPath }) {
+export function createMobileSync({ db, all, get, put, stamp, tx, log, keyPath, isDnt = () => false }) {
   db.exec(
     "CREATE TABLE IF NOT EXISTS mobile_devices(id TEXT PRIMARY KEY, token_hash TEXT UNIQUE, body TEXT); CREATE TABLE IF NOT EXISTS mobile_audio(id TEXT PRIMARY KEY, device_id TEXT, call_id TEXT UNIQUE, sha TEXT, mime TEXT, bytes BLOB, UNIQUE(device_id,sha))",
   );
@@ -79,7 +79,7 @@ export function createMobileSync({ db, all, get, put, stamp, tx, log, keyPath })
   }
   const targets = (d) =>
     all("leads")
-      .filter((l) => !l.archived && l.owner === d.owner)
+      .filter((l) => !l.archived && l.owner === d.owner && !isDnt(l.phone))
       .map((l) => ({ id: l.id, phone: digits(l.phone) }))
       .filter((l) => /^[1-9]\d{7,14}$/.test(l.phone));
   function call(d, p) {

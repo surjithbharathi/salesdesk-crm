@@ -178,7 +178,7 @@ test("CRM lifecycle, transaction rollback, validation, and persistent storage", 
         { name: "New import", phone: "+919555556666" },
       ],
     });
-    assert.deepEqual(imported.data, { added: 1, skipped: 1 });
+    assert.deepEqual(imported.data, { added: 1, skipped: 1, dntBlocked: 0 });
     const reply = await request("autoReplies", "POST", {
       name: "Conversation welcome",
       trigger: "Conversation opened",
