@@ -271,16 +271,20 @@ export function createCallAI({db,keyPath,all,get,playback,fetcher=fetch,onLangua
     const at=c=>Number(c.startedAt)||Date.parse(c.createdAt||'')||0, now=Date.now(), week=now-7*86400000;
     const calls=(all?all('mobileCalls'):[]).filter(c=>c.recordingId), byRec=new Map(calls.map(c=>[c.recordingId,c]));
     const last=calls.reduce((m,c)=>Math.max(m,at(c)),0), recent=calls.filter(c=>at(c)>=week);
-    const jobs=db.prepare('SELECT recording_id,lead_id,status FROM call_ai_jobs ORDER BY rowid DESC LIMIT 60').all().map(r=>{
+    const row=r=>{
       let j={};try{j=readJob(r.recording_id);}catch{/* unreadable job: shown with its status only */}
       const c=byRec.get(r.recording_id);
       return {recordingId:r.recording_id,leadId:r.lead_id||'',leadName:(r.lead_id&&get?get('leads',r.lead_id)?.name:'')||'',status:r.status,error:r.status==='error'?String(j.error||''):'',
         updatedAt:j.updatedAt||'',callAt:c?new Date(at(c)).toISOString():'',source:c?(c.deviceId==='telecrm'?'TeleCRM':'Phone'):''};
-    }).sort((a,b)=>String(b.updatedAt||b.callAt).localeCompare(String(a.updatedAt||a.callAt))).slice(0,20);
+    };
+    const newest=(a,b)=>String(b.updatedAt||b.callAt).localeCompare(String(a.updatedAt||a.callAt));
+    const jobs=db.prepare('SELECT recording_id,lead_id,status FROM call_ai_jobs ORDER BY rowid DESC LIMIT 60').all().map(row).sort(newest).slice(0,20);
+    // every failed job, however old, with its reason, so a failure never hides behind newer work
+    const failedJobs=db.prepare("SELECT recording_id,lead_id,status FROM call_ai_jobs WHERE status='error' ORDER BY rowid DESC LIMIT 50").all().map(row).sort(newest);
     const c=rawSettings();
     return {enabled:Boolean(c.enabled),automatic:Boolean(c.automatic),lastRecordingAt:last?new Date(last).toISOString():null,
       week:{total:recent.length,phone:recent.filter(x=>x.deviceId!=='telecrm').length,telecrm:recent.filter(x=>x.deviceId==='telecrm').length},
-      done:counts.complete||0,waiting:(counts.queued||0)+(counts.waiting||0)+(counts.processing||0),failed:counts.error||0,jobs};
+      done:counts.complete||0,waiting:(counts.queued||0)+(counts.waiting||0)+(counts.processing||0),failed:counts.error||0,jobs,failedJobs};
   }
   return {publicSettings,save,enqueue,tick,vaultList,saveKey,spokenOf,status,async models(input){
     if(typeof input.key!=='undefined'&&(typeof input.key!=='string'||input.key.length>4096))fail('Invalid API key');

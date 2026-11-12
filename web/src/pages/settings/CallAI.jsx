@@ -22,6 +22,13 @@ function Status() {
   const status = useLoad(() => crmGet("call-ai/status"), [tick]);
   if (status.error) return <Failed>{status.error.message}</Failed>;
   if (!status.data) return <Loading>Checking call AI…</Loading>;
+  const row = (j) => (
+    <li key={j.recordingId}>
+      <span><a href={`#/leads?lead=${j.leadId}`}>{j.leadName || "Lead"}</a>{j.source && <span className="muted"> · {j.source}</span>}</span>
+      <span className="muted">{stamp(j.callAt || j.updatedAt)}</span>
+      <span className={`cai-job cai-job-${j.status}`}>{JOB[j.status] || j.status}{j.error ? `: ${j.error}` : ""}</span>
+    </li>
+  );
   const d = status.data, quietDays = d.lastRecordingAt ? Math.floor((Date.now() - Date.parse(d.lastRecordingAt)) / DAY) : null;
   const pill = !d.enabled ? ["Off", "off"] : d.failed ? [`${d.failed} failed`, "bad"] : quietDays === null || quietDays >= 2 ? ["No new recordings", "warn"] : ["Working", "ok"];
   return (
@@ -35,16 +42,17 @@ function Status() {
         <div className="cai-stat"><span>Waiting</span><b>{d.waiting}</b></div>
         <div className="cai-stat"><span>Failed</span><b className={d.failed ? "cai-bad" : ""}>{d.failed}</b></div>
       </div>
+      {d.failedJobs?.length > 0 && (
+        <>
+          <p className="sec-line cai-head">Failed ({d.failedJobs.length})</p>
+          <ul className="cai-jobs" aria-label="Failed jobs">{d.failedJobs.map(row)}</ul>
+        </>
+      )}
       {d.jobs.length > 0 && (
-        <ul className="cai-jobs" aria-label="Recent jobs">
-          {d.jobs.map((j) => (
-            <li key={j.recordingId}>
-              <span><a href={`#/leads?lead=${j.leadId}`}>{j.leadName || "Lead"}</a>{j.source && <span className="muted"> · {j.source}</span>}</span>
-              <span className="muted">{stamp(j.callAt || j.updatedAt)}</span>
-              <span className={`cai-job cai-job-${j.status}`}>{JOB[j.status] || j.status}{j.error ? `: ${j.error}` : ""}</span>
-            </li>
-          ))}
-        </ul>
+        <>
+          <p className="sec-line cai-head">Latest</p>
+          <ul className="cai-jobs" aria-label="Recent jobs">{d.jobs.map(row)}</ul>
+        </>
       )}
       <div className="set-bar"><button type="button" className="btn" onClick={() => setTick((t) => t + 1)}>Refresh</button></div>
     </Section>
