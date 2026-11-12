@@ -19,6 +19,31 @@ function Recent({ side }) {
   );
 }
 
+// IndiaMART's push: the address to paste into IndiaMART, and the last enquiry it sent
+function PushAddress({ im, busy, onNewAddress, notify }) {
+  if (!im.push || !im.pushPath) return null;
+  const address = window.location.origin + im.pushPath;
+  const last = im.lastPush;
+  const copy = async () => { try { await navigator.clipboard.writeText(address); notify("Address copied"); } catch { notify("Select the address and copy it"); } };
+  return (
+    <Section title="IndiaMART push address" desc="IndiaMART sends each new enquiry here the moment it comes. Keep this address private: anyone who has it can send enquiries.">
+      <Steps>
+        <>In IndiaMART Lead Manager, open the ⋮ menu → Import/Export Leads → Push API.</>
+        <>Choose Other, type Salesdesk as the CRM name and paste this address as the Webhook Listener URL.</>
+        <>Confirm with the OTP IndiaMART sends to your mobile, then use its Test button. A test buyer is answered but not made a lead.</>
+      </Steps>
+      <div className="sec-grid">
+        <label>Push address<input className="field-input" readOnly value={address} onFocus={(e) => e.target.select()} /></label>
+      </div>
+      <p role="status" className="sec-line">{last ? `Last push ${when(last.at)}: ${last.newLeads} new leads, ${last.repeats} noted on existing leads${last.tests ? `, ${last.tests} test` : ""}${last.skipped ? `, ${last.skipped} left out` : ""}.` : "Nothing pushed by IndiaMART yet."}</p>
+      <div className="newlead-actions">
+        <button type="button" className="btn btn-primary" onClick={copy}>Copy address</button>
+        <button type="button" className="btn" disabled={busy} onClick={onNewAddress}>Make a new address</button>
+      </div>
+    </Section>
+  );
+}
+
 function lastLine(side, empty) {
   const run = side.lastRun;
   if (!run) return empty;
@@ -44,18 +69,18 @@ export default function MarketplaceLeads({ users = [] }) {
     const f = new FormData(event.currentTarget);
     act(() => crmSend("POST", "marketplace/settings", {
       intervalMinutes: Number(f.get("intervalMinutes")), owner: f.get("owner") || "",
-      indiamart: { key: f.get("imKey") || undefined, backfillDays: Number(f.get("imDays")), enabled: f.get("imOn") === "on" },
+      indiamart: { key: f.get("imKey") || undefined, backfillDays: Number(f.get("imDays")), enabled: f.get("imOn") === "on", push: f.get("imPush") === "on" },
       tradeindia: { userid: f.get("tiUser") || "", profileId: f.get("tiProfile") || "", key: f.get("tiKey") || undefined, backfillDays: Number(f.get("tiDays")), enabled: f.get("tiOn") === "on" },
     }), "Saved. Nothing was changed in IndiaMART or TradeIndia.");
   }
   const read = (source, name) => act(() => crmSend("POST", "marketplace/sync", { source }), `Read from ${name}`);
   const active = users.filter((u) => u.active !== false);
-  const on = [im.enabled && "IndiaMART", ti.enabled && "TradeIndia"].filter(Boolean);
+  const on = [(im.enabled || im.push) && "IndiaMART", ti.enabled && "TradeIndia"].filter(Boolean);
   return (
     <>
       <Section title="What this does" desc="Both sites are only read, never changed." status={on.length ? `Reading ${on.join(" and ")}` : "Switched off"} tone={on.length ? "ok" : "off"}>
         <Steps>
-          <>Every few minutes the CRM reads new enquiries from your IndiaMART Lead Manager and your TradeIndia inquiries.</>
+          <>IndiaMART sends each new enquiry to the CRM the moment it comes, and every few minutes the CRM also reads your IndiaMART Lead Manager and TradeIndia inquiries.</>
           <>A buyer not in the CRM yet becomes a new lead, with source IndiaMART or TradeIndia, the product and the buyer's message.</>
           <>A buyer already in the CRM (same mobile number) is not made twice: the new enquiry is noted on that lead's timeline.</>
         </Steps>
@@ -63,7 +88,8 @@ export default function MarketplaceLeads({ users = [] }) {
       </Section>
       <form className="set-form" onSubmit={save} key={version}>
         <Section title="IndiaMART" desc="Make the key in IndiaMART Lead Manager → Import/Export Leads → Pull API (CRM key). The same key as the IndiaMART call link is fine. Keys are never shown again.">
-          <label className="check"><input type="checkbox" name="imOn" defaultChecked={im.enabled} /> <span><b>Read IndiaMART enquiries.</b> Direct enquiries, buy-leads and calls.</span></label>
+          <label className="check"><input type="checkbox" name="imPush" defaultChecked={im.push} /> <span><b>Get each enquiry the moment it comes (Push API).</b> No key needed; Save, then paste the address shown below into IndiaMART.</span></label>
+          <label className="check"><input type="checkbox" name="imOn" defaultChecked={im.enabled} /> <span><b>Also read IndiaMART enquiries every few minutes.</b> Direct enquiries, buy-leads and calls; catches anything a push missed.</span></label>
           <div className="sec-grid">
             <label>IndiaMART CRM key<input className="field-input" name="imKey" type="password" autoComplete="new-password" placeholder={im.hasKey ? "Saved. Leave blank to keep it" : "CRM key from IndiaMART"} /></label>
             <label>First read goes back (days)<input className="field-input" name="imDays" type="number" min="1" max="90" defaultValue={im.backfillDays} /></label>
@@ -91,6 +117,7 @@ export default function MarketplaceLeads({ users = [] }) {
         </Section>
         <div className="set-bar"><button className="btn btn-primary" disabled={busy}>Save</button></div>
       </form>
+      <PushAddress im={im} busy={busy} notify={notify} onNewAddress={() => { if (window.confirm("Make a new address? IndiaMART stops reaching the CRM until you paste the new one there.")) act(() => crmSend("POST", "marketplace/settings", { indiamart: { newPushAddress: true } }), "New address made. Paste it into IndiaMART."); }} />
       <Section title="IndiaMART reads" desc="IndiaMART allows one read every 5 minutes and 7 days per read, so older enquiries come in over several reads." status={runState(im)[0]} tone={runState(im)[1]}>
         <p role="status" className="sec-line">{lastLine(im, "Save the CRM key first, then read.")} {im.enquiries ? `${im.enquiries} enquiries so far, ${im.leadsMade} new leads.` : ""}</p>
         <div className="newlead-actions"><button type="button" className="btn btn-primary" disabled={busy || !im.hasKey} onClick={() => read("indiamart", "IndiaMART")}>Read IndiaMART now</button></div>

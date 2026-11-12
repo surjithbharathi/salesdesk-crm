@@ -119,3 +119,32 @@ test("TradeIndia refusing the key is said plainly", async (t) => {
   assert.equal(out.results.tradeindia.ok, false);
   assert.equal(out.results.tradeindia.message, "TradeIndia: Invalid key");
 });
+
+test("IndiaMART's push makes the lead at once, only at its own address, and never twice", async (t) => {
+  const f = fixture(t), { m, replies, all } = f;
+  assert.throws(() => m.receivePush("0".repeat(32), { RESPONSE: im() }), /Not found/, "push is off until it is switched on");
+  const on = m.save({ indiamart: { push: true } });
+  assert.match(on.indiamart.pushPath, /^\/hooks\/indiamart\/[a-f0-9]{32}$/);
+  const token = on.indiamart.pushPath.split("/").pop();
+  assert.throws(() => m.receivePush("f".repeat(32), { RESPONSE: im() }), /Not found/, "a wrong address is refused");
+  const lead = im({ UNIQUE_QUERY_ID: "PUSH1", SENDER_MOBILE: "+91-9876500011", SENDER_NAME: "Ravi" });
+  assert.deepEqual(m.receivePush(token, { CODE: 200, STATUS: "SUCCESS", RESPONSE: lead }), { CODE: 200, STATUS: "SUCCESS" });
+  assert.equal(all("leads").filter((l) => l.phoneKey === "919876500011").length, 1);
+  assert.equal(all("leads").find((l) => l.phoneKey === "919876500011").source, "IndiaMART");
+  // IndiaMART sends it again, and the pull read later lists it too: still one lead
+  m.receivePush(token, { RESPONSE: lead });
+  m.save({ indiamart: { key: "abcdefghijklmnop1234", enabled: true } });
+  replies.push({ status: 200, body: { CODE: 200, RESPONSE: [lead] } });
+  await m.sync();
+  assert.equal(all("leads").filter((l) => l.phoneKey === "919876500011").length, 1);
+  // IndiaMART's test buyer is answered but not made a lead
+  assert.equal(m.receivePush(token, { RESPONSE: im({ UNIQUE_QUERY_ID: "TEST1", SENDER_MOBILE: "+91-9999999999" }) }).CODE, 200);
+  assert.equal(all("leads").some((l) => l.phoneKey === "919999999999"), false);
+  assert.equal(m.settings().indiamart.lastPush.tests, 1);
+  // a new address shuts the old one
+  const fresh = m.save({ indiamart: { newPushAddress: true } }).indiamart.pushPath.split("/").pop();
+  assert.notEqual(fresh, token);
+  assert.throws(() => m.receivePush(token, { RESPONSE: im() }), /Not found/);
+  m.save({ indiamart: { push: false } });
+  assert.throws(() => m.receivePush(fresh, { RESPONSE: im() }), /Not found/);
+});
