@@ -3,6 +3,7 @@ import { createWaGateway, publicHttps } from "./wa-gateway.mjs";
 import { createSigninMethods } from "./signin-methods.mjs";
 import { createTelecrmMirror } from "./telecrm-mirror.mjs";
 import { createMarketplaceLeads } from "./marketplace-leads.mjs";
+import { createAiTasks } from "./ai-tasks.mjs";
 import { createBlockedNumbers } from "./blocked-numbers.mjs";
 import { createKpi } from "./kpi.mjs";
 import { extname, resolve as resolvePath, sep } from "node:path";
@@ -540,6 +541,9 @@ function permittedState(value,id){
   return {...value,mobileCalls:calls?value.mobileCalls:[],activities:(value.activities||[]).filter(a=>(calls||a.type!=='Call')&&(messages||a.type!=='Message')),messages:messages?value.messages:[],conversations:messages?value.conversations:[]};
 }
 const callAI = createCallAI({db,all,get,playback:mobile.playback,onLanguage:languageFromCall,keyPath:(process.env.CRM_DB || new URL('./data/crm.sqlite',import.meta.url).pathname)+'.ai-key'});
+// AI tasks (ai-tasks.mjs): what to do next, from calls made from now on and from missed calls and waiting leads
+const aiTasks = createAiTasks({ db, get, put, stamp, tx, iqConfig: () => callAI.iqConfig(), summariesSince: (ms) => callAI.summariesSince(ms),
+  isAdmin: (id) => { try { return ["owner", "admin"].includes(workspaceAccess.profile(id).role); } catch { return false; } }, report: (m) => console.error(m) });
 const smtpEmail=createSmtpEmail({db,keyPath:(process.env.CRM_DB||new URL('./data/crm.sqlite',import.meta.url).pathname)+'.smtp-key',origin:publicOrigin});
 // the one-way mirror of TeleCRM: it writes records directly (no per-lead uniqueness scan), the unique phone index still protects against duplicates
 const rawPut = (kind, v) => db.prepare("INSERT INTO records VALUES(?,?,?) ON CONFLICT(kind,id) DO UPDATE SET body=excluded.body").run(kind, v.id, JSON.stringify(v));
@@ -750,10 +754,19 @@ const mobileServer = http.createServer(async (req, res) => {
       reply(200, deleteLead(leadId, { block: action === "delete-and-block", by: userId }));
       return;
     }
+    const phoneAiTask = /^\/v1\/ai-tasks\/([\w:+.-]{1,120})\/(accept|dismiss)$/.exec(url.pathname);
+    if (phoneAiTask && req.method === "POST") {
+      if (!identity) bad("Shared user login required", 401);
+      const p = await body(req);
+      reply(200, phoneAiTask[2] === "accept" ? aiTasks.accept(phoneAiTask[1], p, identity.user.id) : aiTasks.dismiss(phoneAiTask[1], identity.user.id));
+      return;
+    }
     if (url.pathname === "/v1/workspace" && req.method === "GET") {
       if (!identity) bad("Shared user login required", 401);
       const started = Date.now();
-      const fit = fitPhoneWorkspace(permittedState(scopedState(linkedState, identity.user.id), identity.user.id), { user: identity.user, company: identity.company });
+      let aiTaskList = [];
+      try { aiTaskList = aiTasks.list(identity.user.id).items.slice(0, 60); } catch (e) { console.error("AI tasks for the phone: " + e.message); }
+      const fit = fitPhoneWorkspace(permittedState(scopedState(linkedState, identity.user.id), identity.user.id), { user: identity.user, company: identity.company, aiTasks: aiTaskList });
       console.log(JSON.stringify({ event: "phone_workspace", user: identity.user.id, bytes: fit.bytes, step: fit.step, ms: Date.now() - started }));
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(fit.text);
@@ -1335,6 +1348,15 @@ const server = http.createServer(async (req, res) => {
       if(/^\/api\/activities(?:\/|$)/.test(url.pathname)&&write)workspaceAccess.requirePermission(identity,'leads.write');
       if(/^\/api\/mobile\/recordings\//.test(url.pathname))workspaceAccess.requirePermission(identity,'calls.read');
       if(/^\/api\/whatsapp\//.test(url.pathname))workspaceAccess.requirePermission(identity,'integrations.manage');
+    }
+    if (url.pathname === "/api/ai-tasks" || url.pathname.startsWith("/api/ai-tasks/")) {
+      if (!identity && userAuth.configured()) bad("Login required", 401);
+      const uid = identity?.user.id || "";
+      const one = /^\/api\/ai-tasks\/([\w:+.-]{1,120})\/(accept|dismiss)$/.exec(url.pathname);
+      if (url.pathname === "/api/ai-tasks" && req.method === "GET") send(200, aiTasks.list(uid));
+      else if (one && req.method === "POST") { sameOrigin(); const p = await body(req); send(200, one[2] === "accept" ? aiTasks.accept(one[1], p, uid) : aiTasks.dismiss(one[1], uid)); }
+      else bad("Not found", 404);
+      return;
     }
     if (url.pathname.startsWith("/api/kpi/")) {
       if (req.method !== "GET") sameOrigin();
