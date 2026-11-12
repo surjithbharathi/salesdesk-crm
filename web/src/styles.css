@@ -406,3 +406,31 @@ kbd { font-family: var(--font); font-size: 12.5px; border: 1px solid var(--line-
 .work-calls li { flex-direction: column; align-items: stretch; }
 .tele-call-row .rec { margin-top: 8px; }
 .tele-rec-flag { font-size: 11px; font-weight: 700; color: var(--leaf); background: var(--leaf-soft); padding: 1px 6px; border-radius: 4px; }
+
+/* DateTimePicker.jsx: our own date and time picker with Cancel and OK (the browser's has no OK button) */
+.dtp { position: relative; display: inline-flex; min-width: 0; }
+.dtp .dtp-field { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 6px 12px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); color: var(--ink); font: inherit; font-size: 14px; cursor: pointer; text-align: left; }
+.dtp .dtp-field:hover, .dtp .dtp-field:focus-visible { border-color: var(--oil); outline: none; }
+.dtp-req { position: absolute; left: 12px; bottom: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.dtp-pop { position: fixed; z-index: 1000; width: 320px; max-width: calc(100vw - 16px); padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18); font-size: 14px; }
+.dtp-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.dtp-head b { font-weight: 600; }
+.dtp .dtp-pop .dtp-nav { width: 32px; height: 32px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--ink); font-size: 18px; cursor: pointer; }
+.dtp-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; text-align: center; }
+.dtp-wd { padding: 4px 0; font-size: 12px; color: var(--muted); }
+.dtp .dtp-pop .dtp-day { height: 34px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--ink); font: inherit; cursor: pointer; }
+.dtp .dtp-pop .dtp-day:hover, .dtp .dtp-pop .dtp-day:focus-visible { border-color: var(--line-strong); outline: none; }
+.dtp .dtp-pop .dtp-day.today { border-color: var(--line-strong); }
+.dtp .dtp-pop .dtp-day.on { background: var(--oil-soft); border-color: var(--oil); color: var(--oil-ink); font-weight: 700; }
+.dtp-label { margin: 12px 0 6px; font-size: 12px; color: var(--muted); }
+.dtp-quick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.dtp .dtp-pop .dtp-chip { min-height: 32px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--ink); font: inherit; font-size: 13px; cursor: pointer; }
+.dtp .dtp-pop .dtp-chip.on { background: var(--oil-soft); border-color: var(--oil); color: var(--oil-ink); font-weight: 700; }
+.dtp-exact { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 13px; color: var(--muted); }
+.dtp .dtp-pop .dtp-exact select { min-height: 32px; padding: 2px 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); font: inherit; }
+.dtp-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+.dtp-sum { font-size: 13px; font-weight: 600; }
+.dtp-acts { display: flex; gap: 6px; }
+.dtp .dtp-pop .dtp-cancel, .dtp .dtp-pop .dtp-ok { min-height: 34px; padding: 0 14px; border-radius: 8px; font: inherit; font-weight: 600; cursor: pointer; }
+.dtp .dtp-pop .dtp-cancel { border: 1px solid var(--line-strong); background: transparent; color: var(--ink); }
+.dtp .dtp-pop .dtp-ok { border: 1px solid var(--oil); background: var(--oil); color: #1d1405; }

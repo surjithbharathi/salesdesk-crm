@@ -9,6 +9,7 @@ import GatewayChat from "../GatewayChat.jsx";
 import ChatEntry, { buyLeadOf, leadArrivedOf } from "../ChatEntry.jsx";
 import { PIPELINE, pipelineStep } from "../pipeline.js";
 import { buildModel, hms, initials, money, startOfDay } from "./model.js";
+import DateTimePicker from "../DateTimePicker.jsx";
 
 // The lead page in the Salesmax style: the lead's profile on the left, its timeline and records on the right.
 // The class names are the reference web app's, so its style sheet (cw/detail.css) applies as written. Everything is this CRM's own data.
@@ -281,7 +282,7 @@ export default function CwLeadDetail({ id, onClose }) {
                 ))}
                 <form className="task-form" onSubmit={addTask}>
                   <b>Add a task</b>
-                  <input type="datetime-local" value={taskDue} onChange={(e) => setTaskDue(e.target.value)} aria-label="Due" required />
+                  <DateTimePicker value={taskDue} onChange={setTaskDue} ariaLabel="Due" required />
                   <input value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} placeholder="What's next? e.g. Send quote" aria-label="Task" required maxLength={300} />
                   <span className="quick-days"><button type="button" className="ghost" onClick={() => setTaskDue(at10(1))}>Tomorrow</button><button type="button" className="ghost" onClick={() => setTaskDue(at10(3))}>In 3 days</button><button type="button" className="ghost" onClick={() => setTaskDue(at10(7))}>Next week</button></span>
                   <button type="submit" className="solid" disabled={busy}>Save task</button>

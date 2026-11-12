@@ -7,6 +7,7 @@ import { when, day, rupees, dueText, timeOnly, dayLabel, minutes } from "../form
 import Icon from "../icons.jsx";
 import Recording from "../Recording.jsx";
 import ChatEntry, { fromActivity, userForNumber, saidInChat } from "../ChatEntry.jsx";
+import DateTimePicker from "../DateTimePicker.jsx";
 
 const OUTCOMES = ["Interested", "Callback", "No answer", "Not interested", "Connected"];
 const ICON = { Call: "phone", Note: "note", Message: "chat", Visit: "pin", System: "dot" };
@@ -111,7 +112,7 @@ export function Update({ lead, crm }) {
         change("Follow-up added", async () => { await crmSend("POST", "tasks", { leadId: lead.id, title, due: new Date(due).toISOString(), status: "Open", owner: lead.owner || crm.me.id || "" }); setTitle(""); });
       }}>
         <input className="field-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="What to do, for example Send quotation" aria-label="Follow-up task" required maxLength={300} />
-        <input className="field-input" type="datetime-local" value={due} onChange={(e) => setDue(e.target.value)} aria-label="Due" required />
+        <DateTimePicker value={due} onChange={setDue} ariaLabel="Due" required />
         <span className="work-quick">
           <button type="button" className="btn btn-quiet" onClick={() => setDue(atTen(1))}>Tomorrow</button>
           <button type="button" className="btn btn-quiet" onClick={() => setDue(atTen(3))}>In 3 days</button>
