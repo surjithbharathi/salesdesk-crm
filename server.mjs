@@ -10,6 +10,7 @@ import { createUserAuth } from "./user-auth.mjs";
 import { scopedState } from "./user-scope.mjs";
 import { createClickToCall } from "./click-to-call.mjs";
 import { bridgeConfig, createAutomationBridge } from "./automation-bridge.mjs";
+import { createErpSso, erpSsoConfig } from "./erp-sso.mjs";
 
 const port = Number(process.env.PORT || 3100);
 const publicOrigin = process.env.PUBLIC_ORIGIN || "";
@@ -291,6 +292,8 @@ const mobile = createMobileSync({
     (process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname) + ".mobile-key",
 });
 const userAuth = createUserAuth({ db, getUser: (id) => get("users", id) });
+const erpSsoSettings = erpSsoConfig(process.env, publicOrigin);
+const erpSso = erpSsoSettings ? createErpSso({ config: erpSsoSettings }) : null;
 const automation = createAutomationBridge({
   db,
   getUser: (id) => get("users", id),
@@ -649,6 +652,7 @@ const server = http.createServer(async (req, res) => {
           configured: userAuth.configured(),
           user: identity?.user || null,
           company: identity?.company || "",
+          erpLogin: Boolean(erpSso && userAuth.configured()),
           ...(!userAuth.configured()
             ? {
                 users: all("users")
@@ -665,6 +669,52 @@ const server = http.createServer(async (req, res) => {
         cookie(result.token);
         send(200, { user: result.user, company: result.company });
         return;
+      }
+      if (action.startsWith("erp/") && req.method === "GET") {
+        if (!erpSso || !userAuth.configured()) bad("ERP login is not configured", 404);
+        const stateCookie = (value) =>
+          `salesdesk_erp_state=${value}; HttpOnly; SameSite=Lax; Path=/api/auth/erp/; Max-Age=${value ? 600 : 0}${publicOrigin ? "; Secure" : ""}`;
+        if (action === "erp/start") {
+          const { state, location } = erpSso.start();
+          res.writeHead(302, { Location: location, "Set-Cookie": stateCookie(state) });
+          res.end();
+          return;
+        }
+        if (action === "erp/callback") {
+          const page = (title, message, refresh) =>
+            `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${refresh ? '<meta http-equiv="refresh" content="0;url=/">' : ""}<title>${title}</title><link rel="stylesheet" href="/style.css"></head><body><main><h1>${title}</h1><p>${message}</p><p><a href="/">Open Salesdesk CRM</a></p></main></body></html>`;
+          const escapeHtml = (s) =>
+            String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+          try {
+            const profile = await erpSso.callback({
+              code: url.searchParams.get("code"),
+              state: url.searchParams.get("state"),
+              error: url.searchParams.get("error"),
+              cookieState:
+                /(?:^|;\s*)salesdesk_erp_state=([A-Za-z0-9_-]{43})(?:;|$)/.exec(
+                  req.headers.cookie || "",
+                )?.[1] || "",
+            });
+            const result = userAuth.externalLogin(profile.username);
+            res.writeHead(200, {
+              "Content-Type": "text/html; charset=utf-8",
+              "Set-Cookie": [
+                `salesdesk_session=${result.token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200${publicOrigin ? "; Secure" : ""}`,
+                stateCookie(""),
+              ],
+            });
+            // Same-site meta refresh so the Strict session cookie is sent on the next load.
+            res.end(page("Signing in…", `Welcome ${escapeHtml(result.user.name)}.`, true));
+          } catch (error) {
+            res.writeHead(error.status && error.status < 500 ? error.status : 502, {
+              "Content-Type": "text/html; charset=utf-8",
+              "Set-Cookie": stateCookie(""),
+            });
+            res.end(page("ERP login failed", escapeHtml(error.message || "Unexpected error"), false));
+          }
+          return;
+        }
+        bad("Not found", 404);
       }
       if (action === "reset" && req.method === "POST") {
         sameOrigin();

@@ -114,6 +114,19 @@ export function createUserAuth({ db, getUser, now = () => Date.now() }) {
     failures.delete(name);
     return session(account, deviceId);
   }
+  // Trusted identity provider (ERPNext OAuth) already verified the person; map by username.
+  function externalLogin(username) {
+    let name;
+    try {
+      name = usernameOf(username);
+    } catch {
+      fail("No Salesdesk account is linked to this ERP user", 403);
+    }
+    const account = db.prepare("SELECT * FROM auth_accounts WHERE username=?").get(name);
+    if (!account || !getUser(account.user_id)?.active)
+      fail(`No active Salesdesk account with username ${name}`, 403);
+    return session(account);
+  }
   function authenticate(token) {
     if (typeof token !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(token))
       fail("Invalid credentials or session", 401);
@@ -198,6 +211,7 @@ export function createUserAuth({ db, getUser, now = () => Date.now() }) {
     bootstrap,
     createAccount,
     login,
+    externalLogin,
     authenticate,
     revoke,
     listAccounts,
