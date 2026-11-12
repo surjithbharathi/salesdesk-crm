@@ -31,6 +31,7 @@ final class SimplePreferences {
             else{prefs().edit().putBoolean("recordingSync",enabled).commit();a.render();}
         });
         if(hasFolder())a.button(sync,"Change recording folder",this::chooseFolder);
+        if(prefs().getBoolean("enabled",false))a.button(sync,"Add older calls & recordings",this::addOlder);
         toggle(sync,"Fill lead names from the phone",SyncEngine.namesOn(a)&&SyncEngine.contactsAllowed(a),enabled->{
             prefs().edit().putBoolean("contactNames",enabled).commit();
             if(enabled&&!SyncEngine.contactsAllowed(a)){prefs().edit().putBoolean("contactsAsked",true).commit();a.requestPermissions(new String[]{Manifest.permission.READ_CONTACTS},309);}
@@ -74,6 +75,15 @@ final class SimplePreferences {
             if(all)new AlertDialog.Builder(a).setTitle("Track all calls?").setMessage("All calls on the selected SIMs will sync to CRM, including personal numbers. New numbers become leads. Matched recordings also upload when recording sync is on.").setNegativeButton("Cancel",null).setPositiveButton("OK",(dialog,which)->save(sims,assignment,true,tracking)).show();
             else save(sims,assignment,false,tracking);
         }).show();
+    }
+    // calls from before sign-in are not sent on their own; this sends the chosen days once, with their recordings
+    void addOlder(){
+        String[] labels={"Last 7 days","Last 30 days","Last 90 days"};int[] days={7,30,90};
+        new android.app.AlertDialog.Builder(a).setTitle("Add older calls & recordings").setItems(labels,(d,i)->{
+            long from=System.currentTimeMillis()-days[i]*86400000L;android.content.SharedPreferences p=prefs();
+            p.edit().putLong("since",Math.min(p.getLong("since",System.currentTimeMillis()),from)).putLong("trackingSince",Math.min(p.getLong("trackingSince",System.currentTimeMillis()),from)).commit();
+            a.notice("Adding calls from the "+labels[i].toLowerCase()+" on the SIMs you chose. Recordings follow in the background.");a.sync();
+        }).setNegativeButton("Cancel",null).show();
     }
     void save(JSONObject sims,String assignment,boolean consent,boolean enabled){java.util.concurrent.atomic.AtomicBoolean saved=new java.util.concurrent.atomic.AtomicBoolean();a.work(()->{try{JSONObject policy=SyncEngine.requestApi(a,"/v1/tracking-preferences","PUT",new JSONObject().put("sims",sims).put("assignment",assignment).put("consent",consent));prefs().edit().putString("trackingPolicy",policy.toString()).putLong("trackingSince",System.currentTimeMillis()).commit();saved.set(true);}catch(Exception e){a.failure(e);}},()->{if(saved.get()){a.render();a.setSyncEnabled(enabled);a.callerOffered=false;a.handler.postDelayed(a::offerCaller,1500);}});}
     void setupCaller(){
