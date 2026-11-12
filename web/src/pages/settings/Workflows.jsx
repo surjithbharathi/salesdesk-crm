@@ -201,7 +201,7 @@ export default function Workflows({ users }) {
 }
 
 // the searchable list of steps (n8n's node creator); for the trigger it lists events instead
-function Picker({ mode, onPick, onClose }) {
+function Picker({ mode, onPick, onClose, joinTo = [], onJoin }) {
   const [q, setQ] = useState("");
   const input = useRef(null);
   useEffect(() => { input.current?.focus(); }, [mode]);
@@ -216,6 +216,21 @@ function Picker({ mode, onPick, onClose }) {
       </div>
       <input ref={input} className="field-input wfd-search" type="search" placeholder="Search steps…" aria-label="Search steps" value={q} onChange={(e) => setQ(e.target.value)}
         onKeyDown={(e) => { if (e.key === "Enter" && shown[0]) { const [type, , , cfg] = shown[0][1][0]; onPick(type, cfg); } }} />
+      {/* a line to a box already on the canvas (another When box joining the same steps, for example) */}
+      {(() => {
+        const joins = joinTo.filter(([, kind, text]) => !want || `${kind} ${text}`.toLowerCase().includes(want));
+        return joins.length > 0 && (
+          <div className="wfd-group">
+            <div className="wfd-group-title">Join to a step already here</div>
+            {joins.map(([id, kind, text, icon, cls]) => (
+              <button key={id} type="button" className={`wfd-item ${cls}`} onClick={() => onJoin(id)}>
+                <span className="wfd-icon"><TIcon name={icon} size={22} /></span>
+                <span className="wfd-text"><b>{kind}</b><small>{text}</small></span>
+              </button>
+            ))}
+          </div>
+        );
+      })()}
       {shown.map(([title, items]) => (
         <div key={title} className="wfd-group">
           <div className="wfd-group-title">{title}</div>
@@ -419,6 +434,16 @@ function Builder({ start, meta, users, nameOf, gateway, busy, runs, onSave, onCa
     setDrag(null);
   }
 
+  // boxes a "+" can join to instead of adding a new one: not a When box, not itself, not already joined from this side,
+  // and not a box that leads back to it (that would make a loop)
+  function joinChoices(m) {
+    if (m.kind !== "add" || !m.from || !byId.get(m.from)) return [];
+    const before = new Set([m.from]);
+    for (let grew = true; grew;) { grew = false; for (const e of edges) if (before.has(e.to) && !before.has(e.from)) { before.add(e.from); grew = true; } }
+    return nodes.filter((n) => n.type !== "trigger" && !before.has(n.id) && !edges.some((e) => e.from === m.from && (!m.port || e.port === m.port) && e.to === n.id))
+      .map((n) => { const [kind, text] = label(n, meta, nameOf); return [n.id, kind, text, iconOf(n), kindClass(n)]; });
+  }
+
   async function runTest(leadId) {
     setTesting(true);
     try {
@@ -523,6 +548,8 @@ function Builder({ start, meta, users, nameOf, gateway, busy, runs, onSave, onCa
                               <path d={`M${S + 57},${PORT_Y[port] - 6} V${PORT_Y[port] + 6} M${S + 51},${PORT_Y[port]} H${S + 63}`} />
                             </g>
                           )}
+                          {/* a wider, unseen grab area: the dot itself is small, and a near miss used to move the whole box */}
+                          <circle className="wfc-port-hit" cx={S} cy={PORT_Y[port]} r={16} onPointerDown={(e) => down(e, "link", { id: n.id, port })}><title>Drag to another step to join them</title></circle>
                           <circle className={`wfc-port wfc-out wfc-port-${port}`} cx={S} cy={PORT_Y[port]} r={7} onPointerDown={(e) => down(e, "link", { id: n.id, port })}><title>Drag to another step to join them</title></circle>
                           {port !== "out" && <text className="wfc-port-label" x={S + 10} y={PORT_Y[port] - 8}>{port}</text>}
                         </g>
@@ -563,7 +590,8 @@ function Builder({ start, meta, users, nameOf, gateway, busy, runs, onSave, onCa
                 <BoxForm n={sel} meta={meta} users={users} people={people} stageOptions={stageOptions} gateway={gateway} canRemove={sel.type !== "trigger" || triggers.length > 1} set={(patch) => setConfig(sel.id, patch)} replace={(config) => setNodes((all) => all.map((x) => (x.id === sel.id ? { ...x, config } : x)))} onRemove={() => remove(sel.id)} />
               </>}
               {drawer.kind === "settings" && !sel && <div className="wfd-inner"><p className="muted">Click a step to set it up.</p></div>}
-              {["add", "insert", "trigger"].includes(drawer.kind) && <Picker mode={drawer} onPick={pick} onClose={() => setDrawer(null)} />}
+              {["add", "insert", "trigger"].includes(drawer.kind) && <Picker mode={drawer} onPick={pick} onClose={() => setDrawer(null)} joinTo={joinChoices(drawer)}
+                onJoin={(to) => { const from = byId.get(drawer.from), port = drawer.port || PORTS[from.type].find((p) => !edges.some((x) => x.from === from.id && x.port === p)) || PORTS[from.type][0]; setEdges((all) => [...all, { from: from.id, port, to }]); setSelected(""); setDrawer(null); }} />}
               {drawer.kind === "test" && triggers.length > 1 && (
                 <label className="wfd-from">Start the test from
                   <select className="field-input" value={testFrom || triggers[0].id} onChange={(e) => { setTestFrom(e.target.value); setTest(null); }}>
