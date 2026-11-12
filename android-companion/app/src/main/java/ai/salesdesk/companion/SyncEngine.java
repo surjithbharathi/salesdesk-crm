@@ -15,6 +15,9 @@ import org.json.*;
 
 final class SyncEngine {
     static class HttpError extends IOException { final int code; HttpError(int code) { super("Sync request rejected ("+code+")"); this.code=code; } }
+    // the CRM answers 502/503/504 for the half minute it restarts after an update; that is not a fault on the phone
+    static final String RESTARTING = "The CRM is restarting after an update. Try again in a minute.";
+    static boolean restarting(Exception e) { return e instanceof HttpError && ((HttpError) e).code >= 502 && ((HttpError) e).code <= 504; }
     static final AtomicBoolean running = new AtomicBoolean(false);
     static volatile boolean cancelled;
     static void cancel() { cancelled = true; }

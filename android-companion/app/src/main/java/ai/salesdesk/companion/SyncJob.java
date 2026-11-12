@@ -4,7 +4,7 @@ import android.content.*;
 public class SyncJob extends JobService {
     public boolean onStartJob(JobParameters params) {
         if(!SecureConfig.loggedIn(this)||!SecureConfig.prefs(this).getBoolean("enabled",false)) return false;
-        new Thread(() -> { boolean retry = false; try { SyncEngine.run(this); } catch (Exception e) { boolean denied=e instanceof SyncEngine.HttpError&&(((SyncEngine.HttpError)e).code==401||((SyncEngine.HttpError)e).code==403); SecureConfig.prefs(this).edit().putString("status", denied?"Session expired or access denied. Sign in again; sync paused.":"Sync failed. Check permissions and connection; retry available.").apply(); if(denied){SecureConfig.prefs(this).edit().putBoolean("enabled",false).commit();schedule(this,false);}else retry=true; } jobFinished(params, retry); }).start(); return true;
+        new Thread(() -> { boolean retry = false; try { SyncEngine.run(this); } catch (Exception e) { boolean denied=e instanceof SyncEngine.HttpError&&(((SyncEngine.HttpError)e).code==401||((SyncEngine.HttpError)e).code==403); SecureConfig.prefs(this).edit().putString("status", denied?"Session expired or access denied. Sign in again; sync paused.":SyncEngine.restarting(e)?"The CRM was restarting after an update; sync tries again by itself.":"Sync failed. Check permissions and connection; retry available.").apply(); if(denied){SecureConfig.prefs(this).edit().putBoolean("enabled",false).commit();schedule(this,false);}else retry=true; } jobFinished(params, retry); }).start(); return true;
     }
     public boolean onStopJob(JobParameters params) { SyncEngine.cancel(); return true; }
     static void schedule(Context c, boolean enabled) {
