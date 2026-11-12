@@ -86,12 +86,13 @@ final class SyncEngine {
         try(Cursor files=c.getContentResolver().query(children,new String[]{DocumentsContract.Document.COLUMN_DOCUMENT_ID,DocumentsContract.Document.COLUMN_MIME_TYPE,DocumentsContract.Document.COLUMN_LAST_MODIFIED},null,null,null)) {
             if(files==null) return;
             int seen=0; while(files.moveToNext()) {
-                check(c); if(++seen>5000) return;
+                check(c); // a phone recorder keeps every call it ever recorded: only files near a work call count toward the cap
                 String mime=files.getString(1); if(mime==null || !mime.startsWith("audio/")) continue;
                 long changed=files.getLong(2); if(changed>System.currentTimeMillis()-15000) continue;
                 boolean relevant=false;
                 for(RecordingMatcher.Call call:timings) if(call.eligible && RecordingMatcher.nearEnd(call,changed)) { relevant=true; break; }
                 if(!relevant) continue;
+                if(++seen>5000) return;
                 Uri uri=DocumentsContract.buildDocumentUriUsingTree(tree,files.getString(0));
                 if(!reserved.contains(uri.toString()) && !reservedDocuments.contains(uri.getAuthority()+"/"+DocumentsContract.getDocumentId(uri))) audio.add(new RecordingMatcher.Audio(uri.toString(),changed,duration(c,uri)));
             }
@@ -157,7 +158,7 @@ final class SyncEngine {
                     ContentValues v=new ContentValues(); v.put("local_id",log.getString(0)+"-"+start); v.put("phone",phone);v.put("account",account); v.put("started",start); v.put("duration",seconds); v.put("direction",direction); db.insertWithOnConflict("calls",null,v,SQLiteDatabase.CONFLICT_IGNORE);
                 }
             }
-            int synced=0, uploaded=0;
+            int synced=0, uploaded=0, refused=0;
             if(!online) { SecureConfig.prefs(c).edit().putString("status","Offline: business calls queued locally using the last assigned-lead list. Retry when connected.").apply(); return; }
             for(JSONObject row:calls(db)) {
                 check(c); if(!SimTracking.allows(c,row.optString("account"),phones.contains(row.getString("phone"))))continue;
@@ -182,9 +183,13 @@ final class SyncEngine {
                 Uri uri=Uri.parse(row.getString("uri")); long seconds=duration(c,uri); if(seconds<1) continue;
                 byte[] bytes; try(InputStream in=c.getContentResolver().openInputStream(uri); ByteArrayOutputStream out=new ByteArrayOutputStream()) { if(in==null) continue; byte[] buf=new byte[8192]; int n; while((n=in.read(buf))!=-1) { check(c); if(out.size()+n>20*1024*1024) throw new Exception("Recording exceeds 20 MiB"); out.write(buf,0,n); } bytes=out.toByteArray(); }
                 Map<String,String> headers=new HashMap<>(); headers.put("Content-Type","application/octet-stream"); headers.put("X-Match-Mode",row.getString("mode")); headers.put("X-Audio-Duration",String.valueOf(seconds)); headers.put("X-File-Modified",String.valueOf(modified(c,uri)));
-                request(c,"/v1/calls/"+remote+"/recording","PUT",bytes,headers); ContentValues v=new ContentValues(); v.put("uploaded",1); db.update("calls",v,"local_id=?",new String[]{row.getString("local_id")}); uploaded++;
+                // A recording the CRM turns down for good (needs a manual match, already on another call, too big) is set aside,
+                // so it cannot hold back every recording after it; a dropped connection still stops and retries later.
+                try { request(c,"/v1/calls/"+remote+"/recording","PUT",bytes,headers); }
+                catch(HttpError e) { if(e.code==400||e.code==404||e.code==409||e.code==413){ ContentValues skip=new ContentValues(); skip.put("uploaded",-2); db.update("calls",skip,"local_id=?",new String[]{row.getString("local_id")}); refused++; continue; } throw e; }
+                ContentValues v=new ContentValues(); v.put("uploaded",1); db.update("calls",v,"local_id=?",new String[]{row.getString("local_id")}); uploaded++;
             }
-            SecureConfig.prefs(c).edit().putString("status","Updated "+android.text.format.DateFormat.getTimeFormat(c).format(new java.util.Date())+" · "+synced+" new calls · "+uploaded+" recordings").apply();
+            SecureConfig.prefs(c).edit().putString("status","Updated "+android.text.format.DateFormat.getTimeFormat(c).format(new java.util.Date())+" · "+synced+" new calls · "+uploaded+" recordings"+(refused>0?" · "+refused+" recordings need a manual match":"")).apply();
         } finally { running.set(false); }
     }
 }
