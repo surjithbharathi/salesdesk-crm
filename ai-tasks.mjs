@@ -166,7 +166,8 @@ export function createAiTasks({ db, get, put, stamp, tx, iqConfig = () => null, 
       out.push({ id: `sig:new:${l.id}`, kind: "new", leadId: l.id, owner: l.owner || "", phone: l.phone, action: "call", title: `First call to ${l.name || "the new lead"}`,
         why: `New ${l.source ? l.source + " " : ""}lead waiting ${h < 1 ? "under an hour" : h < 24 ? `${h} hour${h === 1 ? "" : "s"}` : `${Math.floor(h / 24)} day${h < 48 ? "" : "s"}`}`, at: l.createdAt });
     }
-    // 3. interested customers and quotations quiet for 3 days, with no follow-up planned
+    // 3. interested customers and quotations quiet for 3 to 14 days, with no follow-up planned (older ones are a pipeline
+    //    clean-up, not a to-do: listing them all buried the rest)
     const keen = db.prepare("SELECT body FROM records WHERE kind='leads' AND json_extract(body,'$.deal') IN ('Interested Customer','Quotation Shared') AND COALESCE(json_extract(body,'$.archived'),0)=0 LIMIT 2000").all().map((r) => JSON.parse(r.body));
     if (keen.length) {
       const planned = new Set(db.prepare("SELECT json_extract(body,'$.leadId') l FROM records WHERE kind='tasks' AND json_extract(body,'$.status')<>'Done'").all().map((r) => r.l));
@@ -174,7 +175,7 @@ export function createAiTasks({ db, get, put, stamp, tx, iqConfig = () => null, 
       for (const l of keen) {
         if (planned.has(l.id) || !leadOk(l)) continue;
         const last = Date.parse(lastAt.get(l.id)?.at || l.updatedAt || l.createdAt || 0);
-        if (!last || t - last < 3 * DAY || t - last > 60 * DAY) continue;
+        if (!last || t - last < 3 * DAY || t - last > 14 * DAY) continue;
         const days = Math.floor((t - last) / DAY), quote = l.deal === "Quotation Shared";
         out.push({ id: `sig:quiet:${l.id}:${Math.floor(last / DAY)}`, kind: "quiet", leadId: l.id, owner: l.owner || "", phone: l.phone || "", action: "followup",
           title: quote ? `Follow up on the quotation with ${l.name}` : `Check in with ${l.name}`, why: `${quote ? "Quotation" : "Interested customer"} quiet for ${days} days, no follow-up planned`, at: new Date(last).toISOString() });
