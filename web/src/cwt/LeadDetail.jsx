@@ -10,6 +10,7 @@ import ChatEntry, { fromActivity, userForNumber, saidInChat } from "../ChatEntry
 import { STATES, LANGUAGES } from "../regions.js";
 import { SourceTag, quickTimes, localInput } from "./LeadBits.jsx";
 import DateTimePicker from "../DateTimePicker.jsx";
+import ErpPanel from "./ErpPanel.jsx";
 
 // One lead: a header (who, status, owner, call and WhatsApp), the stage bar, the conversation with a composer under it,
 // and on the right the next follow-up, the lead's fields and the enquiry it came with. Styles: cwt/r-leads.css (ld-*).
@@ -438,6 +439,7 @@ export function LeadDetail({ id, nav = null, compose: startWith = "" }) {
               {enquiry.note && <p className="ld-enq-intro">"{enquiry.note}"</p>}
             </section>
           )}
+          <ErpPanel leadId={raw.id} canEdit={canEdit} />
         </aside>
       </div>
     </div>

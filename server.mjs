@@ -15,6 +15,7 @@ import { createCrmMcp } from './crm-mcp.mjs';
 import { createMcpAccess } from './mcp-access.mjs';
 import { createMcpOAuth } from './mcp-oauth.mjs';
 import { createCallAI } from './call-ai.mjs';
+import { createErpnext } from "./erpnext.mjs";
 import { mergeLeads } from "./lead-merge.mjs";
 import { phoneParts, phoneKeyOf, assertUniqueLead, initializeLeadPhoneIndex } from "./lead-phone.mjs";
 import { cleanState, cleanLanguage, withRegion, regionHints } from "./lead-region.mjs";
@@ -548,6 +549,8 @@ const smtpEmail=createSmtpEmail({db,keyPath:(process.env.CRM_DB||new URL('./data
 // the one-way mirror of TeleCRM: it writes records directly (no per-lead uniqueness scan), the unique phone index still protects against duplicates
 const rawPut = (kind, v) => db.prepare("INSERT INTO records VALUES(?,?,?) ON CONFLICT(kind,id) DO UPDATE SET body=excluded.body").run(kind, v.id, JSON.stringify(v));
 // IndiaMART and TradeIndia enquiries read into leads on a schedule
+// ERPNext quotations and invoices on leads (erpnext.mjs)
+const erpnext = createErpnext({ db, all, get, put, log, keyPath: (process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname) + ".erp-key", report: (m) => console.error(m) });
 const marketplace = createMarketplaceLeads({ db, all, get, put, stamp, tx, log, keyPath: (process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname) + ".marketplace-key", report: (m) => console.error(m) });
 const salesmaxImport = createSalesmaxImport({ db, get, put: rawPut, tx, users: () => all("users") });
 // Salesmax leads left without an owner (its short names, like "Bala" for Balaji) get one at each start
@@ -1397,11 +1400,12 @@ const server = http.createServer(async (req, res) => {
           "/api/whatsapp/status",
           "/api/click-to-call/devices",
           "/api/notifications",
-        ].includes(url.pathname) || /^\/api\/mobile\/recordings\/[a-f0-9-]{36}$/.test(url.pathname) || /^\/api\/leads\/[\w-]{1,80}\/history$/.test(url.pathname);
+        ].includes(url.pathname) || /^\/api\/mobile\/recordings\/[a-f0-9-]{36}$/.test(url.pathname) || /^\/api\/leads\/[\w-]{1,80}\/history$/.test(url.pathname) || /^\/api\/erpnext\/lead\/[\w-]{1,80}$/.test(url.pathname) || url.pathname === "/api/erpnext/items";
       const allowedWrite =
         (url.pathname === "/api/click-to-call/request" && req.method === "POST") ||
         (url.pathname === "/api/notifications/read" && req.method === "POST") ||
         (/^\/api\/wa-gateway\/leads\/[\w-]{1,64}\/(send|history)$/.test(url.pathname) && req.method === "POST") ||
+        (/^\/api\/erpnext\/lead\/[\w-]{1,80}\/quotation$/.test(url.pathname) && req.method === "POST") ||
         (/^\/api\/(leads|tasks|activities)(?:\/[a-zA-Z0-9-]+)?$/.test(url.pathname) &&
           ["POST", "PATCH"].includes(req.method));
       if (!(req.method === "GET" ? allowedRead : allowedWrite)) bad("Administrator required", 403);
@@ -1427,6 +1431,26 @@ const server = http.createServer(async (req, res) => {
         send(200, waLead[2] === "send" ? await waGateway.send(waLead[1], input, identity?.user.id || "") : await waGateway.history(waLead[1]));
         return;
       }
+    }
+    // ERPNext: the connection is for administrators; a lead's quotes and invoices for whoever may work that lead
+    if (url.pathname.startsWith("/api/erpnext/")) {
+      const isAdmin = () => !identity || ["owner", "admin"].includes(workspaceAccess.profile(identity.user.id).role);
+      const leadMatch = /^\/api\/erpnext\/lead\/([A-Za-z0-9_-]{1,80})(\/quotation)?$/.exec(url.pathname);
+      if (leadMatch) {
+        const lead = get("leads", leadMatch[1]);
+        if (!lead) bad("Lead not found", 404);
+        if (!isAdmin() && lead.owner && lead.owner !== identity.user.id) bad("This lead belongs to a colleague", 403);
+        if (!leadMatch[2] && req.method === "GET") { send(200, erpnext.forLead(lead.id)); return; }
+        if (leadMatch[2] && req.method === "POST") { sameOrigin(); if (identity) workspaceAccess.requirePermission(identity, "leads.write"); send(200, await erpnext.createQuotation(lead.id, await body(req), identity?.user.name || "")); return; }
+        bad("Method not allowed", 405);
+      }
+      if (url.pathname === "/api/erpnext/items" && req.method === "GET") { if (identity) workspaceAccess.requirePermission(identity, "leads.write"); send(200, await erpnext.items(url.searchParams.get("q") || "")); return; }
+      if (identity) workspaceAccess.requirePermission(identity, "integrations.manage");
+      if (url.pathname === "/api/erpnext/settings" && req.method === "GET") { send(200, erpnext.settings()); return; }
+      if (url.pathname === "/api/erpnext/settings" && req.method === "POST") { sameOrigin(); send(200, await erpnext.save(await body(req))); return; }
+      if (url.pathname === "/api/erpnext/test" && req.method === "POST") { sameOrigin(); send(200, await erpnext.test()); return; }
+      if (url.pathname === "/api/erpnext/sync" && req.method === "POST") { sameOrigin(); send(200, await erpnext.sync()); return; }
+      bad("Not found", 404);
     }
     // IndiaMART and TradeIndia leads: administrators only
     if (url.pathname.startsWith("/api/marketplace/")) {

@@ -372,3 +372,32 @@
   .cwt .ld-stages { overflow-x: auto; }
   .cwt .ld-chev { flex: 0 0 auto; min-width: 96px; }
 }
+
+/* ERPNext quotations and invoices on the lead (ErpPanel.jsx) */
+.cwt .erp .ld-kicker { color: var(--r-blue-deep); }
+.cwt .erp-totals { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0 4px; }
+.cwt .erp-totals div { display: flex; flex-direction: column; padding: 8px 10px; border-radius: 10px; background: var(--r-bg-2); }
+.cwt .erp-totals span { font-size: 11.5px; color: var(--r-muted); }
+.cwt .erp-totals b { font-size: 16px; font-weight: 700; color: var(--r-ink); font-variant-numeric: tabular-nums; }
+.cwt .erp-totals b.erp-owed { color: var(--r-red); }
+.cwt .erp-head { margin: 10px 0 2px; font-size: 11.5px; font-weight: 700; color: var(--r-muted); }
+.cwt .erp-list { list-style: none; margin: 0; padding: 0; }
+.cwt .erp-doc { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; padding: 7px 0; border-top: 1px solid var(--r-line); font-size: 12.5px; }
+.cwt .erp-doc a { color: var(--r-blue); font-weight: 600; overflow-wrap: anywhere; }
+.cwt .erp-amt { text-align: right; font-weight: 600; color: var(--r-ink); font-variant-numeric: tabular-nums; }
+.cwt .erp-meta { color: var(--r-muted); }
+.cwt .erp-st { justify-self: end; font-size: 11.5px; font-weight: 600; color: var(--r-ink-2); }
+.cwt .erp-st.ok { color: var(--r-green-ink); }
+.cwt .erp-st.warn { color: var(--r-amber-ink); }
+.cwt .erp-st.bad { color: var(--r-red); }
+.cwt .erp-st.muted { color: var(--r-faint); }
+.cwt .erp-doc .erp-pdf { grid-column: 1 / -1; font-size: 11.5px; font-weight: 500; }
+.cwt .erp-make { margin-top: 10px; width: 100%; }
+.cwt .erp-new .fu-matches button span { display: block; font-size: 11.5px; color: var(--r-muted); }
+.cwt .erp-lines { list-style: none; margin: 4px 0; padding: 0; display: grid; gap: 8px; }
+.cwt .erp-lines li { display: grid; grid-template-columns: minmax(0, 1fr) 70px 110px auto; gap: 8px; align-items: end; font-size: 13px; }
+.cwt .erp-lines label { display: flex; flex-direction: column; font-size: 11px; color: var(--r-muted); }
+.cwt .erp-lines input { width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid var(--r-line-2); border-radius: 8px; font: inherit; color: var(--r-ink); background: var(--r-bg); }
+.cwt .erp-line-name { overflow-wrap: anywhere; padding-bottom: 6px; }
+.cwt .erp-total { font-size: 12.5px; color: var(--r-ink-2); }
+@media (max-width: 480px) { .cwt .erp-lines li { grid-template-columns: minmax(0, 1fr) 64px 96px; } .cwt .erp-lines li .r-link { grid-column: 1 / -1; justify-self: start; } }
