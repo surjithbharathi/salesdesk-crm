@@ -61,7 +61,7 @@ const QUIET_WINDOW_DAYS = 3; // "no activity for N days" fires for leads that we
 const PER_LEAD_HOUR = 3; // a flow starts for one lead at most this often per hour, so two flows cannot ping-pong a stage forever
 const MAX_EVENTS = 300; // per tick; a flood beyond this (a bulk import) is skipped and reported, not sent as hundreds of messages
 const MAX_STEPS = 60; // boxes one run may pass through
-const MAX_NODES = 40, MAX_EDGES = 80;
+const MAX_NODES = 40, MAX_EDGES = 80, MAX_TRIGGERS = 5;
 const PORTS = { trigger: ["out"], condition: ["yes", "no"], wait: ["out"], action: ["out"] };
 
 const str = (v, max) => (typeof v === "string" ? v.trim().slice(0, max) : "");
@@ -181,7 +181,8 @@ export function createWorkflows({ db, get, put, stamp, tx, log, users, sendWhats
       nodes.push({ id, type: n.type, x: coord(n.x), y: coord(n.y), config });
     }
     const triggers = nodes.filter((n) => n.type === "trigger");
-    if (triggers.length !== 1) fail("A workflow starts with exactly one trigger box");
+    if (!triggers.length) fail("A workflow starts with a When box");
+    if (triggers.length > MAX_TRIGGERS) fail(`A workflow has at most ${MAX_TRIGGERS} When boxes`);
     const byId = new Map(nodes.map((n) => [n.id, n])), edges = [], pairs = new Set();
     for (const e of flow.edges) {
       const from = byId.get(e?.from), to = byId.get(e?.to), port = String(e?.port || "out");
@@ -204,9 +205,12 @@ export function createWorkflows({ db, get, put, stamp, tx, log, users, sendWhats
       state.set(id, 2);
     };
     nodes.forEach((n) => visit(n.id));
-    const reach = new Set([triggers[0].id]);
-    for (let grew = true; grew;) { grew = false; for (const e of edges) if (reach.has(e.from) && !reach.has(e.to)) { reach.add(e.to); grew = true; } }
-    if (!nodes.some((n) => n.type === "action" && reach.has(n.id))) fail("Connect the trigger to at least one action");
+    // every When box must lead somewhere that acts
+    for (const t of triggers) {
+      const reach = new Set([t.id]);
+      for (let grew = true; grew;) { grew = false; for (const e of edges) if (reach.has(e.from) && !reach.has(e.to)) { reach.add(e.to); grew = true; } }
+      if (!nodes.some((n) => n.type === "action" && reach.has(n.id))) fail(triggers.length > 1 ? `Connect the When "${TRIGGERS[t.config.type] || t.config.type}" to at least one action` : "Connect the trigger to at least one action");
+    }
     return { nodes, edges };
   }
   function cleanWait(w = {}) {
@@ -221,6 +225,8 @@ export function createWorkflows({ db, get, put, stamp, tx, log, users, sendWhats
     const trigger = flow.nodes.find((n) => n.type === "trigger").config;
     return { ...old, name, enabled: input.enabled !== false, trigger, flow };
   }
+  // A flow can start from several When boxes: any of them starts it. Read from the drawn flow, so flows saved with one box work as before.
+  const triggersOf = (rule) => (rule.flow?.nodes || []).filter((n) => n.type === "trigger").map((n) => ({ node: n.id, ...n.config }));
 
   function list() {
     const runs = db.prepare("SELECT body FROM records WHERE kind='workflowRuns' AND COALESCE(json_extract(body,'$.empty'),0)=0 ORDER BY rowid DESC LIMIT 60").all().map((r) => JSON.parse(r.body));
@@ -327,7 +333,7 @@ export function createWorkflows({ db, get, put, stamp, tx, log, users, sendWhats
   }
   // what the API (webhook) box sends
   const payload = (rule, lead, why) => ({
-    event: rule.trigger.type, why, at: new Date(now()).toISOString(), workflow: { id: rule.id, name: rule.name },
+    event: rule.event || rule.trigger.type, why, at: new Date(now()).toISOString(), workflow: { id: rule.id, name: rule.name },
     lead: { id: lead.id, name: lead.name || "", phone: lead.phone || "", email: lead.email || "", company: lead.company || "", city: lead.city || "", source: lead.source || "", stage: stageOf(lead), owner: userName(lead.owner), value: lead.value || 0, createdAt: lead.createdAt || "" },
   });
   const next = (rule, id, port) => rule.flow.edges.filter((e) => e.from === id && e.port === port).map((e) => e.to);
@@ -389,14 +395,20 @@ export function createWorkflows({ db, get, put, stamp, tx, log, users, sendWhats
 
   // one event against every flow that listens for it; `key` makes each (flow, event) run once even after a restart
   async function fire(type, lead, key, why, extra = {}) {
+    const fits = (t) => {
+      if (t.type !== type) return false;
+      if (type === "stage_changed" && ((t.to && t.to !== extra.to && t.to !== extra.toStage) || (t.from && t.from !== extra.from && t.from !== extra.fromStage))) return false;
+      if (type === "no_activity" && t.days !== extra.days) return false;
+      if (type === "owner_changed" && (!extra.to || (t.to && t.to !== extra.to))) return false;
+      if (type === "rating_changed" && t.to && t.to !== String(Number(extra.to) || 0)) return false;
+      if (type === "field_changed" && (t.field !== extra.field || (t.to && t.to.toLowerCase() !== String(extra.to).toLowerCase()))) return false;
+      return true;
+    };
     for (const rule of rules()) {
-      if (!rule.enabled || rule.trigger.type !== type) continue;
-      const t = rule.trigger;
-      if (type === "stage_changed" && ((t.to && t.to !== extra.to && t.to !== extra.toStage) || (t.from && t.from !== extra.from && t.from !== extra.fromStage))) continue;
-      if (type === "no_activity" && t.days !== extra.days) continue;
-      if (type === "owner_changed" && (!extra.to || (t.to && t.to !== extra.to))) continue;
-      if (type === "rating_changed" && t.to && t.to !== String(Number(extra.to) || 0)) continue;
-      if (type === "field_changed" && (t.field !== extra.field || (t.to && t.to.toLowerCase() !== String(extra.to).toLowerCase()))) continue;
+      if (!rule.enabled) continue;
+      // the first When box this event fits starts the flow; one event runs a flow once
+      const t = triggersOf(rule).find(fits);
+      if (!t) continue;
       const runId = rule.id + ":" + key;
       if (get("workflowRuns", runId)) continue;
       const fresh = get("leads", lead.id);
@@ -407,8 +419,7 @@ export function createWorkflows({ db, get, put, stamp, tx, log, users, sendWhats
         put("workflows", { ...latest, runs: (latest.runs || 0) + 1, lastRunAt: new Date(now()).toISOString() });
         put("workflowRuns", { id: runId, ruleId: rule.id, rule: rule.name, leadId: lead.id, lead: fresh.name || "", why, at: new Date(now()).toISOString(), done: [], ok: true });
       });
-      const start = rule.flow.nodes.find((n) => n.type === "trigger");
-      await walk(rule, lead.id, [start.id], runId, why);
+      await walk({ ...rule, event: type }, lead.id, [t.node], runId, why);
     }
   }
 
@@ -444,7 +455,7 @@ export function createWorkflows({ db, get, put, stamp, tx, log, users, sendWhats
     const stages = { ...state.stages };
     // fields some switched-on flow listens to; only these are remembered, so a field nobody watches costs nothing and a flow
     // switched on later starts from what the lead holds then, never from an old remembered value
-    const watch = new Set(active.map((r) => (r.trigger.type === "owner_changed" ? "owner" : r.trigger.type === "rating_changed" ? "rating" : r.trigger.type === "field_changed" ? r.trigger.field : "")).filter(Boolean));
+    const watch = new Set(active.flatMap(triggersOf).map((t) => (t.type === "owner_changed" ? "owner" : t.type === "rating_changed" ? "rating" : t.type === "field_changed" ? t.field :"")).filter(Boolean));
     const seen = state.vals || {}, vals = {};
     let leadRow = state.leadRow;
     for (const l of leads) {
@@ -482,12 +493,12 @@ export function createWorkflows({ db, get, put, stamp, tx, log, users, sendWhats
         events.push(["call_missed", byId.get(a.leadId), "missed:" + a.id, "missed call"]);
     }
     // "no activity for N days": a heavier read, so every 15 minutes and only when such a flow exists
-    const quietRules = active.filter((r) => r.trigger.type === "no_activity");
+    const quietRules = active.flatMap(triggersOf).filter((t) => t.type === "no_activity");
     let quietAt = state.quietAt || 0;
     if (quietRules.length && t - quietAt >= 15 * 60000) {
       quietAt = t;
       const last = new Map(db.prepare("SELECT json_extract(body,'$.leadId') l, MAX(COALESCE(json_extract(body,'$.occurredAt'),json_extract(body,'$.createdAt'))) at FROM records WHERE kind='activities' AND json_extract(body,'$.type')<>'System' GROUP BY l").all().map((x) => [x.l, x.at]));
-      for (const days of new Set(quietRules.map((r) => r.trigger.days))) {
+      for (const days of new Set(quietRules.map((q) => q.days))) {
         for (const l of leads) {
           if (l.archived || l.mergedInto || l.stage === "Closed") continue;
           const at = last.get(l.id) || l.createdAt, idle = (t - Date.parse(at || 0)) / 86400000;
@@ -498,7 +509,7 @@ export function createWorkflows({ db, get, put, stamp, tx, log, users, sendWhats
     put("workflowState", { ...state, leadRow, activityRow, stages, quietAt, vals });
     await resume();
     if (!active.length) return { events: 0 };
-    const wanted = events.filter(([type]) => active.some((r) => r.trigger.type === type));
+    const wanted = events.filter(([type]) => active.some((r) => triggersOf(r).some((t) => t.type === type)));
     if (wanted.length > MAX_EVENTS) report(`Workflows: ${wanted.length - MAX_EVENTS} events skipped this time (more than ${MAX_EVENTS} at once)`);
     let fired = 0;
     for (const [type, lead, key, why, extra] of wanted.slice(0, MAX_EVENTS)) {
@@ -517,9 +528,11 @@ export function createWorkflows({ db, get, put, stamp, tx, log, users, sendWhats
     const flow = cleanFlow(input?.flow);
     const lead = get("leads", String(leadId || ""));
     if (!lead || lead.archived || lead.mergedInto) fail("Choose a lead to test with");
-    const rule = { id: input.id || "test", name: str(input.name, 120) || "Test", trigger: flow.nodes.find((n) => n.type === "trigger").config, flow };
+    // with several When boxes the test starts from the one chosen, else the first
+    const start = flow.nodes.find((n) => n.type === "trigger" && n.id === String(input?.from || "")) || flow.nodes.find((n) => n.type === "trigger");
+    const rule = { id: input.id || "test", name: str(input.name, 120) || "Test", trigger: start.config, flow };
     const steps = {}, lines = [];
-    const queue = [flow.nodes.find((n) => n.type === "trigger").id];
+    const queue = [start.id];
     let count = 0, turn = (get("workflows", rule.id)?.rr) || 0;
     while (queue.length && count++ < MAX_STEPS) {
       const id = queue.shift(), n = flow.nodes.find((x) => x.id === id);

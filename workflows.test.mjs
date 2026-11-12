@@ -189,11 +189,13 @@ test("a wait box holds the flow and carries on when it is due; turning the flow 
   assert.ok(second);
 });
 
-test("loops, a second trigger and lines into the trigger are refused", () => {
+test("loops, a When box going nowhere, too many When boxes and lines into the trigger are refused", () => {
   const { wf } = setup();
   const base = [{ id: "t", type: "trigger", config: { type: "lead_created" } }, { id: "a", type: "action", config: { type: "note", text: "x" } }, { id: "b", type: "action", config: { type: "note", text: "y" } }];
   assert.throws(() => wf.create({ name: "x", flow: { nodes: base, edges: [{ from: "t", to: "a" }, { from: "a", to: "b" }, { from: "b", to: "a" }] } }), /loop/);
-  assert.throws(() => wf.create({ name: "x", flow: { nodes: [...base, { id: "t2", type: "trigger", config: { type: "call_missed" } }], edges: [{ from: "t", to: "a" }] } }), /exactly one trigger/);
+  assert.throws(() => wf.create({ name: "x", flow: { nodes: [...base, { id: "t2", type: "trigger", config: { type: "call_missed" } }], edges: [{ from: "t", to: "a" }] } }), /When "A call from a lead is missed" to at least one action/);
+  const many = Array.from({ length: 6 }, (_, i) => ({ id: "w" + i, type: "trigger", config: { type: "call_missed" } }));
+  assert.throws(() => wf.create({ name: "x", flow: { nodes: [...base, ...many], edges: many.map((w) => ({ from: w.id, to: "a" })) } }), /at most 5 When/);
   assert.throws(() => wf.create({ name: "x", flow: { nodes: base, edges: [{ from: "t", to: "a" }, { from: "a", to: "t" }] } }), /back into the trigger/);
   assert.throws(() => wf.create({ name: "x", flow: { nodes: base, edges: [] } }), /at least one action/);
   assert.throws(() => wf.create({ name: "x", flow: { nodes: base, edges: [{ from: "t", port: "yes", to: "a" }] } }), /wrong side/);
@@ -335,4 +337,33 @@ test("a flow can check state and language and route a lead to the right people",
   assert.equal(s.get("leads", a.id).owner, "u1");
   assert.equal(s.get("leads", b.id).owner, "");
   assert.deepEqual([s.get("leads", c.id).state, s.get("leads", c.id).language, s.get("leads", c.id).languageGuess], ["Karnataka", "Kannada", true]);
+});
+
+test("several When boxes: any of them starts the flow, each event once, and the test starts from the chosen one", async () => {
+  const s = setup();
+  const flow = {
+    nodes: [
+      { id: "new", type: "trigger", config: { type: "lead_created" } },
+      { id: "lang", type: "trigger", config: { type: "field_changed", field: "language" } },
+      { id: "if", type: "condition", config: { match: "all", conditions: [{ field: "language", op: "is", value: "Tamil" }] } },
+      { id: "give", type: "action", config: { type: "assign", to: "u3" } },
+    ],
+    edges: [{ from: "new", to: "if" }, { from: "lang", to: "if" }, { from: "if", port: "yes", to: "give" }],
+  };
+  s.wf.create({ name: "Language assignment", flow });
+  await s.wf.tick();
+  const l = s.lead({ name: "Murugan", language: "" });
+  await s.wf.tick();
+  assert.equal(s.get("leads", l.id).owner, "", "came in without a language: not assigned yet");
+  s.advance(60000);
+  s.put("leads", { ...s.get("leads", l.id), language: "Tamil", updatedAt: s.iso() });
+  await s.wf.tick();
+  assert.equal(s.get("leads", l.id).owner, "u3", "the language arriving later starts the same flow");
+  const runs = s.wf.list().runs;
+  assert.equal(runs.length, 1, "the first run did nothing, so it is not listed");
+  assert.match(runs[0].why, /Language/);
+  await s.wf.tick();
+  assert.equal(s.wf.list().runs.length, 1, "each event once");
+  const test = s.wf.dryRun({ name: "t", flow, from: "lang" }, l.id);
+  assert.match(JSON.stringify(test), /Language/);
 });
