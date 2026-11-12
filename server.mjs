@@ -1440,7 +1440,7 @@ const server = http.createServer(async (req, res) => {
         const lead = get("leads", leadMatch[1]);
         if (!lead) bad("Lead not found", 404);
         if (!isAdmin() && lead.owner && lead.owner !== identity.user.id) bad("This lead belongs to a colleague", 403);
-        if (!leadMatch[2] && req.method === "GET") { send(200, erpnext.forLead(lead.id)); return; }
+        if (!leadMatch[2] && req.method === "GET") { send(200, erpnext.forLead(lead.id, { seeInvoices: !identity || ["owner", "admin", "manager"].includes(workspaceAccess.profile(identity.user.id).role) })); return; }
         if (leadMatch[2] && req.method === "POST") { sameOrigin(); if (identity) workspaceAccess.requirePermission(identity, "leads.write"); send(200, await erpnext.createQuotation(lead.id, await body(req), identity?.user.name || "")); return; }
         bad("Method not allowed", 405);
       }

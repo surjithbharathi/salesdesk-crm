@@ -150,7 +150,7 @@ export function createErpnext({ db, all, get, put, log, keyPath, checkUrl = publ
     if (!lead) return { moved: 0, noted: 0 };
     let moved = 0, noted = 0;
     const def = KINDS[kind];
-    if (!before || before.status !== doc.status || Number(before.docstatus) !== Number(doc.docstatus)) {
+    if (kind === "Quotation" && (!before || before.status !== doc.status || Number(before.docstatus) !== Number(doc.docstatus))) {
       const what = Number(doc.docstatus) === 2 ? "Cancelled" : Number(doc.docstatus) === 0 ? "Draft" : doc.status || "Submitted";
       log(lead.id, "System", `ERPNext ${def.label} ${doc.name} · ${money(doc.grand_total)} · ${what}${kind === "Sales Invoice" && Number(doc.outstanding_amount) > 0 && Number(doc.docstatus) === 1 ? ` · ${money(doc.outstanding_amount)} due` : ""}`, { erp: { kind, name: doc.name } });
       noted++;
@@ -160,7 +160,7 @@ export function createErpnext({ db, all, get, put, log, keyPath, checkUrl = publ
       const p = PIPELINE.find((x) => x.name === step);
       const fresh = get("leads", lead.id);
       put("leads", { ...fresh, deal: step, stage: p.stage, disposition: p.disposition, updatedAt: new Date(now()).toISOString() });
-      log(lead.id, "System", `Pipeline step changed: ${fresh.deal || "none"} → ${step} · reason: ERPNext ${def.label.toLowerCase()} ${doc.name}`);
+      log(lead.id, "System", `Pipeline step changed: ${fresh.deal || "none"} → ${step} · reason: ${kind === "Quotation" ? `ERPNext quotation ${doc.name}` : "payment recorded in ERPNext"}`);
       moved++;
     }
     return { moved, noted };
@@ -196,19 +196,20 @@ export function createErpnext({ db, all, get, put, log, keyPath, checkUrl = publ
   }
 
   // what a lead's screen shows
-  function forLead(leadId) {
+  // invoices (and what is owed) only when seeInvoices: owners, admins and managers; quotations for everyone
+  function forLead(leadId, { seeInvoices = true } = {}) {
     const lead = get("leads", leadId);
     if (!lead) fail("Lead not found", 404);
     const s = raw(), phone = tail10(lead.phone);
     const rows = phone ? db.prepare("SELECT kind, body FROM erp_docs WHERE phone=? ORDER BY modified DESC LIMIT 200").all(phone).map((r) => JSON.parse(r.body)) : [];
     const pick = (kind) => rows.filter((d) => d.kind === kind && Number(d.docstatus) !== 2);
     const quotations = pick("Quotation").map((d) => ({ name: d.name, date: d.transaction_date, validTill: d.valid_till || "", total: Number(d.grand_total) || 0, status: Number(d.docstatus) === 0 ? "Draft" : d.status, party: d.customer_name || d.party_name }));
-    const invoices = pick("Sales Invoice").map((d) => ({ name: d.name, date: d.posting_date, due: d.due_date || "", total: Number(d.grand_total) || 0, outstanding: Number(d.outstanding_amount) || 0, status: Number(d.docstatus) === 0 ? "Draft" : d.status, party: d.customer_name || d.customer }));
+    const invoices = !seeInvoices ? [] : pick("Sales Invoice").map((d) => ({ name: d.name, date: d.posting_date, due: d.due_date || "", total: Number(d.grand_total) || 0, outstanding: Number(d.outstanding_amount) || 0, status: Number(d.docstatus) === 0 ? "Draft" : d.status, party: d.customer_name || d.customer }));
     const submitted = (list) => list.filter((d) => d.status !== "Draft");
     return {
       connected: ready(s), base: s.baseUrl,
-      quotations, invoices,
-      totals: { quoted: submitted(quotations).reduce((a, d) => a + d.total, 0), invoiced: submitted(invoices).reduce((a, d) => a + d.total, 0), outstanding: submitted(invoices).reduce((a, d) => a + d.outstanding, 0) },
+      quotations, invoices: seeInvoices ? invoices : null,
+      totals: { quoted: submitted(quotations).reduce((a, d) => a + d.total, 0), ...(seeInvoices ? { invoiced: submitted(invoices).reduce((a, d) => a + d.total, 0), outstanding: submitted(invoices).reduce((a, d) => a + d.outstanding, 0) } : {}) },
     };
   }
 

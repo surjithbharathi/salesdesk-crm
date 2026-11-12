@@ -69,14 +69,20 @@ test("the first read only takes stock; later quotations and invoices note the le
   assert.equal(get("leads", "L1").deal, "Quotation Shared");
   assert.ok(notes.some((n) => n.leadId === "L1" && /reason: ERPNext quotation Q-1/.test(n.text)));
   assert.equal(get("leads", "L2").deal, "Won", "a won lead is not moved back by an unpaid invoice");
-  assert.ok(notes.some((n) => n.leadId === "L2" && /Invoice I-1/.test(n.text)), "invoice found through the customer's mobile");
+  assert.deepEqual(api.forLead("L2").invoices.map((i) => i.name), ["I-1"], "invoice found through the customer's mobile");
+  assert.equal(notes.some((n) => /I-1|Invoice/.test(n.text)), false, "invoices are not written on the shared timeline");
   erp["Sales Invoice"].push({ name: "I-2", customer: "Durga", contact_mobile: "8639967636", grand_total: 224200, outstanding_amount: 100000, status: "Partly Paid", docstatus: 1, modified: "2026-11-12 11:00:00" });
   await api.sync();
   assert.equal(get("leads", "L1").deal, "Advance Received");
+  assert.ok(notes.some((n) => n.leadId === "L1" && /→ Advance Received · reason: payment recorded in ERPNext$/.test(n.text)), "a move by payment names no invoice or amount");
   const view = api.forLead("L1");
   assert.deepEqual(view.quotations.map((q) => q.name).sort(), ["Q-1", "Q-OLD"]);
   assert.equal(view.totals.outstanding, 100000);
   assert.equal(view.totals.quoted, 224300);
+  const caller = api.forLead("L1", { seeInvoices: false });
+  assert.equal(caller.invoices, null, "callers see no invoices");
+  assert.equal(caller.totals.outstanding, undefined, "nor what is owed");
+  assert.equal(caller.quotations.length, 2, "but they see the quotations");
 });
 
 test("pipeline steps from documents", () => {
