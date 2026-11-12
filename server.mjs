@@ -2,6 +2,7 @@ import {createSmtpEmail} from './smtp-email.mjs';
 import { createWaGateway, publicHttps } from "./wa-gateway.mjs";
 import { createSigninMethods } from "./signin-methods.mjs";
 import { createTelecrmMirror } from "./telecrm-mirror.mjs";
+import { createMarketplaceLeads } from "./marketplace-leads.mjs";
 import { createBlockedNumbers } from "./blocked-numbers.mjs";
 import { createKpi } from "./kpi.mjs";
 import { extname, resolve as resolvePath, sep } from "node:path";
@@ -531,6 +532,8 @@ const callAI = createCallAI({db,all,get,playback:mobile.playback,onLanguage:lang
 const smtpEmail=createSmtpEmail({db,keyPath:(process.env.CRM_DB||new URL('./data/crm.sqlite',import.meta.url).pathname)+'.smtp-key',origin:publicOrigin});
 // the one-way mirror of TeleCRM: it writes records directly (no per-lead uniqueness scan), the unique phone index still protects against duplicates
 const rawPut = (kind, v) => db.prepare("INSERT INTO records VALUES(?,?,?) ON CONFLICT(kind,id) DO UPDATE SET body=excluded.body").run(kind, v.id, JSON.stringify(v));
+// IndiaMART and TradeIndia enquiries read into leads on a schedule
+const marketplace = createMarketplaceLeads({ db, all, get, put, stamp, tx, log, keyPath: (process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname) + ".marketplace-key", report: (m) => console.error(m) });
 const salesmaxImport = createSalesmaxImport({ db, get, put: rawPut, tx, users: () => all("users") });
 const telecrm = createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecording: (callId, bytes) => mobile.importRecording(callId, bytes), shareTwins: () => mobile.shareTwins(), keyPath: (process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname) + ".telecrm-key", log: (m) => console.error(m) });
 const waGateway = createWaGateway({ db, all, get, put, stamp, tx, log, systemUser: process.env.CRM_OWNER_USER_ID || "", keyPath: (process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname) + ".wagw-key" });
@@ -1348,6 +1351,14 @@ const server = http.createServer(async (req, res) => {
         return;
       }
     }
+    // IndiaMART and TradeIndia leads: administrators only
+    if (url.pathname.startsWith("/api/marketplace/")) {
+      if (identity) workspaceAccess.requirePermission(identity, "integrations.manage");
+      if (url.pathname === "/api/marketplace/settings" && req.method === "GET") { send(200, marketplace.settings()); return; }
+      if (url.pathname === "/api/marketplace/settings" && req.method === "POST") { sameOrigin(); send(200, marketplace.save(await body(req))); return; }
+      if (url.pathname === "/api/marketplace/sync" && req.method === "POST") { sameOrigin(); const p = await body(req); send(200, await marketplace.sync(["indiamart", "tradeindia"].includes(p.source) ? p.source : "")); return; }
+      bad("Not found", 404);
+    }
     // the TeleCRM mirror: administrators only
     if (url.pathname.startsWith("/api/telecrm/")) {
       if (identity) workspaceAccess.requirePermission(identity, "integrations.manage");
@@ -1787,6 +1798,7 @@ function scheduleTelecrm() {
   }
 }
 scheduleTelecrm();
+marketplace.schedule();
 workflows.tick();
 setInterval(() => workflows.tick(), 30000).unref();
 server.listen(port, bindHost, () =>

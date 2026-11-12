@@ -8,6 +8,7 @@ import Email from "./settings/Email.jsx";
 import WhatsApp from "./settings/WhatsApp.jsx";
 import Gateway from "./settings/Gateway.jsx";
 import TelecrmMirror from "./settings/TelecrmMirror.jsx";
+import MarketplaceLeads from "./settings/MarketplaceLeads.jsx";
 import { Section, Loading, Failed } from "./settings/Parts.jsx";
 import CallAI from "./settings/CallAI.jsx";
 import Mcp from "./settings/Mcp.jsx";
@@ -85,6 +86,7 @@ export default function Settings({ params, me }) {
     ["integrations", "Integrations", can("integrations.manage"), <Integrations has={(key) => sections.some(([k, , allowed]) => k === key && allowed)} />, "Connections", "New enquiries from these come into Leads by themselves and are shared out by your assignment rules."],
     ["whatsapp", "WhatsApp", can("integrations.manage"), <WhatsApp />, "Connections", "Link a WhatsApp number by QR code so chats appear against the lead."],
     ["gateway", "WhatsApp gateway", can("integrations.manage"), <Gateway users={me.users} />, "Connections", "Connect the Devi WhatsApp gateway: customer messages become leads, and people reply from a lead."],
+    ["marketplace", "IndiaMART & TradeIndia", can("integrations.manage"), <MarketplaceLeads users={me.users} />, "Connections", "New IndiaMART and TradeIndia enquiries come into Leads by themselves."],
     ["telecrm", "TeleCRM copy", can("integrations.manage"), <TelecrmMirror />, "Connections", "Keep a read-only copy of TeleCRM here: team, leads, timelines and follow-ups."],
     ["email", "Email", can("integrations.manage"), <Email />, "Connections", "Mail settings used to send sign-in invitations and password resets."],
     ["mcp", "AI connections", admin, <Mcp />, "Connections", "Let AI assistants read and work with this CRM through keys you control."],

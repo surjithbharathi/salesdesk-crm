@@ -34,6 +34,7 @@ export default function Integrations({ has }) {
   const crm = useCrm();
   const none = () => Promise.resolve(null);
   const indiamart = useLoad(() => (has("indiamart") ? crmGet("indiamart/settings") : none()), []);
+  const market = useLoad(() => (has("marketplace") ? crmGet("marketplace/settings") : none()), []);
   const gateway = useLoad(() => (has("gateway") ? crmGet("wa-gateway/settings") : none()), []);
   const whatsapp = useLoad(() => (has("whatsapp") ? crmGet("whatsapp/status") : none()), []);
   const telecrm = useLoad(() => (has("telecrm") ? crmGet("telecrm/settings") : none()), []);
@@ -53,8 +54,12 @@ export default function Integrations({ has }) {
   const gwNumbers = gateway.data ? new Set([...Object.keys(gateway.data.seenNumbers || {}), ...Object.keys(gateway.data.numberOwners || {})]).size : 0;
   const gwState = stateOf(gateway, (d) => d.enabled, (d) => d.hasKey && d.hasSecret);
   const cards = [
-    has("indiamart") && <Card key="indiamart" k="indiamart" mark="IM" tone="red" name="IndiaMART" desc="Call enquiries linked to the buyer's lead, with recordings"
+    has("indiamart") && <Card key="indiamart" k="indiamart" mark="IM" tone="red" name="IndiaMART calls" desc="Call enquiries linked to the buyer's lead, with recordings"
       state={stateOf(indiamart, (d) => d.enabled, (d) => d.hasKey)} extra={{ note: todayNote("indiamart") }} />,
+    has("marketplace") && <Card key="im-leads" k="marketplace" mark="IM" tone="red" name="IndiaMART leads" desc="Direct enquiries, buy-leads and calls become leads"
+      state={stateOf(market, (d) => d.indiamart.enabled, (d) => d.indiamart.hasKey)} extra={{ note: todayNote("indiamart") }} />,
+    has("marketplace") && <Card key="ti-leads" k="marketplace" mark="TI" tone="blue" name="TradeIndia" desc="TradeIndia inquiries become leads"
+      state={stateOf(market, (d) => d.tradeindia.enabled, (d) => d.tradeindia.hasKey)} extra={{ note: todayNote("tradeindia") }} />,
     has("gateway") && <Card key="gateway" k="gateway" mark="W" tone="green" name="WhatsApp Business" desc="Chats and templates in Messages, through the Devi gateway"
       state={gwState} extra={gwState === "on" ? { pill: gwNumbers ? `${gwNumbers} ${gwNumbers === 1 ? "number" : "numbers"}` : "Connected", note: todayNote("whatsapp", "today") } : null} />,
     has("gateway") && <Card key="meta" k="gateway" mark="M" tone="blue" name="Meta ads" desc="Click-to-WhatsApp ad leads, arriving through the gateway"
