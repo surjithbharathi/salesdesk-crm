@@ -33,3 +33,21 @@ export function scopedState(all, userId) {
     leadViews: [],
   };
 }
+
+// The same rules for one record at a time, for the screen's "only what changed" updates: whether this person's screen
+// holds this record. `leadOf`, `dealOf` and `conversationOf` read the linked record (people already joined).
+export function visibleTo(kind, v, userId, { leadOf, dealOf, conversationOf }) {
+  const own = (leadId) => Boolean(leadId) && leadOf(leadId)?.owner === userId;
+  switch (kind) {
+    case "leads": return v.owner === userId;
+    case "users": return v.id === userId;
+    case "products": return true;
+    case "deals": return v.owner === userId && own(v.leadId);
+    case "conversations": case "activities": case "documents": return own(v.leadId);
+    case "tasks": case "tickets": return v.owner === userId && (!v.leadId || own(v.leadId));
+    case "payments": { const d = v.dealId && dealOf(v.dealId); return Boolean(d) && d.owner === userId && own(d.leadId); }
+    case "messages": { const c = v.conversationId && conversationOf(v.conversationId); return Boolean(c) && own(c.leadId); }
+    case "mobileCalls": { if (own(v.leadId)) return true; const l = v.leadId && leadOf(v.leadId); return Boolean(l) && v.owner === userId && l.owner === "" && l.createdBy === userId; }
+    default: return false;
+  }
+}
