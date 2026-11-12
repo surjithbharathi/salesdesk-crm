@@ -1295,6 +1295,10 @@ const server = http.createServer(async (req, res) => {
         if(identity.user.role!=='admin')bad('Administrator required',403);
         if(req.method!=='POST')bad('Method not allowed',405);
         sameOrigin();send(200,await callAI.models(await body(req)));
+      } else if(url.pathname==='/api/call-ai/retry-failed') {
+        if(identity.user.role!=='admin')bad('Administrator required',403);
+        if(req.method!=='POST')bad('Method not allowed',405);
+        sameOrigin();send(200,callAI.retryFailed());
       } else if(url.pathname==='/api/call-ai/status') {
         if(identity.user.role!=='admin')bad('Administrator required',403);
         if(req.method!=='GET')bad('Method not allowed',405);

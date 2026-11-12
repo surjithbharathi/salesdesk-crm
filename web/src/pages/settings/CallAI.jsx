@@ -19,6 +19,14 @@ const stamp = (iso) => (iso ? new Date(iso).toLocaleString("en-IN", { day: "nume
 const JOB = { complete: "Summary done", error: "Failed", queued: "Waiting its turn", waiting: "Transcribing", processing: "Transcribing" };
 function Status() {
   const [tick, setTick] = useState(0);
+  const [retrying, setRetrying] = useState(false);
+  const notify = useToast();
+  async function retry() {
+    setRetrying(true);
+    try { const r = await crmSend("POST", "call-ai/retry-failed", {}); notify(`${r.retried} recording${r.retried === 1 ? "" : "s"} sent again`); setTick((t) => t + 1); }
+    catch (e) { notify(e.message); }
+    finally { setRetrying(false); }
+  }
   const status = useLoad(() => crmGet("call-ai/status"), [tick]);
   if (status.error) return <Failed>{status.error.message}</Failed>;
   if (!status.data) return <Loading>Checking call AI…</Loading>;
@@ -48,7 +56,7 @@ function Status() {
       </div>
       {d.failedJobs?.length > 0 && (
         <>
-          <p className="sec-line cai-head">Failed ({d.failedJobs.length})</p>
+          <p className="sec-line cai-head">Failed ({d.failedJobs.length}) <button type="button" className="btn cai-retry" disabled={retrying} onClick={retry}>Retry failed</button></p>
           <ul className="cai-jobs" aria-label="Failed jobs">{d.failedJobs.map(row)}</ul>
         </>
       )}

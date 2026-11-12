@@ -219,8 +219,11 @@ export function createCallAI({db,keyPath,all,get,playback,fetcher=fetch,onLangua
     const previous=readJob(id); if(['queued','processing','waiting','complete'].includes(previous.status))return previous;
     const job={...previous,status:'queued',recordingId:id,leadId:call.leadId,updatedAt:new Date().toISOString()};store(id,call.leadId,job);return job;
   }
-  // Never repeat an interrupted paid request automatically after a restart.
-  for(const row of db.prepare("SELECT recording_id,lead_id FROM call_ai_jobs WHERE status='processing'").all()) {const job=readJob(row.recording_id);store(row.recording_id,row.lead_id,{...job,status:'error',error:'Processing interrupted. Review and retry explicitly.'});}
+  // Never repeat an interrupted paid request automatically after a restart. A Sarvam batch already handed over is
+  // only waited on again (no new request, no new cost); anything else stops as failed until someone retries it.
+  for(const row of db.prepare("SELECT recording_id,lead_id FROM call_ai_jobs WHERE status='processing'").all()) {const job=readJob(row.recording_id);store(row.recording_id,row.lead_id,job.batch?.id&&!job.transcript?{...job,status:'waiting'}:{...job,status:'error',error:'Processing interrupted. Review and retry explicitly.'});}
+  // Settings > Call AI "Retry failed": each failed job starts again from the recording (a new provider request)
+  function retryFailed(){let n=0;for(const row of db.prepare("SELECT recording_id,lead_id FROM call_ai_jobs WHERE status='error'").all()){let job={};try{job=readJob(row.recording_id);}catch{/* unreadable: start clean */}store(row.recording_id,row.lead_id,{recordingId:row.recording_id,leadId:row.lead_id,status:'queued',retriedAt:new Date().toISOString(),updatedAt:new Date().toISOString()});n++;}return {retried:n};}
   let busy=false;
   async function tick() {
     if(busy)return;busy=true;
@@ -288,7 +291,7 @@ export function createCallAI({db,keyPath,all,get,playback,fetcher=fetch,onLangua
       week:{total:recent.length,phone:recent.filter(x=>x.deviceId!=='telecrm').length,telecrm:recent.filter(x=>x.deviceId==='telecrm').length},
       done:counts.complete||0,waiting:(counts.queued||0)+(counts.waiting||0)+(counts.processing||0),failed:counts.error||0,jobs,failedJobs};
   }
-  return {publicSettings,save,enqueue,tick,vaultList,saveKey,spokenOf,status,async models(input){
+  return {publicSettings,save,enqueue,tick,vaultList,saveKey,spokenOf,status,retryFailed,async models(input){
     if(typeof input.key!=='undefined'&&(typeof input.key!=='string'||input.key.length>4096))fail('Invalid API key');
     const saved=settings()[input.part];
     return listModels({...input,key:input.keyId?resolveKey(input.keyId,input.provider):(input.key||(canonicalProvider(saved?.provider)===canonicalProvider(input.provider)?saved.key:''))},fetcher);
