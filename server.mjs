@@ -1311,7 +1311,8 @@ const server = http.createServer(async (req, res) => {
       await handleKpi(req, url, identity, send, () => body(req));
       return;
     }
-    if (member) {
+    // the allow-list is for API addresses only: the app's own pages and files are public, so a member's refresh loads them
+    if (member && url.pathname.startsWith("/api/")) {
       const allowedRead =
         [
           "/api/state",
