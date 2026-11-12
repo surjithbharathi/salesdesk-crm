@@ -1310,7 +1310,7 @@ const server = http.createServer(async (req, res) => {
     if(identity){
       if(url.pathname==='/api/email/settings'){workspaceAccess.requirePermission(identity,'integrations.manage');if(req.method==='GET')send(200,smtpEmail.settings());else if(req.method==='POST'){sameOrigin();send(200,smtpEmail.save(await body(req)));}else bad('Method not allowed',405);return;}
       if(url.pathname==='/api/email/test'&&req.method==='POST'){workspaceAccess.requirePermission(identity,'integrations.manage');sameOrigin();send(200,await smtpEmail.send({to:(await body(req)).to,purpose:'test',actor:identity.user.id}));return;}
-      const emailUser=/^\/api\/workspace\/users\/([a-f0-9-]{36})\/email-setup$/.exec(url.pathname);
+      const emailUser=/^\/api\/workspace\/users\/([\w-]{1,64})\/email-setup$/.exec(url.pathname);
       if(emailUser&&req.method==='POST'){sameOrigin();workspaceAccess.requirePermission(identity,'users.manage');const target=get('users',emailUser[1]);if(!target?.email)bad('Add an email address for this user first');const reset=workspaceAccess.reset(identity,emailUser[1]);send(200,await smtpEmail.send({to:target.email,purpose:'reset',setupUrl:reset.setupUrl,actor:identity.user.id}));return;}
       // "same person" links: owners and admins join a TeleCRM copy of a person to their real login
       if(url.pathname==='/api/workspace/user-links'){
@@ -1333,7 +1333,7 @@ const server = http.createServer(async (req, res) => {
       if(url.pathname==='/api/workspace/access'&&req.method==='GET'){send(200,{...workspaceAccess.profile(identity.user.id),name:db.prepare("SELECT value FROM auth_settings WHERE key='company'").get()?.value||'Workspace'});return;}
       if(url.pathname==='/api/workspace/users'&&req.method==='GET'){send(200,workspaceAccess.list(identity));return;}
       if(url.pathname==='/api/workspace/users'&&req.method==='POST'){sameOrigin();const input=await body(req);if(input.sendEmail&&!smtpEmail.settings().enabled)bad('Configure and enable SMTP before sending invitations');const result=workspaceAccess.invite(identity,input);if(input.sendEmail){try{await smtpEmail.send({to:input.email,purpose:'invitation',setupUrl:result.setupUrl,actor:identity.user.id});result.emailStatus='accepted';}catch{result.emailStatus='failed';}}send(201,result);return;}
-      const accessUser=/^\/api\/workspace\/users\/([a-f0-9-]{36})(?:\/(setup-link))?$/.exec(url.pathname);
+      const accessUser=/^\/api\/workspace\/users\/([\w-]{1,64})(?:\/(setup-link))?$/.exec(url.pathname);
       if(accessUser&&['PATCH','POST'].includes(req.method)){sameOrigin();send(200,accessUser[2]?workspaceAccess.reset(identity,accessUser[1]):workspaceAccess.update(identity,accessUser[1],await body(req)));return;}
       const numbersUser=/^\/api\/workspace\/users\/([\w-]{1,64})\/numbers$/.exec(url.pathname);
       if(numbersUser&&req.method==='PUT'){sameOrigin();send(200,workspaceAccess.setNumbers(identity,numbersUser[1],await body(req)));return;}

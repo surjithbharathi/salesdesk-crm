@@ -1,3 +1,4 @@
+import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -120,6 +121,18 @@ test("KPI endpoints: team vs caller scope, goals need the owner, same-origin wri
     assert.equal((await json(path, { headers: { Cookie: ownerCookie } })).status, 200, path);
   }
   assert.equal((await json("/api/workspace/access", { headers: { Cookie: callerCookie } })).status, 200);
+  // people copied from TeleCRM have ids like "tc-user-…", not UUIDs: their access must still be editable
+  const seed = new DatabaseSync(join(dir, "crm.sqlite"));
+  seed.prepare("INSERT INTO records VALUES('users',?,?)").run("tc-user-0123abcd", JSON.stringify({ id: "tc-user-0123abcd", name: "Office Phone", role: "Sales representative", active: true }));
+  seed.close();
+  const tcInvite = await post("/api/workspace/users", { userId: "tc-user-0123abcd", name: "Office Phone", username: "office@example.test", role: "member" }, ownerCookie);
+  assert.equal(tcInvite.status, 201, JSON.stringify(tcInvite.data));
+  const patch = (id, payload, cookie) => json(`/api/workspace/users/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json", Origin: base, Cookie: cookie }, body: JSON.stringify(payload) });
+  const tcPatch = await patch("tc-user-0123abcd", { role: "admin", active: true, email: "office@example.test", permissions: {} }, ownerCookie);
+  assert.equal(tcPatch.status, 200, JSON.stringify(tcPatch.data));
+  assert.equal((await post("/api/workspace/users/tc-user-0123abcd/setup-link", {}, ownerCookie)).status, 200);
+  assert.equal((await patch("tc-user-0123abcd", { role: "member", active: true, permissions: {} }, callerCookie)).status, 403);
+  assert.equal((await patch("bad id!", { role: "admin", active: true, permissions: {} }, ownerCookie)).status, 404);
   // the phone app reads the signed-in person's own day from the device API
   const mobileBase = `http://127.0.0.1:${port + 1}`;
   assert.equal((await fetch(mobileBase + "/v1/kpi/day")).status, 401);
