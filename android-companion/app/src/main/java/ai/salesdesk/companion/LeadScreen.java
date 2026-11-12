@@ -28,6 +28,9 @@ import org.json.JSONObject;
  */
 final class LeadScreen {
     private static final String[][] STAGES = {{"New", "New"}, {"Prospecting", "Discussion"}, {"Opportunity", "Interested customer"}, {"Quotation given", "Quotation given"}, {"Closed", "Closed"}};
+    // the Devi pipeline steps, in the order the web shows them (pipeline.mjs); picking one sets the basic stage on the server
+    private static final String[] PIPELINE = {"New", "Requirement Discussion", "Interested Customer", "Quotation Shared", "Loan Document Collected",
+        "Loan in Process", "Advance Received", "Machine Dispatched", "Machine Delivered - Need to Start", "Won", "Later Purchase", "Lost"};
     private static final String[] STATES = {"Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand",
         "Karnataka", "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab", "Rajasthan",
         "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal",
@@ -382,9 +385,9 @@ final class LeadScreen {
     }
 
     private void chooseStage() {
-        String[] labels = new String[STAGES.length];
-        for (int i = 0; i < STAGES.length; i++) labels[i] = STAGES[i][1];
-        new AlertDialog.Builder(a).setTitle("Stage").setItems(labels, (d, w) -> save("PATCH", "/v1/leads/" + id, put("stage", STAGES[w][0]), "Stage changed")).show();
+        String now = stageLabel(); int current = -1;
+        for (int i = 0; i < PIPELINE.length; i++) if (PIPELINE[i].equalsIgnoreCase(now)) current = i;
+        new AlertDialog.Builder(a).setTitle("Stage").setSingleChoiceItems(PIPELINE, current, (d, w) -> { d.dismiss(); if (w == 0) save("PATCH", "/v1/leads/" + id, put("stage", "New"), "Stage changed"); else save("PATCH", "/v1/leads/" + id, put("deal", PIPELINE[w]), "Stage changed to " + PIPELINE[w]); }).setNegativeButton("Cancel", null).show();
     }
 
     private void edit(String label, String key) {
