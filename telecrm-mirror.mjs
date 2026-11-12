@@ -292,7 +292,13 @@ export function createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecor
     importActions(lead, actions, ctx);
     // the follow-up date is the task: it stays open while the lead is live and is closed when TeleCRM clears it or the deal ends
     const due = msOf(next_followup), taskId = "tct-" + tid, oldTask = get("tasks", taskId), live = !map.disposition;
-    if (due && live) {
+    // a follow-up changed in the CRM (new date, done) keeps that change while TeleCRM still holds the date it had then;
+    // a new date set in TeleCRM itself takes over again
+    if (due && live && oldTask?.tcDue && oldTask.tcDue === new Date(due).toISOString()) {
+      if (oldTask.leadId !== lead.id || oldTask.owner !== owner) rawPut("tasks", { ...oldTask, leadId: lead.id, owner, updatedAt: new Date(now()).toISOString() });
+      ctx.counts.tasks++;
+    } else if (due && live) {
+      if (oldTask?.tcDue) delete oldTask.tcDue;
       rawPut("tasks", { ...(oldTask || {}), id: taskId, title: `Follow up with ${lead.name}`, leadId: lead.id, owner, status: oldTask && oldTask.due === new Date(due).toISOString() && oldTask.status === "Done" ? "Done" : "Open", due: new Date(due).toISOString(), origin: "TeleCRM", createdAt: oldTask?.createdAt || new Date(now()).toISOString(), updatedAt: new Date(now()).toISOString() });
       ctx.counts.tasks++;
     } else if (oldTask && oldTask.status !== "Done") {

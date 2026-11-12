@@ -331,3 +331,29 @@ test("a real source found here is not overwritten by TeleCRM's \"Excel\"; a real
   assert.equal(w.get("leads", "smx").createdAt, "2025-08-01T05:00:00.000Z", "the earlier real date stays");
   assert.equal(w.get("leads", "two").source, "TradeIndia");
 });
+
+test("a TeleCRM follow-up moved or done in the CRM stays so, until TeleCRM sets another date", async (t) => {
+  const w = world(t);
+  connect(w);
+  w.tele.leads = [lead("aaa", {}, { "next_follow-up_on": 1801000000000 })];
+  await w.mirror.sync();
+  const tcDue = new Date(1801000000000).toISOString(), moved = new Date(1801500000000).toISOString();
+  // what the CRM's task save keeps when someone changes it: the new date, and the date TeleCRM had
+  w.rawPut("tasks", { ...w.get("tasks", "tct-aaa"), due: moved, tcDue });
+  w.tick(120000);
+  await w.mirror.sync();
+  assert.equal(w.get("tasks", "tct-aaa").due, moved, "the CRM's new date stays");
+  w.rawPut("tasks", { ...w.get("tasks", "tct-aaa"), status: "Done" });
+  w.tick(120000);
+  await w.mirror.sync();
+  assert.equal(w.get("tasks", "tct-aaa").status, "Done", "done stays done");
+  // TeleCRM gets a new follow-up date: that one is the follow-up now
+  w.tele.leads = [lead("aaa", {}, { "next_follow-up_on": 1802000000000, modified_on: 3 })];
+  w.tele.touched = new Set(["aaa"]);
+  w.tick(120000);
+  await w.mirror.sync();
+  const task = w.get("tasks", "tct-aaa");
+  assert.equal(task.due, new Date(1802000000000).toISOString());
+  assert.equal(task.status, "Open");
+  assert.equal(task.tcDue, undefined);
+});

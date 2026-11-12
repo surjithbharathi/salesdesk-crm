@@ -334,6 +334,8 @@ function validate(kind, p, old = {}) {
       "",
     );
     v.origin = old.origin || "User";
+    // a TeleCRM follow-up changed here (new date, done) stays changed: the TeleCRM copy keeps the change until TeleCRM sets another date
+    if (old.origin === "TeleCRM" && (v.due !== old.due || v.status !== old.status)) v.tcDue = old.tcDue || old.due;
     if (!v.title || !v.due) bad("Task title and due date required");
   }
   if (kind === "deals") {
