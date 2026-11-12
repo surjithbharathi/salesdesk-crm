@@ -59,7 +59,7 @@ function world(t) {
     return { ok: false, status: 404, json: async () => ({}) };
   };
   const mirror = createTelecrmMirror({ db, all, get, put: rawPut, rawPut, tx, attachRecording, now: () => clock, keyPath: join(dir, "key"), fetchImpl });
-  return { mirror, all, get, rawPut, tele, audio, tick: (ms) => { clock += ms; } };
+  return { mirror, db, all, get, rawPut, tele, audio, tick: (ms) => { clock += ms; } };
 }
 const lead = (id, over = {}, f = {}) => ({ id, employeeid: "bala@deviindustries.com", status: "New Lead", rating: 2, score: 10, fields: { name: "Customer " + id, phone: "9198765" + String(id.length * 11111).padStart(5, "0").slice(0, 5), lead_source: "IndiaMart", created_on: 1799000000000, modified_on: 1, last_activity_on: 1, ...f }, ...over });
 const connect = (w) => w.mirror.save({ enterpriseId: "6aa78f9ca033a69fb29aaa60", token: "sync-token-1", enabled: true });
@@ -443,4 +443,18 @@ test("a field TeleCRM turns down is kept as the outbox entry's error", async (t)
   w.tele.remarks = [{ field: "fields.state", status: "IGNORED", remark: "Not an option" }];
   await w.mirror.push();
   assert.match(w.mirror.settings().outbox.recent[0].error, /state: Not an option/);
+});
+
+test("someone removed in the CRM is not copied back from TeleCRM's team", async (t) => {
+  const w = world(t);
+  connect(w);
+  await w.mirror.sync();
+  const sathiya = w.all("users").find((u) => u.email === "sathiya@deviindustries.com");
+  assert.ok(sathiya, "copied at first");
+  w.db.exec("CREATE TABLE IF NOT EXISTS removed_users(id TEXT PRIMARY KEY,email TEXT,name TEXT,at TEXT)");
+  w.db.prepare("INSERT INTO removed_users VALUES(?,?,?,?)").run(sathiya.id, sathiya.email, sathiya.name, new Date().toISOString());
+  w.db.prepare("DELETE FROM records WHERE kind='users' AND id=?").run(sathiya.id);
+  w.tick(120000);
+  await w.mirror.sync();
+  assert.equal(w.all("users").some((u) => u.email === "sathiya@deviindustries.com"), false);
 });

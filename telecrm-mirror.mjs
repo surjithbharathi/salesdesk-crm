@@ -223,9 +223,13 @@ export function createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecor
     const existing = all("users"), byEmail = new Map(), byName = new Map();
     for (const u of existing) { if (u.telecrmEmail) byEmail.set(u.telecrmEmail, u); if (u.email) byEmail.set(String(u.email).toLowerCase(), u); byName.set(norm(u.name), u); }
     let added = 0, updated = 0;
+    // someone removed in the CRM stays removed, even while TeleCRM still lists them
+    let gone = { ids: new Set(), emails: new Set() };
+    try { const rows = db.prepare("SELECT id, email FROM removed_users").all(); gone = { ids: new Set(rows.map((r) => r.id)), emails: new Set(rows.map((r) => r.email).filter(Boolean)) }; } catch { /* no one removed yet */ }
     for (const m of members) {
       const email = String(m.email || "").toLowerCase();
       if (!email) continue;
+      if (gone.emails.has(email) || gone.ids.has("tc-user-" + createHash("sha1").update(email).digest("hex").slice(0, 16))) continue;
       const template = text(m.permission_template_name, 100), role = /caller|agent/i.test(template) ? "Sales representative" : "Manager";
       const cur = byEmail.get(email) || (norm(m.name) && byName.get(norm(m.name)));
       const next = {
