@@ -55,7 +55,11 @@ export function CrmProvider({ me, children }) {
       if (seq.current != null) {
         const from = seq.current;
         const delta = await crmGet(`state/changes?after=${from}`);
-        if (!delta.full) {
+        // a staff member's screen holds only their own leads: an older lead just given to them brings its past calls and
+        // notes, which only the whole load has, so that one case loads everything again
+        const have = delta.scoped && new Set((latest.current?.leads || []).map((l) => l.id));
+        const handedOver = have && (delta.changes?.leads || []).some((l) => !have.has(l.id) && Date.now() - Date.parse(l.createdAt || 0) > 600000);
+        if (!delta.full && !handedOver) {
           seq.current = delta.syncSeq;
           if (Object.keys(delta.changes || {}).length || Object.keys(delta.deleted || {}).length) {
             setState((s) => (s ? mergeChanges(s, delta) : s));

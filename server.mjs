@@ -32,7 +32,7 @@ import { createWhatsApp, phoneDigits } from "./whatsapp.mjs";
 import { createMobileSync, MAX_AUDIO } from "./mobile-sync.mjs";
 import { PIPELINE } from "./pipeline.mjs";
 import { createUserAuth } from "./user-auth.mjs";
-import { scopedState } from "./user-scope.mjs";
+import { scopedState, visibleTo } from "./user-scope.mjs";
 import { createClickToCall } from "./click-to-call.mjs";
 import { bridgeConfig, createAutomationBridge } from "./automation-bridge.mjs";
 import { createWorkflows } from "./workflows.mjs";
@@ -1338,6 +1338,7 @@ const server = http.createServer(async (req, res) => {
       const allowedRead =
         [
           "/api/state",
+          "/api/state/changes",
           "/api/mobile/devices",
           "/api/wa-gateway/status",
           "/api/whatsapp/status",
@@ -1419,7 +1420,7 @@ const server = http.createServer(async (req, res) => {
       const after = Number(url.searchParams.get("after"));
       const seq = changeSeq();
       const oldest = db.prepare("SELECT COALESCE(MIN(seq),0) AS s FROM record_changes").get().s;
-      if (member || !Number.isInteger(after) || after < 0 || after > seq || (after < oldest - 1 && after !== seq)) { send(200, { full: true }); return; }
+      if (!Number.isInteger(after) || after < 0 || after > seq || (after < oldest - 1 && after !== seq)) { send(200, { full: true }); return; }
       const rows = db.prepare("SELECT DISTINCT kind, id FROM record_changes WHERE seq > ? LIMIT 3001").all(after);
       const shown = new Set([...kinds, "mobileCalls"]);
       const relevant = rows.filter((r) => shown.has(r.kind));
@@ -1428,6 +1429,9 @@ const server = http.createServer(async (req, res) => {
       const calls = !id || workspaceAccess.can(id, "calls.read"), messages = !id || workspaceAccess.can(id, "messages.read");
       const links = userLinks();
       const changes = {}, deleted = {};
+      // a staff member's screen holds only their own leads and what belongs to them (user-scope.mjs): the same rules, one record at a time
+      const linkedOne = (k, rid) => { const r = rid && db.prepare("SELECT body FROM records WHERE kind=? AND id=?").get(k, rid); return r ? unalias(k, [JSON.parse(r.body)], links)[0] : null; };
+      const scopeLookups = { leadOf: (x) => linkedOne("leads", x), dealOf: (x) => linkedOne("deals", x), conversationOf: (x) => linkedOne("conversations", x) };
       for (const { kind, id: recordId } of relevant) {
         const row = db.prepare("SELECT body FROM records WHERE kind=? AND id=?").get(kind, recordId);
         let value = row ? JSON.parse(row.body) : null;
@@ -1436,10 +1440,12 @@ const server = http.createServer(async (req, res) => {
         if (value && kind === "tasks" && value.importedFrom && value.status === "Done") value = null;
         if (value && kind === "mobileCalls" && !calls) value = null;
         if (value && (kind === "messages" || kind === "conversations") && !messages) value = null;
-        if (value) (changes[kind] ||= []).push(unalias(kind, [value], links)[0]);
+        if (value) value = unalias(kind, [value], links)[0];
+        if (value && member && !visibleTo(kind, value, id, scopeLookups)) value = null;
+        if (value) (changes[kind] ||= []).push(value);
         else (deleted[kind] ||= []).push(recordId);
       }
-      send(200, { syncSeq: seq, changes, deleted });
+      send(200, { syncSeq: seq, changes, deleted, ...(member ? { scoped: true } : {}) });
       return;
     }
     if (url.pathname === "/api/state" && req.method === "GET") {

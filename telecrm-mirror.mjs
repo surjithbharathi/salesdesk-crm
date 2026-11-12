@@ -235,8 +235,10 @@ export function createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecor
         active: m.status === "Working" || m.status === "On Leave", telecrmEmail: email, telecrmRole: template, telecrmStatus: text(m.status, 40),
         telecrmManager: m.manager_email || "", updatedAt: new Date(now()).toISOString(),
       };
-      put("users", next);
-      byEmail.set(email, next);
+      // saved only when something about the person changed: a re-save on every run made every screen load the whole CRM again
+      const same = cur && JSON.stringify({ ...cur, updatedAt: "" }) === JSON.stringify({ ...next, updatedAt: "" });
+      if (!same) put("users", next);
+      byEmail.set(email, same ? cur : next);
       cur ? updated++ : added++;
     }
     return { added, updated, byEmail };

@@ -46,3 +46,39 @@ test("a member's refresh loads the app pages while admin APIs stay closed", asyn
   assert.equal((await req("/api/marketplace/settings", "GET", undefined, member)).status, 403);
   assert.equal((await req("/api/workspace/user-links", "GET", undefined, member)).status, 403);
 });
+
+test("a member's screen gets only what changed, and only their own leads", async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), "salesdesk-member-delta-"));
+  const base = "http://127.0.0.1:3495";
+  const child = spawn(process.execPath, ["server.mjs"], { cwd: new URL(".", import.meta.url), env: { ...process.env, CRM_DB: join(dir, "test.sqlite"), PORT: "3495", MOBILE_PORT: "3494" }, stdio: ["ignore", "pipe", "pipe"] });
+  t.after(async () => { if (child.exitCode === null && child.signalCode === null) { const exited = once(child, "exit"); child.kill("SIGTERM"); await exited; } await rm(dir, { recursive: true, force: true }); });
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(Error("Server timeout")), 10000);
+    child.stdout.on("data", (d) => { if (String(d).includes("Salesdesk CRM:")) { clearTimeout(timer); resolve(); } });
+  });
+  const req = async (path, method = "GET", body, headers = {}) => {
+    const r = await fetch(base + path, { method, headers: { ...(body ? { "Content-Type": "application/json" } : {}), Origin: base, ...headers }, ...(body ? { body: JSON.stringify(body) } : {}) });
+    return { status: r.status, json: await r.json().catch(() => null), cookie: r.headers.get("set-cookie") };
+  };
+  const users = (await req("/api/auth/status")).json.users;
+  const boot = await req("/api/auth/bootstrap", "POST", { userId: users[0].id, username: "owner@example.test", password: "Owner-password-123", company: "Synthetic" });
+  const admin = { Cookie: boot.cookie.split(";")[0] };
+  const invited = (await req("/api/workspace/users", "POST", { name: "Synthetic caller", username: "caller", role: "member" }, admin)).json;
+  const token = new URLSearchParams(new URL(invited.setupUrl, base).hash.slice(1)).get("token");
+  await req("/api/auth/reset", "POST", { token, password: "Caller-password-123" });
+  const login = await req("/api/auth/login", "POST", { username: "caller", password: "Caller-password-123" });
+  const member = { Cookie: login.cookie.split(";")[0] }, me = login.json.user.id;
+  const start = (await req("/api/state", "GET", undefined, member)).json.syncSeq;
+  const mine = (await req("/api/leads", "POST", { name: "Mine", phone: "+919800000101", owner: me, source: "Test" }, admin)).json;
+  const theirs = (await req("/api/leads", "POST", { name: "Theirs", phone: "+919800000102", owner: users[0].id, source: "Test" }, admin)).json;
+  await req("/api/activities", "POST", { leadId: mine.id, type: "Note", text: "Called, wants a quote" }, member);
+  const d = await req(`/api/state/changes?after=${start}`, "GET", undefined, member);
+  assert.equal(d.status, 200);
+  assert.notEqual(d.json.full, true, "a member is no longer sent the whole CRM again");
+  assert.equal(d.json.scoped, true);
+  assert.deepEqual(d.json.changes.leads.map((l) => l.name), ["Mine"]);
+  assert.ok(d.json.changes.activities.some((a) => a.text === "Called, wants a quote"));
+  assert.ok(!JSON.stringify(d.json.changes).includes("Theirs"), "nobody else's lead is sent");
+  assert.ok(!(d.json.deleted.leads || []).includes(mine.id));
+  assert.ok((d.json.deleted.leads || []).includes(theirs.id), "another person's lead is only named as not shown");
+});
