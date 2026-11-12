@@ -1781,6 +1781,11 @@ const server = http.createServer(async (req, res) => {
                   : "Lead created",
           );
           if (stepChanged && old.stage !== record.stage) log(record.id, "System", `Pipeline step changed: ${old.deal || "none"} → ${record.deal}`);
+          // a new owner is always written down with who made the change, so a lead that moved can be traced
+          if (old && (old.owner || "") !== (record.owner || "")) {
+            const who = (uid) => (uid && get("users", uid)?.name) || "nobody";
+            log(record.id, "System", `Owner changed: ${who(old.owner)} → ${who(record.owner)} · reason: changed by ${identity?.user?.name || "someone"} in the CRM`);
+          }
         }
         if (kind === "tasks" && record.leadId)
           log(
