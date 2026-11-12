@@ -270,7 +270,9 @@ export function createCallAI({db,keyPath,all,get,playback,fetcher=fetch,onLangua
     const counts={};for(const r of db.prepare('SELECT status,COUNT(*) n FROM call_ai_jobs GROUP BY status').all())counts[r.status]=r.n;
     const at=c=>Number(c.startedAt)||Date.parse(c.createdAt||'')||0, now=Date.now(), week=now-7*86400000;
     const calls=(all?all('mobileCalls'):[]).filter(c=>c.recordingId), byRec=new Map(calls.map(c=>[c.recordingId,c]));
-    const last=calls.reduce((m,c)=>Math.max(m,at(c)),0), recent=calls.filter(c=>at(c)>=week);
+    // when the recording reached the CRM (recordingAt, kept from now on), else the call's own time
+    const got=c=>Date.parse(c.recordingAt||'')||at(c);
+    const last=calls.reduce((m,c)=>Math.max(m,got(c)),0), recent=calls.filter(c=>got(c)>=week);
     const row=r=>{
       let j={};try{j=readJob(r.recording_id);}catch{/* unreadable job: shown with its status only */}
       const c=byRec.get(r.recording_id);

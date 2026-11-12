@@ -255,7 +255,7 @@ export function createMobileSync({ db, all, get, put, stamp, tx, log, keyPath, o
         mime,
         Buffer.concat([iv, cipher.getAuthTag(), encrypted]),
       );
-      put("mobileCalls", { ...c, recordingId: id, matchMode: meta.mode });
+      put("mobileCalls", { ...c, recordingId: id, matchMode: meta.mode, recordingAt: new Date().toISOString() });
       const activity = get("activities", c.activityId);
       put("activities", { ...activity, recordingId: id });
       log(
@@ -313,7 +313,7 @@ export function createMobileSync({ db, all, get, put, stamp, tx, log, keyPath, o
     const encrypted = Buffer.concat([cipher.update(bytes), cipher.final()]);
     tx(() => {
       db.prepare("INSERT INTO mobile_audio VALUES(?,?,?,?,?,?)").run(id, c.deviceId, c.id, hash(bytes), mime, Buffer.concat([iv, cipher.getAuthTag(), encrypted]));
-      put("mobileCalls", { ...c, recordingId: id, matchMode: "import" });
+      put("mobileCalls", { ...c, recordingId: id, matchMode: "import", recordingAt: new Date().toISOString() });
       const activity = get("activities", c.activityId);
       if (activity) put("activities", { ...activity, recordingId: id });
     });

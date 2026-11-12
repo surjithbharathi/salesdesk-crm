@@ -775,10 +775,11 @@ const mobileServer = http.createServer(async (req, res) => {
     if (
       identity &&
       ["POST", "PATCH"].includes(req.method) &&
-      /^\/v1\/(leads|tasks|notes)(?:\/[a-f0-9-]{36})?$/.test(url.pathname)
+      /^\/v1\/(leads|tasks|notes)(?:\/[A-Za-z0-9_-]{1,80})?$/.test(url.pathname) && url.pathname !== "/v1/leads/merge"
     ) {
       if (req.headers["content-type"]?.split(";")[0] !== "application/json")
         bad("JSON required", 415);
+      // ids are UUIDs for records made here and tc-… / tct-… for ones copied from TeleCRM: both are edited from the phone
       const [, , kind, id] = url.pathname.split("/");
       const p = await body(req),
         userId = identity.user.id;

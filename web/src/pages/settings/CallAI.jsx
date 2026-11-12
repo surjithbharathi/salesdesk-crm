@@ -16,7 +16,7 @@ const canonical = (p) => (p === "openai-audio" ? "openai" : p);
 // is call AI working: when the last recording came, what is done, waiting or failed, and the latest jobs with their errors
 const DAY = 86400000;
 const stamp = (iso) => (iso ? new Date(iso).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) : "");
-const JOB = { complete: "Summary done", error: "Failed", queued: "Waiting", waiting: "With the provider", processing: "Working on it" };
+const JOB = { complete: "Summary done", error: "Failed", queued: "Waiting its turn", waiting: "Transcribing", processing: "Transcribing" };
 function Status() {
   const [tick, setTick] = useState(0);
   const status = useLoad(() => crmGet("call-ai/status"), [tick]);
@@ -30,10 +30,14 @@ function Status() {
     </li>
   );
   const d = status.data, quietDays = d.lastRecordingAt ? Math.floor((Date.now() - Date.parse(d.lastRecordingAt)) / DAY) : null;
-  const pill = !d.enabled ? ["Off", "off"] : d.failed ? [`${d.failed} failed`, "bad"] : quietDays === null || quietDays >= 2 ? ["No new recordings", "warn"] : ["Working", "ok"];
+  const quiet = !d.waiting && (quietDays === null || quietDays >= 2);
+  const pill = !d.enabled ? ["Off", "off"] : d.waiting ? [`Transcribing ${d.waiting}`, "ok"] : d.failed ? [`${d.failed} failed`, "bad"] : quiet ? ["No new recordings", "warn"] : ["Working", "ok"];
   return (
     <Section title="Status" desc="Whether recordings still reach the CRM and what call AI did with them." status={pill[0]} tone={pill[1]}>
-      {d.enabled && (quietDays === null || quietDays >= 2) && (
+      {d.enabled && d.waiting > 0 && (
+        <Note>{d.waiting} recording{d.waiting === 1 ? " is" : "s are"} being transcribed, one after another. About {Math.max(1, Math.ceil(d.waiting / 2))} min left; summaries appear on each lead as they finish.</Note>
+      )}
+      {d.enabled && quiet && (
         <Note tone="warn">{quietDays === null ? "No recording has reached the CRM yet." : `No new recording for ${quietDays} days (last: ${stamp(d.lastRecordingAt)}).`} Call AI is ready; the phones and TeleCRM are not sending recordings.</Note>
       )}
       <div className="cai-stats">
