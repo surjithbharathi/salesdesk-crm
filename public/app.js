@@ -965,9 +965,28 @@ setInterval(async () => {
       $("#wa-status").textContent = "Unable to reach the local WhatsApp service.";
   }
 }, 3000);
+let dntState = { q: "", total: 0, count: 0, rows: [], existingLeadMatches: 0, error: "" };
+function dntPanelHtml() {
+  const d = dntState;
+  return panel(
+    "Do Not Track numbers",
+    `<div class="panel-body"><p class="note">Numbers listed here are never tracked: they cannot be created or imported as leads, are ignored by Android call sync and WhatsApp sync, and are not returned to the mobile app. Existing leads are not deleted.</p>${d.error ? `<div class="warning-box">${esc(d.error)}</div>` : ""}<div class="mini-stats"><div><small>Numbers on Do Not Track</small><strong>${d.count}</strong></div><div><small>Existing leads with a DNT number</small><strong>${d.existingLeadMatches}</strong></div></div><div class="row"><input id="dnt-q" placeholder="Search number…" aria-label="Search Do Not Track numbers" value="${esc(d.q)}"><button data-action="dnt-search">Search</button></div>${table(["Number", "Source", "Added by", "Added", ""], d.rows.map((r) => `<tr><td>${esc(r.phone)}</td><td>${esc(r.source || "—")}</td><td>${esc(r.addedBy || "—")}</td><td>${date(r.addedAt)}</td><td><button data-action="dnt-remove" data-phone="${esc(r.phone)}">Remove</button></td></tr>`))}<p class="muted">Showing ${d.rows.length} of ${d.total}${d.q ? " matching" : ""} numbers.</p><form id="dnt-add-form"><h3>Add numbers</h3><label>Numbers (one per line, comma or space separated; 10-digit numbers are treated as +91)<textarea name="numbers" rows="5" placeholder="+919894817860"></textarea></label><label>Or upload a .csv / .txt file<input type="file" name="file" accept=".csv,.txt,text/plain,text/csv"></label><label>Source<input name="source" maxlength="60" value="Manual"></label><button class="primary" type="submit">Add to Do Not Track</button></form></div>`,
+  );
+}
+async function loadDnt(q = dntState.q) {
+  try {
+    const r = await api("dnt?limit=50&q=" + encodeURIComponent(q));
+    dntState = { ...r, q, error: "" };
+  } catch (e) {
+    dntState = { ...dntState, error: e.message };
+  }
+  if ($("#dnt-panel")) $("#dnt-panel").innerHTML = dntPanelHtml();
+}
 function integrations() {
+  queueMicrotask(() => loadDnt());
   return (
     `<div id="mobile-sync-panel">${mobilePanel()}</div>` +
+    `<div id="dnt-panel">${dntPanelHtml()}</div><br>` +
     panel(
       "WhatsApp · Baileys · Sync only",
       `<div class="panel-body"><div class="warning-box">Unofficial linked-device client: account restriction remains possible even without automated sending. Sync only; no CRM send/bulk-send API.</div><div id="wa-status">${waStatusHtml()}</div><label><input type="checkbox" id="wa-consent"> I understand the unofficial-client risk and authorize storing matched incoming and manually sent WhatsApp text.</label><div class="row"><button data-action="wa-connect">Connect / resume sync</button><button data-action="wa-disconnect">Pause sync</button></div><p>Pairing is your action. Pause retains encrypted linked credentials; revoke from WhatsApp Linked devices to unlink. Messages you send in mobile/WhatsApp Web sync back when delivered to this linked client.</p><form id="wa-web-draft"><h3>Open a manual WhatsApp Web draft</h3><label>Recipient lead<select name="leadId" required>${opts(
@@ -1239,10 +1258,52 @@ async function openAutomation(button) {
     button.disabled = false;
   }
 }
+document.addEventListener("submit", async (e) => {
+  if (e.target.id !== "dnt-add-form") return;
+  e.preventDefault();
+  const f = e.target;
+  try {
+    let text = f.numbers.value;
+    const file = f.file.files[0];
+    if (file) {
+      if (file.size > 2e6) throw Error("File too large (max 2 MB)");
+      text += "\n" + (await file.text());
+    }
+    const numbers = [...new Set(text.split(/[\s,;]+/).filter((x) => /\d/.test(x)))];
+    if (!numbers.length) throw Error("Enter at least one number");
+    let added = 0,
+      existing = 0,
+      invalid = 0;
+    for (let i = 0; i < numbers.length; i += 5000) {
+      const r = await api("dnt", "POST", {
+        numbers: numbers.slice(i, i + 5000),
+        source: f.source.value || "Manual",
+      });
+      added += r.added;
+      existing += r.existing;
+      invalid += r.invalid.length;
+    }
+    toast(`Added ${added}, already listed ${existing}${invalid ? `, invalid ${invalid}` : ""}`);
+    await loadDnt("");
+  } catch (err) {
+    toast(err.message, true);
+  }
+});
 document.addEventListener("click", async (e) => {
   const b = e.target.closest("button");
   if (!b) return;
   try {
+    if (b.dataset.action === "dnt-search") {
+      await loadDnt($("#dnt-q").value);
+      return;
+    }
+    if (b.dataset.action === "dnt-remove") {
+      if (!confirm(`Remove ${b.dataset.phone} from Do Not Track?`)) return;
+      await api("dnt/remove", "POST", { numbers: [b.dataset.phone] });
+      await loadDnt();
+      toast("Removed from Do Not Track");
+      return;
+    }
     if (b.dataset.automationUser) {
       const enabled = b.dataset.automationAllow === "true";
       if (!confirm(`${enabled ? "Allow" : "Revoke"} Automation access for this user?`)) return;
@@ -1607,7 +1668,7 @@ document.addEventListener("submit", async (e) => {
       if (!Array.isArray(rows)) throw Error("Enter a JSON array");
       const r = await api("import", "POST", { leads: rows.map((l) => ({ ...l, owner: p.owner })) });
       await refresh();
-      toast(`${r.added} leads imported; ${r.skipped} duplicates skipped`);
+      toast(`${r.added} leads imported; ${r.skipped} duplicates skipped${r.dntBlocked ? `; ${r.dntBlocked} Do Not Track numbers blocked` : ""}`);
     }
   } catch (err) {
     toast(err.message, true);

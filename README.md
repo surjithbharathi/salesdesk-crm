@@ -73,3 +73,13 @@ First startup creates fictional sample records. Browser verification adds clearl
 This is a local single-company application, not a production Salesmax replacement. Shared login is opt-in: before account setup, local demo access remains open; after setup, API sessions and administrator/member ownership checks apply. Members currently edit web leads/tasks/activities; other web administration routes are restricted. Multiple isolated company workspaces, real-time collaboration, phone/SIM dialing, native call-audio recording, live email/SMS delivery, provider webhooks, AI processing, GPS, binary document uploads and campaign dispatch are not implemented. Android reads existing call logs/audio only after user opt-in; live-device compatibility is unverified. Offline CRM changes are not queued (only call sync has a retry queue). Attendance is manual and source rules execute on request. Campaigns, auto replies and inbox composition remain drafts. The opt-in Baileys adapter handles matched incoming individual texts and explicit single-message sends; it is not the official Business API. See [WHATSAPP.md](WHATSAPP.md). No WhatsApp number was linked during development.
 
 Read [FEATURE_PARITY.md](FEATURE_PARITY.md) for the current evidence ledger, verification and every remaining gap. [RESEARCH.md](RESEARCH.md) preserves the initial inspection. Subsequent read-only browser inspection covered ticket forms, auto-messaging categories, lead/team inbox grids and the report chart library; internal implementation remains unknown.
+
+## Do Not Track numbers
+
+Integrations → **Do Not Track numbers** (administrators) keeps a list of numbers Salesdesk must never track (office/personal lines, numbers migrated from Salesmax or TeleCRM). Numbers are normalised to country code + digits (10-digit numbers get `DEFAULT_COUNTRY_CODE`, default `91`), so `+91 98948 17860` and `9894817860` are the same entry.
+
+- Leads cannot be created (UI, mobile app, API) or changed to a DNT number (HTTP 422); `/api/import` skips them and reports `dntBlocked`.
+- Android call sync never receives DNT numbers as targets, so their calls are not uploaded.
+- Incoming WhatsApp messages from DNT numbers are ignored.
+- Existing leads are not deleted; the panel shows how many existing leads match.
+- Bulk add by paste or `.csv`/`.txt` upload (up to 10,000 per request). API: `GET /api/dnt?q=&limit=&offset=`, `POST /api/dnt {numbers, source}`, `POST /api/dnt/remove {numbers}`.
