@@ -142,3 +142,20 @@ test('the customer language is taken from the summary, the audio model, or the t
   const d=await run({enabled:true,iqEnabled:false,stt:{provider:'openai',model:'t',key:'k'},iq:{provider:'openai',model:''}},()=>json({text:'Hello sir, send the quotation please'}));
   assert.deepEqual(d.heard,[],'nothing guessed from plain English text');
 });
+
+test('status says when the last recording came, counts done, waiting and failed jobs, and lists the latest',()=>{
+  const dir=mkdtempSync(join(tmpdir(),'call-ai-status-')),db=new DatabaseSync(':memory:');
+  const now=Date.now(),calls=[{id:'c1',recordingId:'r1',leadId:'L1',deviceId:'dev',startedAt:now-3600000},{id:'c2',recordingId:'r2',leadId:'L2',deviceId:'telecrm',startedAt:now-10*86400000}];
+  const api=createCallAI({db,keyPath:join(dir,'key'),all:kind=>kind==='mobileCalls'?calls:[],get:(k,id)=>({L1:{name:'Murugan Oils'},L2:{name:'Kavin Traders'}})[id]||null,playback:()=>null,fetcher:async()=>json({})});
+  try{
+    const add=db.prepare('INSERT INTO call_ai_jobs VALUES(?,?,?,?)');
+    add.run('r1','L1','complete',Buffer.from('x'));add.run('r2','L2','error',Buffer.from('x'));add.run('r3','L1','queued',Buffer.from('x'));
+    const s=api.status();
+    assert.equal(s.lastRecordingAt,new Date(now-3600000).toISOString());
+    assert.deepEqual(s.week,{total:1,phone:1,telecrm:0});
+    assert.deepEqual([s.done,s.waiting,s.failed],[1,1,1]);
+    assert.equal(s.jobs.length,3);
+    const r2=s.jobs.find(j=>j.recordingId==='r2');
+    assert.deepEqual([r2.leadName,r2.source,r2.status],['Kavin Traders','TeleCRM','error']);
+  }finally{api.close();db.close();rmSync(dir,{recursive:true,force:true});}
+});

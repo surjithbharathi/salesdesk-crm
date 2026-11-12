@@ -13,6 +13,44 @@ const STT = ["openai", "openai-audio", "google", "sarvam", "elevenlabs"];
 const IQ = ["openai", "claude", "ollama", "grok"];
 const canonical = (p) => (p === "openai-audio" ? "openai" : p);
 
+// is call AI working: when the last recording came, what is done, waiting or failed, and the latest jobs with their errors
+const DAY = 86400000;
+const stamp = (iso) => (iso ? new Date(iso).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) : "");
+const JOB = { complete: "Summary done", error: "Failed", queued: "Waiting", waiting: "With the provider", processing: "Working on it" };
+function Status() {
+  const [tick, setTick] = useState(0);
+  const status = useLoad(() => crmGet("call-ai/status"), [tick]);
+  if (status.error) return <Failed>{status.error.message}</Failed>;
+  if (!status.data) return <Loading>Checking call AI…</Loading>;
+  const d = status.data, quietDays = d.lastRecordingAt ? Math.floor((Date.now() - Date.parse(d.lastRecordingAt)) / DAY) : null;
+  const pill = !d.enabled ? ["Off", "off"] : d.failed ? [`${d.failed} failed`, "bad"] : quietDays === null || quietDays >= 2 ? ["No new recordings", "warn"] : ["Working", "ok"];
+  return (
+    <Section title="Status" desc="Whether recordings still reach the CRM and what call AI did with them." status={pill[0]} tone={pill[1]}>
+      {d.enabled && (quietDays === null || quietDays >= 2) && (
+        <Note tone="warn">{quietDays === null ? "No recording has reached the CRM yet." : `No new recording for ${quietDays} days (last: ${stamp(d.lastRecordingAt)}).`} Call AI is ready; the phones and TeleCRM are not sending recordings.</Note>
+      )}
+      <div className="cai-stats">
+        <div className="cai-stat"><span>Recordings, 7 days</span><b>{d.week.total}</b><small>Phone {d.week.phone} · TeleCRM {d.week.telecrm}</small></div>
+        <div className="cai-stat"><span>Summaries done</span><b>{d.done}</b><small>all time</small></div>
+        <div className="cai-stat"><span>Waiting</span><b>{d.waiting}</b></div>
+        <div className="cai-stat"><span>Failed</span><b className={d.failed ? "cai-bad" : ""}>{d.failed}</b></div>
+      </div>
+      {d.jobs.length > 0 && (
+        <ul className="cai-jobs" aria-label="Recent jobs">
+          {d.jobs.map((j) => (
+            <li key={j.recordingId}>
+              <span><a href={`#/leads?lead=${j.leadId}`}>{j.leadName || "Lead"}</a>{j.source && <span className="muted"> · {j.source}</span>}</span>
+              <span className="muted">{stamp(j.callAt || j.updatedAt)}</span>
+              <span className={`cai-job cai-job-${j.status}`}>{JOB[j.status] || j.status}{j.error ? `: ${j.error}` : ""}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="set-bar"><button type="button" className="btn" onClick={() => setTick((t) => t + 1)}>Refresh</button></div>
+    </Section>
+  );
+}
+
 function Keys({ keys, reload }) {
   const notify = useToast();
   const [busy, setBusy] = useState(false);
@@ -144,6 +182,7 @@ export default function CallAI() {
   }
   return (
     <>
+      <Status />
       <form className="set-form" onSubmit={save}>
         <Section title="Call AI" desc="Turn a call recording into a written transcript, and optionally a summary of what the customer wants. Recordings and transcripts are sent to the providers you choose." status={form.enabled ? "On" : "Off"} tone={form.enabled ? "ok" : "off"}>
           <label className="check"><input type="checkbox" checked={form.enabled} onChange={(e) => set({ enabled: e.target.checked })} /> <span><b>Use call AI.</b></span></label>

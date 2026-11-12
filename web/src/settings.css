@@ -311,3 +311,17 @@ td.right .btn + .btn, td.right .quick-actions + .btn { margin-left: 6px; }
 .msg-frame { display: block; width: 100%; height: calc(100vh - 170px); min-height: 480px; border: 1px solid var(--line, #e2e8f0); border-radius: 12px; background: #fff; }
 .msg-frame-note { margin: 8px 0 0; font-size: 12.5px; }
 @media (max-width: 640px) { .msg-frame { height: calc(100vh - 210px); } .msg-newtab { margin-left: 0; } }
+
+/* Settings > Call AI status */
+.cai-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin: 12px 0; }
+.cai-stat { display: flex; flex-direction: column; gap: 2px; padding: 12px; border-radius: 10px; background: color-mix(in srgb, currentColor 5%, transparent); }
+.cai-stat span { font-size: 13px; opacity: 0.75; }
+.cai-stat b { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.cai-stat small { font-size: 12px; opacity: 0.6; }
+.cai-bad { color: var(--kumkum); }
+.cai-jobs { list-style: none; margin: 0; padding: 0; font-size: 14px; }
+.cai-jobs li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 8px 0; border-top: 1px solid color-mix(in srgb, currentColor 12%, transparent); }
+.cai-jobs li .cai-job { grid-column: 1 / -1; font-size: 13px; }
+.cai-job-complete { color: var(--leaf); }
+.cai-job-error { color: var(--kumkum); }
+.cai-job-queued, .cai-job-waiting, .cai-job-processing { color: var(--oil-ink); }
