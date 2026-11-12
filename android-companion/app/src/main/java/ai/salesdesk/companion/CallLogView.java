@@ -35,11 +35,17 @@ final class CallLogView {
     private final MainActivity a;
     private CallLogView(MainActivity a) { this.a = a; }
 
+    static int limit = 80;
     static void draw(MainActivity a, LinearLayout content, List<Entry> calls) {
         CallLogView v = new CallLogView(a);
         calls.sort((x, y) -> Long.compare(y.time, x.time));
-        String day = null; LinearLayout group = null;
+        String day = null; LinearLayout group = null; int drawn = 0;
         for (Entry e : calls) {
+            if (drawn++ >= limit) {
+                int left = calls.size() - limit;
+                content.addView(Ui.pill(a, "Show " + Math.min(80, left) + " more  ·  " + left + " left", false, MainActivity.ACCENT, () -> { limit += 80; a.render(); }));
+                break;
+            }
             String label = v.dayLabel(e.time);
             if (!label.equals(day)) {
                 day = label;
@@ -151,28 +157,14 @@ final class CallLogView {
         String recording = e.r.optString("recordingId");
         if (e.local && recording.isEmpty()) {
             String remote = e.r.optString("remote_id");
-            org.json.JSONArray server = a.rows("mobileCalls");
-            for (int i = 0; i < server.length(); i++) { JSONObject s = server.optJSONObject(i); if (s != null && !remote.isEmpty() && s.optString("id").equals(remote)) recording = s.optString("recordingId"); }
+            if (!remote.isEmpty()) recording = a.index().recordingByCall.getOrDefault(remote, "");
         }
         return recording;
     }
     private boolean hasRecording(Entry e) { return !recordingOf(e).isEmpty() || (e.local && (!e.r.optString("uri").isEmpty() || e.r.optInt("uploaded") == 1)); }
 
-    // leads by number (last ten digits), built once per screen
-    private java.util.Map<String, String> leadByNumber;
-    private String leadIdFor(String phone) {
-        if (leadByNumber == null) {
-            leadByNumber = new java.util.HashMap<>();
-            org.json.JSONArray ls = a.rows("leads");
-            for (int i = 0; i < ls.length(); i++) {
-                org.json.JSONObject l = ls.optJSONObject(i); if (l == null) continue;
-                String d = l.optString("phone").replaceAll("\\D", "");
-                if (d.length() >= 10) leadByNumber.putIfAbsent(d.substring(d.length() - 10), l.optString("id"));
-            }
-        }
-        String d = String.valueOf(phone).replaceAll("\\D", "");
-        return d.length() >= 10 ? leadByNumber.getOrDefault(d.substring(d.length() - 10), "") : "";
-    }
+    // the lead with this number (last ten digits), from the index built once per workspace
+    private String leadIdFor(String phone) { JSONObject l = a.index().lead(phone); return l == null ? "" : l.optString("id"); }
 
     private void dial(String phone) {
         String d = phone.replaceAll("[^0-9+]", ""); if (d.isEmpty()) return;

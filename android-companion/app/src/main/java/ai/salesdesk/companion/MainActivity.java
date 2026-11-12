@@ -47,6 +47,27 @@ public class MainActivity extends Activity {
     ScrollView dialogBody(LinearLayout body){ScrollView scroll=new ScrollView(this);scroll.addView(body);return scroll;}
     void notice(String s){new AlertDialog.Builder(this).setMessage(s).setPositiveButton("OK",null).show();}
     JSONArray rows(String key){JSONArray a=workspace.optJSONArray(key);return a==null?new JSONArray():a;}
+    // Lookups every screen needs (a lead by id or number, a call's recording, when each lead was last worked on), built once
+    // per workspace instead of on every screen and every row: the lists were scanning thousands of leads per call row.
+    static final class Index {
+        final Map<String,JSONObject> byId=new HashMap<>(), byPhone=new HashMap<>(); final Map<String,String> recordingByCall=new HashMap<>(); Map<String,Long> lastActive;
+        JSONObject lead(String phone){String t=tail10(phone);return t.isEmpty()?null:byPhone.get(t);}
+    }
+    static String tail10(String phone){String d=String.valueOf(phone).replaceAll("\\D","");return d.length()>=10?d.substring(d.length()-10):"";}
+    private Index index;private JSONObject indexed;
+    Index index(){
+        if(index!=null&&indexed==workspace)return index;
+        Index x=new Index();JSONArray ls=rows("leads");
+        for(int i=0;i<ls.length();i++){JSONObject l=ls.optJSONObject(i);if(l==null)continue;x.byId.put(l.optString("id"),l);String t=tail10(l.optString("phone"));if(!t.isEmpty())x.byPhone.putIfAbsent(t,l);}
+        JSONArray cs=rows("mobileCalls");for(int i=0;i<cs.length();i++){JSONObject c=cs.optJSONObject(i);if(c!=null&&!c.optString("recordingId").isEmpty())x.recordingByCall.put(c.optString("id"),c.optString("recordingId"));}
+        index=x;indexed=workspace;return x;
+    }
+    Map<String,Long> lastActive(){
+        Index x=index();if(x.lastActive!=null)return x.lastActive;Map<String,Long> m=new HashMap<>();
+        JSONArray acts=rows("activities");for(int i=0;i<acts.length();i++){JSONObject a=acts.optJSONObject(i);if(a!=null)m.merge(a.optString("leadId"),activityTime(a),Math::max);}
+        JSONArray calls=rows("mobileCalls");for(int i=0;i<calls.length();i++){JSONObject c=calls.optJSONObject(i);if(c==null)continue;long t=c.optLong("startedAt",0);if(t==0)t=Ui.ms(c.optString("startedAt"));m.merge(c.optString("leadId"),t,Math::max);}
+        x.lastActive=m;return m;
+    }
     String leadName(String id){for(int i=0;i<rows("leads").length();i++){JSONObject l=rows("leads").optJSONObject(i);if(l!=null&&l.optString("id").equals(id))return l.optString("name");}return "Business contact";}
     String phoneName(String number){String country=SecureConfig.prefs(this).getString("country","91"),n=SyncEngine.normalize(number,country);for(int i=0;i<rows("leads").length();i++){JSONObject l=rows("leads").optJSONObject(i);if(l!=null&&SyncEngine.normalize(l.optString("phone"),country).equals(n))return l.optString("name");}String cached=SecureConfig.prefs(this).getString("name:"+n,"");if(!cached.isEmpty())return cached;askName(n);return prettyNumber(number);}
     // a number with no name: shown as the number itself, spaced like the phone does (+91 97862 50600)

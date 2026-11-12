@@ -137,10 +137,7 @@ final class MyDayView {
     }
 
     static Map<String, JSONObject> leadsById(MainActivity a) {
-        Map<String, JSONObject> m = new HashMap<>();
-        JSONArray l = a.rows("leads");
-        for (int i = 0; i < l.length(); i++) { JSONObject x = l.optJSONObject(i); if (x != null) m.put(x.optString("id"), x); }
-        return m;
+        return a.index().byId; // built once per workspace
     }
 
     /** Open follow-ups, soonest first; the ones with no date go last. */

@@ -215,7 +215,7 @@ final class LeadsView {
             shown.add(l);
         }
         // late follow-ups first, then the chosen order
-        Map<String, Long> active = sort.equals("active") ? lastActive(a) : Collections.emptyMap();
+        Map<String, Long> active = sort.equals("active") ? a.lastActive() : Collections.emptyMap();
         shown.sort((x, y) -> {
             boolean lx = late.containsKey(x.optString("id")), ly = late.containsKey(y.optString("id"));
             if (lx != ly) return lx ? -1 : 1;

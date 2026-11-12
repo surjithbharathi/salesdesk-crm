@@ -211,9 +211,7 @@ final class TodoView {
     private static JSONObject leadOf(MainActivity a, JSONObject c, Map<String, JSONObject> leads, String country) {
         JSONObject l = leads.get(c.optString("leadId"));
         if (l != null) return l;
-        String n = SyncEngine.normalize(c.optString("phone"), country);
-        for (JSONObject x : leads.values()) if (n.length() >= 6 && SyncEngine.normalize(x.optString("phone"), country).equals(n)) return x;
-        return null;
+        return a.index().lead(c.optString("phone")); // by the last ten digits, from the shared index
     }
 
     private static long lastTouch(MainActivity a, JSONObject l) {
