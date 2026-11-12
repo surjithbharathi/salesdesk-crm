@@ -8,6 +8,7 @@ import LeadPanel from "./LeadDetail.jsx";
 import Recording from "../Recording.jsx";
 import { PIPELINE, pipelineStep } from "../pipeline.js";
 import { DAY, buildModel, initials, money, startOfDay } from "./model.js";
+import DateTimePicker from "../DateTimePicker.jsx";
 
 // Opportunities, To-dos, Engagements and Conversations in the Salesmax style. The class names are the reference web app's,
 // so its style sheet (cw/views.css) applies as written; the data is this CRM's own.
@@ -217,7 +218,7 @@ function NewTask({ onClose }) {
           <span>Next follow-up</span>
           {WHEN.map(([k, t]) => <button type="button" key={k} className={`pill-btn ${when === k ? "on" : ""}`} onClick={() => setWhen(k)}>{t}</button>)}
         </div>
-        {when === "pick" && <label>Date and time<input type="datetime-local" value={custom} onChange={(e) => setCustom(e.target.value)} required /></label>}
+        {when === "pick" && <label>Date and time<DateTimePicker value={custom} onChange={setCustom} ariaLabel="Date and time" required /></label>}
         <div className="dialog__row"><button type="button" className="ghost" onClick={onClose}>Cancel</button><button type="submit" className="solid" disabled={busy}>Create task</button></div>
       </form>
     </>

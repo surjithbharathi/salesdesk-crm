@@ -6,6 +6,7 @@ import { avClass, initials } from "../format.js";
 import { TIcon } from "./icons.jsx";
 import LeadPanel from "./LeadDetail.jsx";
 import { DAY, addDays, dayStart, dayText, mondayOf, monthStart, telOf, timeText } from "./PageUtil.js";
+import DateTimePicker from "../DateTimePicker.jsx";
 
 // Follow Ups: open follow-ups in three columns (Late, Today, Upcoming), narrowed by a date filter and, for owners, by staff.
 
@@ -151,7 +152,7 @@ function NewFollowup({ onClose }) {
           </div>
         )}
         <label className="r-field"><span>What to do</span><input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={lead ? `Call ${lead.name}` : "For example: send the price list"} maxLength={300} /></label>
-        <label className="r-field"><span>When</span><input type="datetime-local" value={due} onChange={(e) => setDue(e.target.value)} required /></label>
+        <label className="r-field"><span>When</span><DateTimePicker value={due} onChange={setDue} ariaLabel="When" required /></label>
         <div className="r-dialog-acts"><button type="button" className="r-btn ghost" onClick={onClose}>Cancel</button><button type="submit" className="r-btn" disabled={busy || !lead}>Add follow-up</button></div>
       </form>
     </>

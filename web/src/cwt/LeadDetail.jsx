@@ -9,6 +9,7 @@ import GatewayChat, { useGatewayOn } from "../GatewayChat.jsx";
 import ChatEntry, { fromActivity, userForNumber, saidInChat } from "../ChatEntry.jsx";
 import { STATES, LANGUAGES } from "../regions.js";
 import { SourceTag, quickTimes, localInput } from "./LeadBits.jsx";
+import DateTimePicker from "../DateTimePicker.jsx";
 
 // One lead: a header (who, status, owner, call and WhatsApp), the stage bar, the conversation with a composer under it,
 // and on the right the next follow-up, the lead's fields and the enquiry it came with. Styles: cwt/r-leads.css (ld-*).
@@ -37,7 +38,7 @@ function TimeChips({ value, onChange, pick, onPick }) {
     <div className="ld-chips">
       {quickTimes().map(([label]) => <button key={label} type="button" className={`ld-chip ${value === label ? "on" : ""}`} aria-pressed={value === label} onClick={() => onChange(label)}>{label}</button>)}
       <button type="button" className={`ld-chip ${value === "pick" ? "on" : ""}`} aria-pressed={value === "pick"} onClick={() => onChange("pick")}><TIcon name="calendar" />Pick date</button>
-      {value === "pick" && <input type="datetime-local" className="ld-pick" value={pick} onChange={(e) => onPick(e.target.value)} aria-label="Date and time" required />}
+      {value === "pick" && <DateTimePicker className="ld-pick" value={pick} onChange={onPick} ariaLabel="Date and time" required />}
     </div>
   );
 }

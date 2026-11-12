@@ -5,6 +5,7 @@ import { hashFor, initials } from "../format.js";
 import { useToast } from "../toast.jsx";
 import { GatewayReplyBar, insideWindow, useGatewaySend } from "../GatewayChat.jsx";
 import { sourceKeys, sourceLabel, secondsText } from "../ChatEntry.jsx";
+import DateTimePicker from "../DateTimePicker.jsx";
 
 const stamp = (m) => m.occurredAt || m.createdAt || "";
 const dayStart = (t) => new Date(t).setHours(0, 0, 0, 0);
@@ -227,7 +228,7 @@ function LeadSide({ lead }) {
       </dl>
       {adding ? (
         <form className="rm-fu" onSubmit={addFollowUp}>
-          <label>Follow up on<input type="datetime-local" value={due} onChange={(e) => setDue(e.target.value)} required /></label>
+          <label>Follow up on<DateTimePicker value={due} onChange={setDue} ariaLabel="Follow up on" required /></label>
           <div className="rm-fu-actions">
             <button className="rm-fu-save" disabled={busy}>Save</button>
             <button type="button" className="rm-fu-cancel" onClick={() => setAdding(false)}>Cancel</button>
