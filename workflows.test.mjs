@@ -367,3 +367,11 @@ test("several When boxes: any of them starts the flow, each event once, and the 
   const test = s.wf.dryRun({ name: "t", flow, from: "lang" }, l.id);
   assert.match(JSON.stringify(test), /Language/);
 });
+
+test("a new lead without a state gets its probable state from the number, not once a state is set", async () => {
+  const { valueOf } = await import("./workflows.mjs");
+  assert.equal(valueOf({ phone: "+919786000001" }, "probableState"), "Tamil Nadu");
+  assert.equal(valueOf({ phone: "+919786000001", state: "Kerala" }, "probableState"), "");
+  assert.equal(valueOf({ phone: "+919786000001", probableState: "Karnataka" }, "probableState"), "Karnataka");
+  assert.equal(valueOf({ phone: "12345" }, "probableState"), "");
+});
