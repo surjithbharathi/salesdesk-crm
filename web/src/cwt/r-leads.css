@@ -351,6 +351,10 @@
 .cwt .ld-note.ok { color: #15803d; }
 
 .cwt .ld-enq-intro { margin: 4px 0 0; font-size: 12.5px; color: var(--r-ink-2); overflow-wrap: anywhere; }
+.cwt .ld-enq-rows { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; margin: 10px 0 0; font-size: 12.5px; }
+.cwt .ld-enq-rows div { display: contents; }
+.cwt .ld-enq-rows dt { color: var(--r-ink-2); }
+.cwt .ld-enq-rows dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
 .cwt .ld-specs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .cwt .ld-specs span { display: inline-flex; align-items: center; min-height: 24px; padding: 2px 9px; border-radius: 8px; background: var(--r-bg); font-size: 12px; font-weight: 600; }
 
