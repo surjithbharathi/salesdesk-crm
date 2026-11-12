@@ -76,34 +76,37 @@ final class SyncEngine {
         // Nearby personal calls block ambiguous matches, but are never stored or uploaded.
         ArrayList<RecordingMatcher.Call> timings=new ArrayList<>();
         try(Cursor log=c.getContentResolver().query(CallLog.Calls.CONTENT_URI,
-            new String[]{CallLog.Calls._ID,CallLog.Calls.DATE,CallLog.Calls.DURATION},
+            new String[]{CallLog.Calls._ID,CallLog.Calls.DATE,CallLog.Calls.DURATION,CallLog.Calls.NUMBER},
             CallLog.Calls.DATE+">=?",new String[]{String.valueOf(Math.max(0,earliest-86400000L-120000L))},CallLog.Calls.DATE+" DESC")) {
             if(log==null) return;
             while(log.moveToNext()) {
                 check(c); if(timings.size()>=5000) return; // Incomplete evidence: require manual review.
                 long start=log.getLong(1); String id=log.getString(0)+"-"+start;
-                timings.add(new RecordingMatcher.Call(id,start,log.getLong(2),eligible.contains(id)));
+                timings.add(new RecordingMatcher.Call(id,start,log.getLong(2),eligible.contains(id),normalize(log.getString(3)==null?"":log.getString(3),SecureConfig.prefs(c).getString("country","91"))));
             }
         }
         Uri tree=Uri.parse(saved), children=DocumentsContract.buildChildDocumentsUriUsingTree(tree,DocumentsContract.getTreeDocumentId(tree));
         ArrayList<RecordingMatcher.Audio> audio=new ArrayList<>();
-        try(Cursor files=c.getContentResolver().query(children,new String[]{DocumentsContract.Document.COLUMN_DOCUMENT_ID,DocumentsContract.Document.COLUMN_MIME_TYPE,DocumentsContract.Document.COLUMN_LAST_MODIFIED},null,null,null)) {
+        try(Cursor files=c.getContentResolver().query(children,new String[]{DocumentsContract.Document.COLUMN_DOCUMENT_ID,DocumentsContract.Document.COLUMN_MIME_TYPE,DocumentsContract.Document.COLUMN_LAST_MODIFIED,DocumentsContract.Document.COLUMN_DISPLAY_NAME},null,null,null)) {
             if(files==null) return;
             int seen=0; while(files.moveToNext()) {
                 check(c); // a phone recorder keeps every call it ever recorded: only files near a work call count toward the cap
                 String mime=files.getString(1); if(mime==null || !mime.startsWith("audio/")) continue;
                 long changed=files.getLong(2); if(changed>System.currentTimeMillis()-15000) continue;
                 boolean relevant=false;
-                for(RecordingMatcher.Call call:timings) if(call.eligible && RecordingMatcher.nearEnd(call,changed)) { relevant=true; break; }
+                String name=files.getString(3)==null?"":files.getString(3); long stamp=RecordingMatcher.stampOf(name);
+                // a file counts when it was written near a business call's end, or its name carries that call's number or time
+                for(RecordingMatcher.Call call:timings) if(call.eligible && (RecordingMatcher.nearEnd(call,changed) || RecordingMatcher.numberIn(name,call.phone)
+                    || (stamp>0 && Math.abs(stamp-call.started)<=RecordingMatcher.STAMP_WINDOW_MS))) { relevant=true; break; }
                 if(!relevant) continue;
                 if(++seen>5000) return;
                 Uri uri=DocumentsContract.buildDocumentUriUsingTree(tree,files.getString(0));
-                if(!reserved.contains(uri.toString()) && !reservedDocuments.contains(uri.getAuthority()+"/"+DocumentsContract.getDocumentId(uri))) audio.add(new RecordingMatcher.Audio(uri.toString(),changed,duration(c,uri)));
+                if(!reserved.contains(uri.toString()) && !reservedDocuments.contains(uri.getAuthority()+"/"+DocumentsContract.getDocumentId(uri))) audio.add(new RecordingMatcher.Audio(uri.toString(),changed,duration(c,uri),name));
             }
         }
-        Map<String,String> matches=RecordingMatcher.match(timings,audio,reserved);
-        for(Map.Entry<String,String> match:matches.entrySet()) {
-            ContentValues values=new ContentValues(); values.put("uri",match.getValue()); values.put("mode","auto");
+        Map<String,RecordingMatcher.Pick> matches=RecordingMatcher.pick(timings,audio,reserved);
+        for(Map.Entry<String,RecordingMatcher.Pick> match:matches.entrySet()) {
+            ContentValues values=new ContentValues(); values.put("uri",match.getValue().uri); values.put("mode",match.getValue().mode);
             db.update("calls",values,"local_id=? AND uploaded=0 AND (uri IS NULL OR uri='')",new String[]{match.getKey()});
         }
     }
@@ -147,6 +150,7 @@ final class SyncEngine {
     static void run(Context c) throws Exception {
         if(!running.compareAndSet(false,true)) return; cancelled=false;
         try(QueueDb helper=new QueueDb(c)) {
+            if(!SecureConfig.prefs(c).getBoolean("rematchFileNames",false)){helper.getWritableDatabase().execSQL("UPDATE calls SET uploaded=0, uri='', mode='' WHERE uploaded=-2");SecureConfig.prefs(c).edit().putBoolean("rematchFileNames",true).apply();}
             check(c); if(c.checkSelfPermission(Manifest.permission.READ_CALL_LOG)!=PackageManager.PERMISSION_GRANTED) throw new Exception("Call-log permission missing");
             if(c.checkSelfPermission(Manifest.permission.READ_PHONE_STATE)==PackageManager.PERMISSION_GRANTED && c.getSystemService(android.telecom.TelecomManager.class).isInCall()) return;
             SQLiteDatabase db=helper.getWritableDatabase();

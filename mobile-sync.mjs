@@ -213,13 +213,16 @@ export function createMobileSync({ db, all, get, put, stamp, tx, log, keyPath, o
     const duration = Number(meta.duration),
       modified = Number(meta.modified);
     if (
-      !["auto", "manual"].includes(meta.mode) ||
+      !["auto", "file", "manual"].includes(meta.mode) ||
       !Number.isFinite(duration) ||
       duration < 1 ||
       duration > 86400 ||
       !Number.isFinite(modified)
     )
       fail("Invalid recording match metadata");
+    // "file": the phone matched it by the number or time in the recorder's file name; only a length far off is refused
+    if (meta.mode === "file" && c.duration > 0 && Math.abs(duration - c.duration) > Math.max(30, c.duration * 0.5))
+      fail("Recording length does not fit this call", 409);
     if (
       meta.mode === "auto" &&
       (c.duration < 1 ||
@@ -261,7 +264,7 @@ export function createMobileSync({ db, all, get, put, stamp, tx, log, keyPath, o
       log(
         c.leadId,
         "System",
-        `Phone recording attached · ${meta.mode === "manual" ? "user-reviewed" : "automatic match"}`,
+        `Phone recording attached · ${meta.mode === "manual" ? "user-reviewed" : meta.mode === "file" ? "automatic match (file name)" : "automatic match"}`,
       );
       assistantJob = onRecording({ recordingId: id, callId: c.id });
       const twin = twinOf(c, all("mobileCalls").filter((o) => o.deviceId === "telecrm" && !o.recordingId));
