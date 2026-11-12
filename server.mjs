@@ -1054,6 +1054,12 @@ const server = http.createServer(async (req, res) => {
       if(result===null){res.writeHead(202);res.end();}else send(200,result);return;
     }
     // the WhatsApp gateway posts customer messages here, signed with a secret both sides know; no browser session
+    // one-click connect: the gateway hands over its key and secret here, with the one-time token our Connect button made
+    if (url.pathname === "/hooks/wa-gateway/pair" && req.method === "POST") {
+      if (req.headers.origin) bad("Browser access is not supported here", 403);
+      send(200, waGateway.pair(await body(req)));
+      return;
+    }
     if (url.pathname === "/hooks/wa-gateway" && req.method === "POST") {
       if (req.headers.origin) bad("Browser access is not supported here", 403);
       send(200, waGateway.receive(await rawBody(req), req.headers["x-devi-signature"]));
@@ -1342,6 +1348,7 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       if (url.pathname === "/api/wa-gateway/test" && req.method === "POST") { needs("integrations.manage"); sameOrigin(); send(200, await waGateway.test()); return; }
+      if (url.pathname === "/api/wa-gateway/connect" && req.method === "POST") { needs("integrations.manage"); sameOrigin(); send(200, await waGateway.startPairing((await body(req)).baseUrl, publicOrigin)); return; }
       const waLead = /^\/api\/wa-gateway\/leads\/([\w-]{1,64})\/(send|history)$/.exec(url.pathname);
       if (waLead && req.method === "POST") {
         sameOrigin(); needs("leads.write");

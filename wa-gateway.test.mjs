@@ -163,3 +163,50 @@ test("the connection test reports reachability, the key and the numbers", async 
   await ready(f);
   assert.deepEqual(await f.gw.test(), { reachable: true, keyOk: true, numbers: 5, aiMode: "all", pendingAlerts: 0 });
 });
+
+test("one-click connect: Connect makes a one-time token; the gateway hands over key and secret with it, once, before it expires", async (t) => {
+  let clock = 1_800_000_000_000;
+  const db = new DatabaseSync(":memory:");
+  const dir = mkdtempSync(join(tmpdir(), "wagw-pair-"));
+  t.after(() => { db.close(); rmSync(dir, { recursive: true, force: true }); });
+  db.exec("CREATE TABLE records(kind TEXT,id TEXT,body TEXT,PRIMARY KEY(kind,id))");
+  const nothing = () => [];
+  const gw = createWaGateway({ db, all: nothing, get: () => null, put: () => {}, stamp: (v) => v, tx: (fn) => fn(), log: () => {}, keyPath: join(dir, "key"),
+    checkUrl: async (u) => (u.startsWith("https://") ? new URL(u).origin : (() => { throw Object.assign(Error("bad"), { status: 400 }); })()), now: () => clock });
+  await assert.rejects(gw.startPairing("https://wa.example.com", ""), status(409));
+  await assert.rejects(gw.startPairing("https://wa.example.com", "http://crm.example.com"), status(409));
+  await assert.rejects(gw.startPairing("http://wa.example.com", "https://crm.example.com"), status(400));
+  const { url } = await gw.startPairing("https://wa.example.com/", "https://crm.example.com/");
+  const u = new URL(url);
+  assert.equal(u.origin + u.pathname, "https://wa.example.com/app/connect");
+  assert.equal(u.searchParams.get("app"), "salesdesk");
+  assert.equal(u.searchParams.get("crm"), "https://crm.example.com");
+  assert.equal(u.searchParams.get("back"), "/next/#/settings?tab=gateway");
+  const token = u.searchParams.get("token");
+  assert.ok(token.length >= 40);
+  assert.ok(!JSON.stringify(gw.settings()).includes(token), "the token is not kept or shown");
+  const handover = { token, base_url: "https://wa.example.com", api_key: "k".repeat(43), webhook_secret: "s".repeat(43), default_from_phone_id: "538388877117181",
+    numbers: [{ phone_id: "538388877117181", label: "Main 94431 74449" }, { phone_id: "bad", label: "x" }] };
+  assert.throws(() => gw.pair({ ...handover, token: "wrong".repeat(9) }), status(404));
+  assert.throws(() => gw.pair({ ...handover, token: "" }), status(404));
+  assert.throws(() => gw.pair({ ...handover, api_key: "short" }), status(400));
+  assert.throws(() => gw.pair({ ...handover, webhook_secret: "has space ".repeat(4) }), status(400));
+  assert.throws(() => gw.pair({ ...handover, base_url: "https://other.example.com" }), status(400), "the address the admin chose");
+  assert.equal(gw.settings().enabled, false, "nothing changes until a good handover");
+  assert.deepEqual(gw.pair(handover), { ok: true });
+  const s = gw.settings();
+  assert.equal(s.enabled, true);
+  assert.equal(s.baseUrl, "https://wa.example.com");
+  assert.ok(s.hasKey && s.hasSecret);
+  assert.equal(s.defaultFromPhoneId, "538388877117181");
+  assert.deepEqual(s.seenNumbers, { 538388877117181: "Main 94431 74449" });
+  assert.ok(!JSON.stringify(s).includes("k".repeat(43)) && !JSON.stringify(s).includes("s".repeat(43)));
+  assert.throws(() => gw.pair(handover), status(404), "a token works once");
+  // the handed-over secret signs incoming messages
+  const body = Buffer.from(JSON.stringify({ event: "test", data: {} }));
+  assert.deepEqual(gw.receive(body, "sha256=" + createHmac("sha256", "s".repeat(43)).update(body).digest("hex")), { ignored: "event not used here" });
+  // an old request runs out
+  const again = new URL((await gw.startPairing("https://wa.example.com", "https://crm.example.com")).url).searchParams.get("token");
+  clock += 11 * 60000;
+  assert.throws(() => gw.pair({ ...handover, token: again }), status(404));
+});

@@ -75,4 +75,11 @@ test("the WhatsApp gateway link: settings are write-only for secrets, and the si
   assert.equal(sent.status, 502);
   assert.equal((await call("/api/state")).data.messages.filter((m) => m.direction === "Outgoing").length, 0);
   assert.equal((await call(`/api/wa-gateway/leads/${lead.id}/send`, "POST", { text: "Hi" })).status, 403);
+
+  // one-click connect: the browser asks from this site only; the handover is server to server and needs a live one-time token
+  assert.equal((await call("/api/wa-gateway/connect", "POST", { baseUrl: "https://93.184.216.34" })).status, 403);
+  assert.equal((await call("/api/wa-gateway/connect", "POST", { baseUrl: "https://93.184.216.34" }, { Origin: base })).status, 409, "no https address of its own (PUBLIC_ORIGIN) to be called back on");
+  assert.equal((await call("/hooks/wa-gateway/pair", "POST", { token: "x".repeat(43), api_key: "k".repeat(43), webhook_secret: "s".repeat(43) }, { Origin: "https://evil.example" })).status, 403);
+  assert.equal((await call("/hooks/wa-gateway/pair", "POST", { token: "x".repeat(43), api_key: "k".repeat(43), webhook_secret: "s".repeat(43) })).status, 404);
+  assert.equal((await call("/api/wa-gateway/settings")).data.hasSecret, true, "a failed handover changes nothing");
 });

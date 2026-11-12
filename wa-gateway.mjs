@@ -3,7 +3,7 @@ import { isBlocked } from "./blocked-numbers.mjs";
 //   The gateway tells us about every customer message with a signed POST (header X-Devi-Signature: "sha256=" + HMAC-SHA256 of the body),
 //   and we send messages and read history through its REST API (header X-Api-Key). Nothing here stores a customer's WhatsApp login.
 // Settings are kept encrypted in the CRM database (same way as the mail settings); the API key and the webhook secret are never sent back to the browser.
-import { createCipheriv, createDecipheriv, createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
@@ -15,6 +15,9 @@ const fail = (message, status = 400) => {
 };
 const DEFAULTS = { enabled: false, baseUrl: "", apiKey: "", webhookSecret: "", createLeads: true, defaultOwner: "", numberOwners: {}, defaultFromPhoneId: "", seenNumbers: {} };
 const MAX_TEXT = 4000;
+const PAIR_MINUTES = 10;  // how long a Connect request waits for someone to approve it in the gateway
+const SETTINGS_PAGE = "/next/#/settings?tab=gateway";
+const sha256 = (value) => createHash("sha256").update(value).digest();
 
 export function privateAddress(address) {
   if (isIP(address) === 4) {
@@ -282,5 +285,50 @@ export function createWaGateway({ db, all, get, put, stamp, tx, log, keyPath, sy
     }
     return { reachable: Boolean(health?.ok), keyOk, numbers: health?.connected_numbers ?? null, aiMode: health?.agent_mode ?? null, pendingAlerts: health?.pending_owner_alerts ?? null };
   }
-  return { settings, save, receive, send, sendSystem, history, test };
+  // ---------------------------------------------------------------- one-click connect
+  // The admin presses Connect: we keep a one-time token (only its hash) and send the browser to the gateway, where an inbox admin approves.
+  // The gateway then posts the key and the secret to /hooks/wa-gateway/pair with that token, server to server, so nobody copies them by hand.
+  async function startPairing(baseUrl, crmOrigin) {
+    let origin;
+    try {
+      origin = new URL(crmOrigin).origin;
+    } catch {
+      fail("This CRM has no https address set (PUBLIC_ORIGIN), so the gateway could not call it back", 409);
+    }
+    if (!origin.startsWith("https://")) fail("This CRM has no https address set (PUBLIC_ORIGIN), so the gateway could not call it back", 409);
+    const base = await checkUrl(String(baseUrl || "").trim().replace(/\/+$/, ""));
+    const token = randomBytes(32).toString("base64url");
+    const s = raw();
+    s.pairing = { hash: sha256(token).toString("hex"), baseUrl: base, expires: now() + PAIR_MINUTES * 60000 };
+    store(s);
+    const query = new URLSearchParams({ app: "salesdesk", crm: origin, token, back: SETTINGS_PAGE });
+    return { url: `${base}/app/connect?${query}` };
+  }
+  function pair(input) {
+    const s = raw(), p = s.pairing;
+    const token = typeof input?.token === "string" ? input.token : "";
+    if (!p || !token || token.length > 200 || p.expires < now()) fail("Not found", 404);
+    if (!timingSafeEqual(sha256(token), Buffer.from(p.hash, "hex"))) fail("Not found", 404);
+    const secret = (value) => (typeof value === "string" && value.length >= 20 && value.length <= 300 && !/\s/.test(value) ? value : fail("The gateway sent a key that does not look right"));
+    const apiKey = secret(input.api_key), webhookSecret = secret(input.webhook_secret);
+    let given;
+    try {
+      given = new URL(String(input.base_url || "")).origin;
+    } catch {
+      given = "";
+    }
+    if (given !== new URL(p.baseUrl).origin) fail("The gateway answered from a different address than the one chosen here");
+    const fromId = String(input.default_from_phone_id || "");
+    if (!/^\d{0,40}$/.test(fromId)) fail("Invalid number ID");
+    const seen = { ...s.seenNumbers };
+    for (const n of Array.isArray(input.numbers) ? input.numbers.slice(0, 50) : []) {
+      const id = String(n?.phone_id || "");
+      if (/^\d{1,40}$/.test(id)) seen[id] = String(n.label || id).replace(/\p{Cc}/gu, " ").slice(0, 60);
+    }
+    delete s.pairing; // one use
+    Object.assign(s, { baseUrl: p.baseUrl, apiKey, webhookSecret, enabled: true, seenNumbers: seen, defaultFromPhoneId: s.defaultFromPhoneId || fromId });
+    store(s);
+    return { ok: true };
+  }
+  return { settings, save, receive, send, sendSystem, history, test, startPairing, pair };
 }

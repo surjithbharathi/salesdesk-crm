@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { crmGet, crmSend } from "../../api.js";
 import { useLoad } from "../../hooks.js";
 import { useToast } from "../../toast.jsx";
@@ -13,6 +13,12 @@ export default function Gateway({ users }) {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
   const [extra, setExtra] = useState({ id: "", owner: "" });
+  const [address, setAddress] = useState("");
+  useEffect(() => { // back from the gateway after approving: say so once, and drop the marker from the address
+    if (!/[?&]gateway=connected/.test(location.hash)) return;
+    notify("Connected to the WhatsApp gateway. Choose the owner of each number below.");
+    history.replaceState(null, "", location.pathname + location.hash.replace(/[?&]gateway=connected/, ""));
+  }, []);
   if (error) return <Failed>{error.message}</Failed>;
   if (!data) return <Loading>Loading the WhatsApp gateway settings…</Loading>;
   const active = users.filter((u) => u.active !== false);
@@ -39,6 +45,17 @@ export default function Gateway({ users }) {
       setBusy(false);
     }
   }
+  async function connect(event) {
+    event.preventDefault();
+    setBusy(true);
+    try {
+      const { url } = await crmSend("POST", "wa-gateway/connect", { baseUrl: address || data.baseUrl || "https://wa.deviindustries.com" });
+      location.assign(url);
+    } catch (e) {
+      notify(e.message);
+      setBusy(false);
+    }
+  }
   async function test() {
     setBusy(true);
     setResult(null);
@@ -54,11 +71,19 @@ export default function Gateway({ users }) {
   return (
     <>
       <Section title="Connect the gateway" desc="Customer messages on the Devi WhatsApp numbers appear in the CRM, and people reply from a lead. The gateway keeps doing its own work (AI replies, templates, alerts)." status={state[0]} tone={state[1]}>
-        <Steps>
-          <>In the gateway open Settings, Integrations, Webhooks and add a webhook for the events <b>customer.new</b> and <b>message.received</b> with this address: <code>{data.hookUrl}</code></>
-          <>The gateway shows a secret once. Paste it below as the webhook secret.</>
-          <>Paste the gateway address and its API key below, save, then press Test connection.</>
-        </Steps>
+        <form className="set-bar" onSubmit={connect}>
+          <label style={{ flex: "1 1 260px" }}>Gateway address<input className="field-input" type="url" required value={address || data.baseUrl || "https://wa.deviindustries.com"} onChange={(e) => setAddress(e.target.value)} /></label>
+          <button className="btn btn-primary" disabled={busy}>{data.enabled ? "Connect again" : "Connect"}</button>
+        </form>
+        <p className="muted">Connect opens the gateway. An inbox admin signs in there and allows it, and you come back here connected. The key and the secret pass between the two servers; nobody copies them.</p>
+        <details>
+          <summary>Set it up by hand instead</summary>
+          <Steps>
+            <>In the gateway open Settings, Integrations, Webhooks and add a webhook for the events <b>customer.new</b> and <b>message.received</b> with this address: <code>{data.hookUrl}</code></>
+            <>The gateway shows a secret once. Paste it below as the webhook secret.</>
+            <>Paste the gateway address and its API key below, save, then press Test connection.</>
+          </Steps>
+        </details>
       </Section>
       <form className="set-form" onSubmit={save} key={version}>
         <Section title="Connection" desc="Where the gateway lives and the keys that prove the messages are genuine. The key and secret are never shown again.">
