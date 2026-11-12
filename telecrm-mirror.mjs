@@ -170,7 +170,7 @@ export function createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecor
     if (!hit) fail('Add a custom action named "Salesdesk Note" in TeleCRM (Settings, Custom Actions) with a text field', 409);
     // its fields: an array, or kept under fieldSchema (as a list or keyed by api name)
     const schema = hit.fieldSchema ?? hit.fields ?? [];
-    const fields = Array.isArray(schema) ? schema : Array.isArray(schema.fields) ? schema.fields : Object.entries(schema).map(([apiName, f]) => ({ apiName, ...(f && typeof f === "object" ? f : {}) }));
+    const fields = Array.isArray(schema) ? schema : Array.isArray(schema.customFieldDefinitions) ? schema.customFieldDefinitions : Array.isArray(schema.fields) ? schema.fields : [];
     const field = fields.find((f) => /text|note/i.test(String(f.type || f.apiName || f.name || ""))) || fields[0];
     const out = { code: String(hit.code || hit.type || hit.id), field: field?.apiName || field?.name || "note" };
     savePushState({ ...st, noteAction: out });

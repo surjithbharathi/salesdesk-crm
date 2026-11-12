@@ -53,7 +53,7 @@ function world(t) {
       (tele.writes ||= []).push({ path, body: JSON.parse(init.body || "{}") });
       return ok(path.endsWith("/action") ? { data: [{ status: "CREATED" }] } : { id: path.split("/")[2], fields: {}, ...(tele.remarks ? { remarks: tele.remarks } : {}) });
     }
-    if (path === "/custom-actions") return ok([{ code: "ACTION_1001", displayName: "Salesmax Activity", fieldSchema: [] }, { code: "ACTION_1014", displayName: "Salesdesk Note", fieldSchema: [{ apiName: "note", type: "TEXT" }] }]);
+    if (path === "/custom-actions") return ok([{ code: "ACTION_1001", displayName: "Salesmax Activity", fieldSchema: [] }, { code: "ACTION_1014", displayName: "Salesdesk Note", fieldSchema: { customFieldDefinitions: [{ type: "TEXT", apiName: "notes", label: "Notes" }] } }]);
     const m = /^\/lead\/([^/]+)$/.exec(path);
     if (m) { const acts = tele.actions[m[1]] || []; return ok({ id: m[1], actions: acts.slice(skip, skip + limit) }); }
     return { ok: false, status: 404, json: async () => ({}) };
@@ -397,7 +397,7 @@ test("changes made here go back to TeleCRM: fields, status, assignee, follow-up 
   assert.equal(note.path, "/lead/aaa/action");
   assert.equal(note.body.actions[0].type, "1014");
   assert.equal(note.body.actions[0].employeeid, "sathiya@deviindustries.com");
-  assert.equal(note.body.actions[0].fields.note, "Wants 2 machines\n— Sathiya, Salesdesk");
+  assert.equal(note.body.actions[0].fields.notes, "Wants 2 machines\n— Sathiya, Salesdesk");
   assert.equal(note.body.actions[0].created_on, "15/01/2027 10:00:00");
   assert.equal(w.mirror.settings().outbox.waiting, 0);
   // the note coming back from TeleCRM is not added a second time
