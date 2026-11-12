@@ -96,10 +96,34 @@ export function readIndiamart(r) {
 // "Buyer Filled Details : …", "Suppliers from Jaipur will be preferred". Each "Key : Value" becomes a spec; the
 // requirement type, the search words and the buyer's own words get their own places; other lines are kept as notes.
 const sentence = (v) => String(v || "").replace(/\b([A-Z])([a-z]+)\b/g, (w, a, b, i) => (i ? a.toLowerCase() + b : w));
+// Some enquiries come as one long line ("Buyer Searched for X Machine Type: Semi-Automatic Motor Power: 1 HP …"). Each
+// "Key:" then starts its own line. The key is the longest name IndiaMART is known to use that ends right at the colon,
+// else the one or two capitalised words before it, so "Business Use Production Capacity:" splits at "Production Capacity".
+const KNOWN_KEYS = ["Probable Requirement Type", "Probable Order Value", "Finance/Loan Requirement", "Buyer Filled Details", "Production Capacity",
+  "Usage/Application", "Model Name/Number", "Crushing Capacity", "Capacity (kg/hr)", "Motor Power (HP)", "Automation Grade", "Number of Plates",
+  "Number of Bolts", "Operation Type", "Pressing Method", "Pressing Type", "No. of Screws", "Machine Type", "Motor Power", "Power Phase", "Buyer Info",
+  "I Deal In", "Technology", "Capacity", "Quantity", "Phase", "Power", "Brand", "Size"].sort((a, b) => b.length - a.length);
+export const PARSE_VERSION = 2;
+function messageLines(text) {
+  const out = [];
+  for (const line of String(text || "").split("\n")) {
+    const cuts = [0], re = /\s?:\s/g;
+    let m;
+    while ((m = re.exec(line))) {
+      const before = line.slice(0, m.index), low = before.toLowerCase();
+      let key = KNOWN_KEYS.find((k) => low.endsWith(k.toLowerCase()) && (before.length === k.length || /\s/.test(before[before.length - k.length - 1])));
+      if (!key) key = (/((?:[A-Z(][\w/&().-]*)(?: [A-Z(][\w/&().-]*)?)$/.exec(before) || [])[1];
+      const at = key ? before.length - key.length : 0;
+      if (at > cuts[cuts.length - 1]) cuts.push(at);
+    }
+    for (let i = 0; i < cuts.length; i++) out.push(line.slice(cuts[i], cuts[i + 1]).trim().replace(/,$/, ""));
+  }
+  return out;
+}
 export function enquiryDetails(q, source = "indiamart") {
   const specs = [], notes = [], seen = new Set();
   let searched = "", requirement = "", intro = "", buyerNote = "";
-  for (const raw of String(q.message || "").split("\n")) {
+  for (const raw of messageLines(q.message)) {
     const l = raw.trim();
     if (!l) continue;
     let m;
@@ -117,7 +141,7 @@ export function enquiryDetails(q, source = "indiamart") {
     if (notes.length < 3) notes.push(l);
   }
   return {
-    source: SOURCES[source] || "IndiaMART", kind: q.type || "Enquiry", code: q.code || "", id: q.id || "", at: q.at ? new Date(q.at).toISOString() : "",
+    v: PARSE_VERSION, source: SOURCES[source] || "IndiaMART", kind: q.type || "Enquiry", code: q.code || "", id: q.id || "", at: q.at ? new Date(q.at).toISOString() : "",
     product: q.product || "", category: q.category && q.category !== q.product ? q.category : "",
     subject: q.subject && q.subject !== q.product && !/^requirement for /i.test(q.subject) ? q.subject : "",
     searched, requirement, intro, specs, buyerNote, notes, quantity: q.quantity || "",
@@ -148,13 +172,13 @@ export function createMarketplaceLeads({ db, all, get, put, stamp, tx, log, keyP
     CREATE TABLE IF NOT EXISTS marketplace_enquiries(source TEXT NOT NULL, id TEXT NOT NULL, at INTEGER, status TEXT, lead_id TEXT, body TEXT, PRIMARY KEY(source,id))`);
   let secret, running = null, timer = null, retry = null;
   // Enquiries noted before the enquiry was taken apart get it now, from the copy kept of each one. Runs at start and
-  // touches only notes still without it.
+  // touches only notes still without it, or taken apart by an older reading of the message.
   function fillOldNotes() {
     const kept = new Map(db.prepare("SELECT source,id,body FROM marketplace_enquiries WHERE lead_id IS NOT NULL").all().map((r) => [r.source + ":" + r.id, r]));
     if (!kept.size) return 0;
     let n = 0;
     for (const a of all("activities")) {
-      if (!a.marketplaceId || !a.integrationSource || a.buyLead) continue;
+      if (!a.marketplaceId || !a.integrationSource || a.buyLead?.v === PARSE_VERSION) continue;
       const r = kept.get(a.integrationSource + ":" + a.marketplaceId);
       if (!r) continue;
       try { put("activities", { ...a, buyLead: { ...enquiryDetails(JSON.parse(r.body), r.source), ...(/^Repeat enquiry/.test(a.text || "") ? { repeat: true } : {}) } }); n++; }
