@@ -224,7 +224,7 @@ test("devices cannot attach other devices' calls or reuse recording hashes withi
   const f = fixture(t),
     a = f.api.call(f.device, f.payload());
   const second = f.api.issue({ name: "Second phone", owner: "owner" });
-  assert.throws(() => f.api.recording(second, a.id, f.audio, f.meta(a)), status(403));
+  assert.throws(() => f.api.recording(second, a.id, f.audio, f.meta(a)), status(409));
   f.api.recording(f.device, a.id, f.audio, f.meta(a));
   const b = f.api.call(f.device, f.payload({ localId: "call-2", startedAt: a.startedAt - 600000 }));
   assert.throws(() => f.api.recording(f.device, b.id, f.audio, f.meta(b)), status(409));
@@ -234,7 +234,7 @@ test("devices cannot attach other devices' calls or reuse recording hashes withi
   f.put("leads", { ...f.get("leads", "lead"), owner: "other" });
   assert.throws(
     () => f.api.recording(f.device, b.id, Buffer.from("OggS new"), f.meta(b)),
-    status(403),
+    status(409),
   );
 });
 
@@ -247,4 +247,12 @@ test("ambiguous automatic time matches require explicit manual review", (t) => {
     f.api.recording(f.device, a.id, f.audio, { ...f.meta(a), mode: "manual" }).duplicate,
     false,
   );
+});
+
+test("a refused recording is 409, so the phone skips that file and keeps syncing instead of signing out", (t) => {
+  const f = fixture(t),
+    a = f.api.call(f.device, f.payload());
+  f.put("leads", { id: "lead", name: "Saved lead", owner: "other", phone: "+91 98765 43210" });
+  assert.throws(() => f.api.recording(f.device, a.id, f.audio, f.meta(a)), status(409));
+  assert.throws(() => f.api.recording(f.device, "no-such-call", f.audio, {}), status(409));
 });
