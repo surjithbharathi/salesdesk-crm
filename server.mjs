@@ -991,6 +991,8 @@ const files = {
   "/lead-views.js": ["public/lead-views.js", "text/javascript"],
   "/auth.js": ["public/auth.js", "text/javascript"],
   "/reset-password.html": ["public/reset-password.html", "text/html"],
+  "/privacy.html": ["public/privacy.html", "text/html"],
+  "/privacy.css": ["public/privacy.css", "text/css"],
   "/reset-password.js": ["public/reset-password.js", "text/javascript"],
   "/style.css": ["public/style.css", "text/css"],
 };
