@@ -809,8 +809,10 @@ const mobileServer = http.createServer(async (req, res) => {
         }
         if (kind === "leads") {
           if (old) ownLead(userId, id);
-          const allowed = ["name", "phone", "countryCode", "mobileNumber", "company", "email", "city", "state", "language", "stage", "value"];
+          const allowed = ["name", "phone", "countryCode", "mobileNumber", "company", "email", "city", "state", "language", "stage", "deal", "value"];
           if (Object.keys(p).some((k) => !allowed.includes(k))) bad("Unsupported lead field");
+          // the pipeline step, as on the web; back to New also clears the step and a Won / Lost result
+          if (p.stage === "New" && !("deal" in p)) Object.assign(p, { deal: "", disposition: "" });
           const value = validate("leads", { ...p, owner: userId }, old || {}),
             record = old ? { ...value, updatedAt: now() } : stamp({ ...value, firstTouchAt: null });
           put("leads", record);
