@@ -85,17 +85,18 @@ export default function ErpPanel({ leadId, canEdit }) {
     crmGet(`erpnext/lead/${encodeURIComponent(leadId)}`).then((d) => live && setData(d)).catch(() => live && setData(null));
     return () => { live = false; };
   }, [leadId, tick]);
-  if (!data || (!data.connected && !data.quotations.length && !data.invoices.length)) return null;
-  const { quotations, invoices, totals, base } = data;
+  if (!data || (!data.connected && !data.quotations.length && !data.invoices?.length)) return null;
+  // invoices come only for owners, admins and managers (null for callers)
+  const { quotations, totals, base } = data, invoices = data.invoices || [], seeInvoices = Array.isArray(data.invoices);
   return (
     <section className="r-card ld-enq erp" aria-label="ERPNext">
       <p className="ld-kicker">ERPNext</p>
       {(quotations.length > 0 || invoices.length > 0) ? (
         <div className="erp-totals">
           <div><span>Quoted</span><b>{short(totals.quoted)}</b></div>
-          <div><span>Outstanding</span><b className={totals.outstanding > 0 ? "erp-owed" : ""}>{short(totals.outstanding)}</b></div>
+          {seeInvoices ? <div><span>Outstanding</span><b className={totals.outstanding > 0 ? "erp-owed" : ""}>{short(totals.outstanding)}</b></div> : <div><span>Quotations</span><b>{quotations.length}</b></div>}
         </div>
-      ) : <p className="ld-enq-intro">No quotation or invoice for this number in ERPNext yet.</p>}
+      ) : <p className="ld-enq-intro">No quotation{seeInvoices ? " or invoice" : ""} for this number in ERPNext yet.</p>}
       {quotations.length > 0 && <><p className="erp-head">Quotations</p><ul className="erp-list">{quotations.slice(0, 8).map((d) => <Doc key={d.name} d={d} kind="q" base={base} />)}</ul></>}
       {invoices.length > 0 && <><p className="erp-head">Invoices</p><ul className="erp-list">{invoices.slice(0, 8).map((d) => <Doc key={d.name} d={d} kind="i" base={base} />)}</ul></>}
       {canEdit && data.connected && <button type="button" className="r-btn ghost erp-make" onClick={() => setCreating(true)}>Create quotation in ERPNext</button>}
