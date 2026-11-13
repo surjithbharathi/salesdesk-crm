@@ -182,7 +182,7 @@ export function createSigninMethods({ db, getUser, users, userAuth, waGateway, k
     return { ok: true, sentTo: maskMobile(m), resendAfter: RESEND_MS / 1000 };
   }
 
-  function otpVerify({ mobile, code } = {}) {
+  function otpVerify({ mobile, code, deviceId } = {}) {
     const m = mobileKey(mobile);
     const c = String(code ?? "").replace(/\D/g, "");
     const wrong = () => fail("That code is not right, or it has expired", 401);
@@ -199,7 +199,7 @@ export function createSigninMethods({ db, getUser, users, userAuth, waGateway, k
       wrong();
     }
     db.prepare("DELETE FROM signin_otps WHERE mobile=?").run(m);
-    return userAuth.sessionForUser(row.user_id);
+    return userAuth.sessionForUser(row.user_id, deviceId);
   }
 
   // ---------------------------------------------------------------- Devi ERP (ERPNext / Frappe OAuth 2.0)

@@ -124,10 +124,11 @@ export function createUserAuth({ db, getUser, now = () => Date.now() }) {
     return { name: companyName() };
   }
   // A session for someone who proved who they are another way (a WhatsApp code, Devi ERP). Only existing logins qualify.
-  function sessionForUser(userId) {
+  // deviceId: a phone signing in (with a WhatsApp code) gets the same long phone session as a password sign-in
+  function sessionForUser(userId, deviceId) {
     const account = typeof userId === "string" && db.prepare("SELECT * FROM auth_accounts WHERE user_id=?").get(userId);
     if (!account) fail("Invalid credentials or session", 401);
-    return session(account);
+    return session(account, deviceId);
   }
   function authenticate(token) {
     if (typeof token !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(token))

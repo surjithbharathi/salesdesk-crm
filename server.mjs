@@ -669,6 +669,25 @@ const mobileServer = http.createServer(async (req, res) => {
   try {
     if (req.headers.origin) bad("Browser access is not supported on the device API", 403);
     const url = new URL(req.url, "http://localhost");
+    // the phone app signs in with a 6-digit WhatsApp code too, the same code and limits as the web sign-in
+    if (req.method === "GET" && url.pathname === "/v1/login/methods") {
+      reply(200, { otp: userAuth.configured() && signin.methods().otp });
+      return;
+    }
+    if (req.method === "POST" && (url.pathname === "/v1/login/otp/start" || url.pathname === "/v1/login/otp/verify")) {
+      if (!userAuth.configured()) bad("Create the shared company login in the web CRM first", 503);
+      if (req.headers["content-type"]?.split(";")[0] !== "application/json") bad("JSON required", 415);
+      const p = await body(req);
+      if (url.pathname.endsWith("start")) {
+        reply(200, await signin.otpStart({ mobile: p.mobile }));
+        return;
+      }
+      if (typeof p.deviceId !== "string" || !/^[a-f0-9-]{36}$/i.test(p.deviceId)) bad("Valid mobile device ID required");
+      const result = signin.otpVerify({ mobile: p.mobile, code: p.code, deviceId: p.deviceId });
+      loginDevice(result);
+      reply(200, result);
+      return;
+    }
     if (req.method === "POST" && url.pathname === "/v1/login") {
       if (!userAuth.configured()) bad("Create the shared company login in the web CRM first", 503);
       if (req.headers["content-type"]?.split(";")[0] !== "application/json")

@@ -113,3 +113,13 @@ test("Devi ERP emails with no matching login are refused", async () => {
   const st = s.erpStart();
   await assert.rejects(s.erpCallback({ code: "c", state: st.state, browserState: st.state }), /No Salesdesk login/);
 });
+
+test("a phone signing in with a WhatsApp code gets a phone session tied to its device", async () => {
+  const { s, sent, people } = fixture();
+  await s.save({ otpEnabled: true, mobiles: { u1: "98765 00008" } }, people);
+  await s.otpStart({ mobile: "9876500008" });
+  const device = "0b6c9f5e-3f2a-4a7d-9c1e-5d2f8a7b6c4d";
+  const session = s.otpVerify({ mobile: "9876500008", code: sent[0].text.slice(0, 6), deviceId: device });
+  assert.equal(session.user.id, "u1");
+  assert.equal(session.deviceId, device, "the device id goes with the session, as with a password sign-in on the phone");
+});
