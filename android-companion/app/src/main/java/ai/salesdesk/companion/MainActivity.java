@@ -183,9 +183,32 @@ public class MainActivity extends Activity {
         primary(b,"Sign in",()->{
             String username=user.getText().toString().trim(),secret=password.getText().toString();if(username.isEmpty()||secret.isEmpty()){notice("Enter your CRM username and password.");return;}password.setText("");
             SecureConfig.prefs(this).edit().putString("endpoint",BuildConfig.CRM_API_ORIGIN).commit();
-            work(()->{try{JSONObject r=SyncEngine.requestApi(this,"/v1/login","POST",new JSONObject().put("username",username).put("password",secret).put("deviceId",SecureConfig.deviceId(this)));JSONObject a=r.getJSONObject("user");SecureConfig.token(this,r.getString("token"));SecureConfig.prefs(this).edit().putString("userId",a.getString("id")).putString("user",a.toString()).remove("workspace").remove("kpiDay").remove("kpiEarned").remove("targets").putLong("since",System.currentTimeMillis()).putBoolean("enabled",false).putBoolean("clickToCall",false).putBoolean("callWhileLocked",false).commit();workspace=new JSONObject();runOnUiThread(this::render);loadWorkspace();}catch(Exception e){runOnUiThread(()->notice(e instanceof SyncEngine.HttpError?(((SyncEngine.HttpError)e).code==401?"Username or password is incorrect. Use the account created in web CRM.":"Company CRM is not ready or access was refused. Contact your administrator."):"Cannot reach your company CRM. Check your internet connection and try again."));}});
+            work(()->{try{JSONObject r=SyncEngine.requestApi(this,"/v1/login","POST",new JSONObject().put("username",username).put("password",secret).put("deviceId",SecureConfig.deviceId(this)));signedIn(r);}catch(Exception e){runOnUiThread(()->notice(e instanceof SyncEngine.HttpError?(((SyncEngine.HttpError)e).code==401?"Username or password is incorrect. Use the account created in web CRM.":"Company CRM is not ready or access was refused. Contact your administrator."):"Cannot reach your company CRM. Check your internet connection and try again."));}});
         });caption(b,"Password is never saved. Business call sync and background calling stay off until you enable them in Settings.");
+        // or a 6-digit code on WhatsApp, sent to the mobile number the admin saved for this person (shown only when the CRM has it on)
+        LinearLayout otp=column();otp.setVisibility(View.GONE);b.addView(otp);
+        text(otp,"Or sign in with a WhatsApp code",17,true).setPadding(0,dp(22),0,0);
+        EditText mobile=input(otp,"Mobile number",SecureConfig.prefs(this).getString("otpMobile",""));mobile.setInputType(3);mobile.setOnFocusChangeListener(keepInView);
+        LinearLayout codeBox=column();codeBox.setVisibility(View.GONE);
+        button(otp,"Send code on WhatsApp",()->{
+            String number=mobile.getText().toString().trim();if(number.replaceAll("[^0-9]","").length()<10){notice("Enter your 10-digit mobile number.");return;}
+            SecureConfig.prefs(this).edit().putString("endpoint",BuildConfig.CRM_API_ORIGIN).putString("otpMobile",number).commit();
+            work(()->{try{JSONObject r=SyncEngine.requestApi(this,"/v1/login/otp/start","POST",new JSONObject().put("mobile",number));runOnUiThread(()->{codeBox.setVisibility(View.VISIBLE);notice("If "+r.optString("sentTo","this number")+" is saved for a CRM user, a code is on its way on WhatsApp. It works for 5 minutes.");});}
+                catch(Exception e){runOnUiThread(()->notice(e instanceof SyncEngine.HttpError&&((SyncEngine.HttpError)e).code==429?"Too many codes asked for. Wait a little and try again.":e instanceof SyncEngine.HttpError&&((SyncEngine.HttpError)e).code==409?"Sign-in with a code is turned off. Use your username and password.":"Could not send the code. Check your internet connection and try again."));}});
+        });
+        otp.addView(codeBox);
+        EditText code=input(codeBox,"6-digit code","");code.setInputType(2);code.setOnFocusChangeListener(keepInView);
+        primary(codeBox,"Sign in with code",()->{
+            String number=mobile.getText().toString().trim(),digits=code.getText().toString().replaceAll("[^0-9]","");if(digits.length()!=6){notice("Enter the 6-digit code from WhatsApp.");return;}code.setText("");
+            SecureConfig.prefs(this).edit().putString("endpoint",BuildConfig.CRM_API_ORIGIN).commit();
+            work(()->{try{signedIn(SyncEngine.requestApi(this,"/v1/login/otp/verify","POST",new JSONObject().put("mobile",number).put("code",digits).put("deviceId",SecureConfig.deviceId(this))));}
+                catch(Exception e){runOnUiThread(()->notice(e instanceof SyncEngine.HttpError&&((SyncEngine.HttpError)e).code==401?"That code is not right, or it has expired. Ask for a new one.":"Cannot reach your company CRM. Check your internet connection and try again."));}});
+        });
+        SecureConfig.prefs(this).edit().putString("endpoint",BuildConfig.CRM_API_ORIGIN).commit();
+        new Thread(()->{try{boolean on=SyncEngine.requestApi(this,"/v1/login/methods","GET",null).optBoolean("otp");if(on)runOnUiThread(()->otp.setVisibility(View.VISIBLE));}catch(Exception ignored){/* an older CRM without codes: password only */}},"login-methods").start();
     }
+    /** After a password or WhatsApp-code sign-in: keep the session, start fresh, load the workspace. */
+    void signedIn(JSONObject r)throws Exception{JSONObject a=r.getJSONObject("user");SecureConfig.token(this,r.getString("token"));SecureConfig.prefs(this).edit().putString("userId",a.getString("id")).putString("user",a.toString()).remove("workspace").remove("kpiDay").remove("kpiEarned").remove("targets").putLong("since",System.currentTimeMillis()).putBoolean("enabled",false).putBoolean("clickToCall",false).putBoolean("callWhileLocked",false).commit();workspace=new JSONObject();runOnUiThread(this::render);loadWorkspace();}
     void refresh(){work(()->{try{loadWorkspace();}catch(Exception e){failure(e);}});}
     void loadWorkspace()throws Exception{try{JSONObject policy=SyncEngine.requestApi(this,"/v1/tracking-preferences","GET",null);SecureConfig.prefs(this).edit().putString("trackingPolicy",policy.toString()).commit();}catch(SyncEngine.HttpError e){if(e.code!=404)throw e;}JSONObject d=SyncEngine.requestApi(this,"/v1/workspace","GET",null);SecureConfig.prefs(this).edit().putString("workspace",d.toString()).putLong("workspaceAt",System.currentTimeMillis()).commit();workspace=d;loadKpi();Reminders.schedule(this);runOnUiThread(this::render);runOnUiThread(this::offerCaller);runOnUiThread(this::askNotifications);}
     // Right after sign-in the app offers the caller popup once, so it works on the next call without digging in settings.

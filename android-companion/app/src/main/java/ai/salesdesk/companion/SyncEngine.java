@@ -36,7 +36,7 @@ final class SyncEngine {
         check(c); return transport(c,path,method,bytes,headers,true);
     }
     static JSONObject requestApi(Context c,String path,String method,JSONObject body) throws Exception {
-        return new JSONObject(transport(c,path,method,body==null?null:body.toString().getBytes("UTF-8"),Collections.singletonMap("Content-Type","application/json"),!path.equals("/v1/login")));
+        return new JSONObject(transport(c,path,method,body==null?null:body.toString().getBytes("UTF-8"),Collections.singletonMap("Content-Type","application/json"),!path.startsWith("/v1/login")));
     }
     static String transport(Context c,String path,String method,byte[] bytes,Map<String,String> headers,boolean authenticated) throws Exception {
         String base = SecureConfig.prefs(c).getString("endpoint", ""); URL url = new URL(base + path);
