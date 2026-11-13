@@ -170,42 +170,51 @@ public class MainActivity extends Activity {
         TextView synced=Ui.text(this,at==0?"Not synced yet. Tap the sync button at the top.":"Last synced "+Ui.dayLabel(at).toLowerCase(Locale.ROOT)+" at "+Ui.clock(at),12,false,MUTED);synced.setPadding(dp(4),dp(8),0,0);content.addView(synced);
     }
     void login(){
-        // the logo: the blue tile with the rising steps, a thin rule, then "Devi Industries" over "Salesdesk"
-        LinearLayout banner=column();banner.setBackgroundColor(Color.WHITE);banner.setPadding(dp(26),dp(56),dp(26),dp(28));
-        LinearLayout logo=horizontal();ImageView mark=glyph(R.drawable.ic_mark,Color.WHITE);mark.clearColorFilter();mark.setPadding(dp(14),dp(14),dp(14),dp(14));mark.setBackground(surface(ACCENT,16));logo.addView(mark,new LinearLayout.LayoutParams(dp(64),dp(64)));
-        View rule=new View(this);rule.setBackgroundColor(0xffb8b8c0);LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(dp(2),dp(52));rp.setMargins(dp(14),0,dp(14),0);logo.addView(rule,rp);
-        LinearLayout words=column();TextView company=Ui.text(this,"Devi Industries",17,true,INK);words.addView(company);TextView product=Ui.text(this,"Salesdesk",34,true,ACCENT);product.setTypeface(Typeface.create("sans-serif",Typeface.BOLD));product.setIncludeFontPadding(false);words.addView(product);logo.addView(words);banner.addView(logo);
-        TextView tag=Ui.text(this,"Calls, follow-ups and daily goals for the Devi Industries team.",15,false,MUTED);tag.setPadding(0,dp(18),0,0);banner.addView(tag);ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);LinearLayout page=column();page.addView(banner);LinearLayout b=column();b.setPadding(dp(26),dp(24),dp(26),dp(24));page.addView(b);scroll.addView(page);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1f));
-        text(b,"Sign in",26,true);
-        caption(b,"Use the same username and password as web CRM. Your company connection is already configured — no IP address or server link needed.");
-        EditText user=input(b,"Username",""),password=input(b,"Password","");user.setInputType(33);password.setInputType(129);
-        View.OnFocusChangeListener keepInView=(field,has)->{if(has)scroll.postDelayed(()->{android.graphics.Rect r=new android.graphics.Rect();field.getDrawingRect(r);scroll.offsetDescendantRectToMyCoords(field,r);scroll.smoothScrollTo(0,Math.max(0,r.bottom+dp(96)-scroll.getHeight()));},300);};user.setOnFocusChangeListener(keepInView);password.setOnFocusChangeListener(keepInView);
-        primary(b,"Sign in",()->{
+        // one calm screen: the logo, then a white card holding one way to sign in at a time (password, or a WhatsApp code
+        // when the CRM has codes on), then a short line on what stays private
+        ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);LinearLayout page=column();page.setPadding(dp(22),dp(64),dp(22),dp(28));scroll.addView(page);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1f));
+        LinearLayout logo=horizontal();logo.setGravity(Gravity.CENTER_VERTICAL);ImageView mark=glyph(R.drawable.ic_mark,Color.WHITE);mark.clearColorFilter();mark.setPadding(dp(11),dp(11),dp(11),dp(11));mark.setBackground(surface(ACCENT,14));logo.addView(mark,new LinearLayout.LayoutParams(dp(52),dp(52)));
+        LinearLayout words=column();words.setPadding(dp(14),0,0,0);TextView product=Ui.text(this,"Salesdesk",28,true,INK);product.setTypeface(Typeface.create("sans-serif",Typeface.BOLD));product.setIncludeFontPadding(false);words.addView(product);words.addView(Ui.text(this,"Devi Industries",14,false,MUTED));logo.addView(words);page.addView(logo);
+        TextView hello=Ui.text(this,"Sign in to your workspace",20,true,INK);hello.setPadding(0,dp(36),0,dp(4));page.addView(hello);
+        TextView sub=Ui.text(this,"Your calls, follow-ups and goals, the same as on the web CRM.",14,false,MUTED);sub.setPadding(0,0,0,dp(18));page.addView(sub);
+        LinearLayout box=column();box.setPadding(dp(18),dp(18),dp(18),dp(8));GradientDrawable boxBg=surface(Color.WHITE,18);boxBg.setStroke(dp(1),LINE);box.setBackground(boxBg);page.addView(box,new LinearLayout.LayoutParams(-1,-2));
+        View.OnFocusChangeListener keepInView=(field,has)->{if(has)scroll.postDelayed(()->{android.graphics.Rect r=new android.graphics.Rect();field.getDrawingRect(r);scroll.offsetDescendantRectToMyCoords(field,r);scroll.smoothScrollTo(0,Math.max(0,r.bottom+dp(96)-scroll.getHeight()));},300);};
+        // the switch between the two ways, shown only once the CRM says codes are on
+        LinearLayout tabs=horizontal();tabs.setPadding(dp(4),dp(4),dp(4),dp(4));tabs.setBackground(surface(SOFT,12));tabs.setVisibility(View.GONE);
+        LinearLayout.LayoutParams tabsLp=new LinearLayout.LayoutParams(-1,-2);tabsLp.setMargins(0,0,0,dp(16));box.addView(tabs,tabsLp);
+        LinearLayout pass=column(),otp=column();otp.setVisibility(View.GONE);box.addView(pass);box.addView(otp);
+        TextView[] tab=new TextView[2];String[] names={"Password","WhatsApp code"};
+        for(int i=0;i<2;i++){final int at=i;TextView t=Ui.text(this,names[i],14,true,MUTED);t.setGravity(Gravity.CENTER);t.setPadding(0,dp(10),0,dp(10));t.setFocusable(true);t.setContentDescription("Sign in with "+names[i].toLowerCase(Locale.ROOT));tab[i]=t;tabs.addView(t,new LinearLayout.LayoutParams(0,-2,1));
+            t.setOnClickListener(v->{for(int k=0;k<2;k++){tab[k].setTextColor(k==at?ACCENT:MUTED);tab[k].setBackground(k==at?surface(Color.WHITE,9):null);tab[k].setSelected(k==at);}pass.setVisibility(at==0?View.VISIBLE:View.GONE);otp.setVisibility(at==1?View.VISIBLE:View.GONE);});}
+        tab[0].setTextColor(ACCENT);tab[0].setBackground(surface(Color.WHITE,9));tab[0].setSelected(true);
+        // password
+        EditText user=input(pass,"Username",""),password=input(pass,"Password","");user.setInputType(33);password.setInputType(129);user.setOnFocusChangeListener(keepInView);password.setOnFocusChangeListener(keepInView);
+        primary(pass,"Sign in",()->{
             String username=user.getText().toString().trim(),secret=password.getText().toString();if(username.isEmpty()||secret.isEmpty()){notice("Enter your CRM username and password.");return;}password.setText("");
             SecureConfig.prefs(this).edit().putString("endpoint",BuildConfig.CRM_API_ORIGIN).commit();
             work(()->{try{JSONObject r=SyncEngine.requestApi(this,"/v1/login","POST",new JSONObject().put("username",username).put("password",secret).put("deviceId",SecureConfig.deviceId(this)));signedIn(r);}catch(Exception e){runOnUiThread(()->notice(e instanceof SyncEngine.HttpError?(((SyncEngine.HttpError)e).code==401?"Username or password is incorrect. Use the account created in web CRM.":"Company CRM is not ready or access was refused. Contact your administrator."):"Cannot reach your company CRM. Check your internet connection and try again."));}});
-        });caption(b,"Password is never saved. Business call sync and background calling stay off until you enable them in Settings.");
-        // or a 6-digit code on WhatsApp, sent to the mobile number the admin saved for this person (shown only when the CRM has it on)
-        LinearLayout otp=column();otp.setVisibility(View.GONE);b.addView(otp);
-        text(otp,"Or sign in with a WhatsApp code",17,true).setPadding(0,dp(22),0,0);
+        });
+        // WhatsApp code: the number first; the code field appears once a code is on its way
         EditText mobile=input(otp,"Mobile number",SecureConfig.prefs(this).getString("otpMobile",""));mobile.setInputType(3);mobile.setOnFocusChangeListener(keepInView);
         LinearLayout codeBox=column();codeBox.setVisibility(View.GONE);
+        TextView sent=Ui.text(this,"",13,false,MUTED);sent.setPadding(0,dp(6),0,dp(10));
         button(otp,"Send code on WhatsApp",()->{
             String number=mobile.getText().toString().trim();if(number.replaceAll("[^0-9]","").length()<10){notice("Enter your 10-digit mobile number.");return;}
             SecureConfig.prefs(this).edit().putString("endpoint",BuildConfig.CRM_API_ORIGIN).putString("otpMobile",number).commit();
-            work(()->{try{JSONObject r=SyncEngine.requestApi(this,"/v1/login/otp/start","POST",new JSONObject().put("mobile",number));runOnUiThread(()->{codeBox.setVisibility(View.VISIBLE);notice("If "+r.optString("sentTo","this number")+" is saved for a CRM user, a code is on its way on WhatsApp. It works for 5 minutes.");});}
+            work(()->{try{JSONObject r=SyncEngine.requestApi(this,"/v1/login/otp/start","POST",new JSONObject().put("mobile",number));runOnUiThread(()->{sent.setText("If "+r.optString("sentTo","this number")+" is saved for you in the CRM, a code is on its way on WhatsApp. It works for 5 minutes.");codeBox.setVisibility(View.VISIBLE);});}
                 catch(Exception e){runOnUiThread(()->notice(e instanceof SyncEngine.HttpError&&((SyncEngine.HttpError)e).code==429?"Too many codes asked for. Wait a little and try again.":e instanceof SyncEngine.HttpError&&((SyncEngine.HttpError)e).code==409?"Sign-in with a code is turned off. Use your username and password.":"Could not send the code. Check your internet connection and try again."));}});
         });
-        otp.addView(codeBox);
+        otp.addView(codeBox);codeBox.addView(sent);
         EditText code=input(codeBox,"6-digit code","");code.setInputType(2);code.setOnFocusChangeListener(keepInView);
-        primary(codeBox,"Sign in with code",()->{
+        primary(codeBox,"Sign in",()->{
             String number=mobile.getText().toString().trim(),digits=code.getText().toString().replaceAll("[^0-9]","");if(digits.length()!=6){notice("Enter the 6-digit code from WhatsApp.");return;}code.setText("");
             SecureConfig.prefs(this).edit().putString("endpoint",BuildConfig.CRM_API_ORIGIN).commit();
             work(()->{try{signedIn(SyncEngine.requestApi(this,"/v1/login/otp/verify","POST",new JSONObject().put("mobile",number).put("code",digits).put("deviceId",SecureConfig.deviceId(this))));}
                 catch(Exception e){runOnUiThread(()->notice(e instanceof SyncEngine.HttpError&&((SyncEngine.HttpError)e).code==401?"That code is not right, or it has expired. Ask for a new one.":"Cannot reach your company CRM. Check your internet connection and try again."));}});
         });
+        TextView note=Ui.text(this,"Your password is never saved on this phone. Call sync and background calling stay off until you turn them on in Settings.",12,false,MUTED);note.setPadding(dp(4),dp(16),dp(4),0);page.addView(note);
         SecureConfig.prefs(this).edit().putString("endpoint",BuildConfig.CRM_API_ORIGIN).commit();
-        new Thread(()->{try{boolean on=SyncEngine.requestApi(this,"/v1/login/methods","GET",null).optBoolean("otp");if(on)runOnUiThread(()->otp.setVisibility(View.VISIBLE));}catch(Exception ignored){/* an older CRM without codes: password only */}},"login-methods").start();
+        new Thread(()->{try{boolean on=SyncEngine.requestApi(this,"/v1/login/methods","GET",null).optBoolean("otp");if(on)runOnUiThread(()->tabs.setVisibility(View.VISIBLE));}catch(Exception ignored){/* an older CRM without codes: password only */}},"login-methods").start();
     }
     /** After a password or WhatsApp-code sign-in: keep the session, start fresh, load the workspace. */
     void signedIn(JSONObject r)throws Exception{JSONObject a=r.getJSONObject("user");SecureConfig.token(this,r.getString("token"));SecureConfig.prefs(this).edit().putString("userId",a.getString("id")).putString("user",a.toString()).remove("workspace").remove("kpiDay").remove("kpiEarned").remove("targets").putLong("since",System.currentTimeMillis()).putBoolean("enabled",false).putBoolean("clickToCall",false).putBoolean("callWhileLocked",false).commit();workspace=new JSONObject();runOnUiThread(this::render);loadWorkspace();}
