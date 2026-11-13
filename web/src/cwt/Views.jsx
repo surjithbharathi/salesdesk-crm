@@ -27,7 +27,7 @@ const WORK_VIEWS = [["active", "All Active"], ["fresh", "New Lead"], ["today", "
 const STAGE_VIEWS = STATUSES.map((s) => [stageView(s), s]);
 const OTHER_VIEWS = [["all", "All Leads"], ["mine", "My Leads"], ["untouched", "Not called yet"], ["report", "Status vs Assignee Report"]];
 const STAGE_OF_VIEW = Object.fromEntries(STATUSES.map((s) => [stageView(s), s]));
-const LABEL = { ...Object.fromEntries([...WORK_VIEWS, ...STAGE_VIEWS, ...OTHER_VIEWS]), waiting: "New, not called (last 7 days)" };
+const LABEL = { ...Object.fromEntries([...WORK_VIEWS, ...STAGE_VIEWS, ...OTHER_VIEWS]), waiting: "New, no call or WhatsApp (last 7 days)" };
 // Which upload a lead came from: a file added in Settings, the Salesmax import, or TeleCRM's Excel upload
 const uploadOf = (l) => l.upload?.name || (l.importedFrom === "salesmax" ? "Salesmax import" : l.importTouch || /^excel$/i.test(l.source || "") ? "TeleCRM Excel upload" : "");
 const SMART_KEY = "salesdesk-smart-views";
@@ -66,18 +66,18 @@ export default function Views({ params }) {
   const nameOf = (id) => crm.users.get(id)?.name || "";
   // what the work views need to know about each lead: calls made / answered, and whether it was assigned today
   const facts = useMemo(() => {
-    const calls = new Map(), assigned = new Set(), messages = new Map(), notes = new Map(), today = new Date().toDateString();
+    const calls = new Map(), assigned = new Set(), messages = new Map(), sent = new Set(), notes = new Map(), today = new Date().toDateString();
     const bump = (m, id) => m.set(id, (m.get(id) || 0) + 1);
     for (const a of crm.activities || []) {
       if (a.type === "Call") { const c = calls.get(a.leadId) || { n: 0, answered: 0 }; c.n++; if (Number(a.duration) > 0) c.answered++; calls.set(a.leadId, c); }
-      else if (a.type === "Message") bump(messages, a.leadId);
+      else if (a.type === "Message") { bump(messages, a.leadId); if (a.direction === "Outgoing") sent.add(a.leadId); }
       else if (a.type === "Note") bump(notes, a.leadId);
       else if (a.type === "System" && /assign/i.test(a.text || "") && new Date(a.occurredAt || a.createdAt).toDateString() === today) assigned.add(a.leadId);
     }
     for (const l of crm.leads || []) if (l.owner && new Date(l.createdAt).toDateString() === today) assigned.add(l.id);
     const openTasks = new Map();
     for (const t of crm.openTasks || []) if (t.leadId) bump(openTasks, t.leadId);
-    return { calls, assigned, messages, notes, openTasks };
+    return { calls, assigned, messages, sent, notes, openTasks };
   }, [crm.activities, crm.leads]);
   const endOfDay = new Date(); endOfDay.setHours(23, 59, 59, 999);
   const testOf = (id) => {
@@ -94,8 +94,8 @@ export default function Views({ params }) {
       due: (l) => active(l) && crm.nextDue.has(l.id) && Date.parse(crm.nextDue.get(l.id)) <= endOfDay.getTime(),
       unassigned: (l) => active(l) && !l.owner,
       untouched: (l) => active(l) && !l.firstTouchAt && !facts.calls.get(l.id),
-      // the dashboard tile: given an owner 2 hours to 7 days ago and still not called
-      waiting: (l) => { const t = Date.parse(l.createdAt) || 0, now = Date.now(); return active(l) && !l.archived && l.owner && !l.firstTouchAt && !facts.calls.get(l.id) && t < now - 2 * 3600000 && t > now - 7 * 86400000; },
+      // the dashboard tile: given an owner 2 hours to 7 days ago, still no call and no WhatsApp sent
+      waiting: (l) => { const t = Date.parse(l.createdAt) || 0, now = Date.now(); return active(l) && !l.archived && l.owner && !l.firstTouchAt && !facts.calls.get(l.id) && !facts.sent.has(l.id) && t < now - 2 * 3600000 && t > now - 7 * 86400000; },
     }[id] || (() => true);
   };
   const team = crm.me?.users?.filter((u) => u.active !== false) || [];
