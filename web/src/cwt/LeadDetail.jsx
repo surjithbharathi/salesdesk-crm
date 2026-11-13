@@ -101,9 +101,9 @@ export function LeadDetail({ id, nav = null, compose: startWith = "" }) {
   const canEdit = crm.me?.lead;
   // anyone may give their own lead to a colleague or take an unassigned one for themselves; team leads and admins move any lead
   const canAssign = canEdit || (raw.owner && raw.owner === crm.me?.id) || !raw.owner;
-  const assignTo = canEdit || raw.owner ? team : team.filter((u) => u.id === crm.me?.id);
   const isAdmin = ["owner", "admin"].includes(crm.me?.role);
   const team = (crm.me?.users || []).filter((u) => u.active !== false);
+  const assignTo = canEdit || raw.owner ? team : team.filter((u) => u.id === crm.me?.id);
   const rating = Math.max(0, Math.min(5, Math.round(Number(raw.telecrm?.rating) || 0)));
   const stepAt = STEP_AT[status] ?? -1;
   const calls = acts.filter((a) => a.type === "Call");
