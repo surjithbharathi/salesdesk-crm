@@ -14,7 +14,7 @@ Salesdesk phones can update themselves from the CRM. When a newer APK is publish
   - `GET /v1/app/update` returns `{available:false}` or `{available:true, versionCode, versionName, notes, mandatory, size, sha256}`.
   - `GET /v1/app/update/apk` streams the APK as `application/vnd.android.package-archive`, with an `X-Content-SHA256` header.
 - **Phone** (`Updater.java`):
-  - **When it checks.** On opening the app, at most once every 6 hours, and any time from Settings › Account & app › **Check for updates**. Preview builds (`.preview`) never self-update.
+  - **When it checks.** Each time the app is opened (at most every 5 minutes), and any time from Settings › Account & app › **Check for updates**. Preview builds (`.preview`) never self-update.
   - **What it checks.** The download is HTTPS only and is written to a `.part` file in the app's cache. The phone then checks:
     - size and SHA-256;
     - package name;
@@ -38,7 +38,7 @@ Salesdesk phones can update themselves from the CRM. When a newer APK is publish
    ```bash
    node scripts/publish-app-update.mjs path/to/signed.apk --notes "Faster call sync" [--mandatory] [--out ./data/app-update]
    ```
-4. **Copy the files to the server folder:** first `salesdesk.apk`, then `latest.json`. Copy them into `/opt/salesdesk-crm/data/app-update/` on the VPS, for example with `scp`. No redeploy or restart is needed. Phones see the update within 6 hours, or at once with **Check for updates**.
+4. **Copy the files to the server folder:** first `salesdesk.apk`, then `latest.json`. Copy them into `/opt/salesdesk-crm/data/app-update/` on the VPS, for example with `scp`. No redeploy or restart is needed. Phones see the update the next time the app is opened. A person who taps **Later** is asked again after 6 hours.
 
 To withdraw an update, delete `latest.json`; phones then see `{available:false}`.
 

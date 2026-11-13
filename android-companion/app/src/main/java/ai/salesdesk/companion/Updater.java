@@ -34,9 +34,12 @@ import org.json.JSONObject;
 /** Private self-update (no Play Store): asks the CRM for a newer APK, downloads it, checks it, and opens Android's installer.
  *  The APK must be signed with the same key as the installed app; anything else is refused and deleted. See APP_UPDATE.md. */
 final class Updater {
-    static final long CHECK_EVERY_MS = 6L * 60 * 60 * 1000;
+    // the CRM is asked each time the app is opened (at most every 5 minutes), so a newly published update shows up at once;
+    // an update the person put off with "Later" is offered again after 6 hours
+    static final long CHECK_EVERY_MS = 5L * 60 * 1000, LATER_MS = 6L * 60 * 60 * 1000;
     static final long MIN_BYTES = 64L * 1024, MAX_BYTES = 80L * 1024 * 1024;
     private static volatile boolean checking, downloading, cancelled;
+    private static java.lang.ref.WeakReference<AlertDialog> offered = new java.lang.ref.WeakReference<>(null); // the update popup on screen, if any
     private static boolean waitingForPermission; // set when we sent the user to "Install unknown apps"
 
     private Updater() {}
@@ -83,7 +86,7 @@ final class Updater {
         check(a, false);
     }
 
-    /** Asks the CRM whether a newer app is published. Automatic checks run at most every 6 hours; a manual one always runs
+    /** Asks the CRM whether a newer app is published. Automatic checks run when the app opens, at most every 5 minutes; a manual one always runs
      *  and says what it found. A pending mandatory update is checked on every resume until it is installed. */
     static void check(Activity a, boolean manual) {
         if (preview(a)) { if (manual) message(a, "Updates", "Preview builds are not updated in the app. Install the new preview APK."); return; }
@@ -122,13 +125,15 @@ final class Updater {
             return;
         }
         if (mandatory) prefs(a).edit().putLong("mandatoryCode", code).apply(); else prefs(a).edit().remove("mandatoryCode").apply();
+        if (!manual && !mandatory && ((offered.get() != null && offered.get().isShowing()) || (prefs(a).getLong("laterCode", 0) == code && System.currentTimeMillis() - prefs(a).getLong("laterAt", 0) < LATER_MS))) return;
         String text = "Salesdesk " + name + " is ready (" + mb(size) + "). You have " + BuildConfig.VERSION_NAME + "."
                 + (mandatory ? "\n\nThis update is required to keep using Salesdesk." : "")
                 + (notes.isEmpty() ? "" : "\n\nWhat's new:\n" + (notes.length() > 600 ? notes.substring(0, 600) : notes));
         AlertDialog.Builder b = new AlertDialog.Builder(a).setTitle("Update available").setMessage(text)
                 .setPositiveButton("Update now", (d, w) -> download(a, code, size, sha, mandatory));
-        if (mandatory) b.setCancelable(false); else b.setNegativeButton("Later", null);
-        b.show();
+        if (mandatory) b.setCancelable(false);
+        else b.setNegativeButton("Later", (d, w) -> prefs(a).edit().putLong("laterCode", code).putLong("laterAt", System.currentTimeMillis()).apply());
+        offered = new java.lang.ref.WeakReference<>(b.show());
     }
 
     @SuppressLint("SetTextI18n") // the app is English-only, like the rest of its screens
