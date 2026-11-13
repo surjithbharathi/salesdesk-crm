@@ -191,3 +191,23 @@ test("a one-line IndiaMART message is split at each known key", () => {
   assert.deepEqual(i.specs, [["Capacity", "1-5 ton/day"], ["Number of Bolts", "4"]]);
   assert.equal(d.v, 2);
 });
+
+test("a won customer who asks again starts over as a new lead with the same owner and a call to make", async (t) => {
+  const f = fixture(t), { m, replies, all } = f;
+  f.put("users", { id: "u2", name: "Balaji", active: true });
+  f.put("leads", { id: "raju", name: "Raju Awc", phone: "+919505429074", stage: "Closed", deal: "Won", disposition: "Won", owner: "u2", firstTouchAt: "2026-10-01T00:00:00Z" });
+  f.put("leads", { id: "warm", name: "Warm", phone: "+919000000001", stage: "Opportunity", deal: "Interested Customer", owner: "u2" });
+  m.save({ owner: "u2", indiamart: { key: "abcdefghijklmnop1234", enabled: true, backfillDays: 2 } });
+  replies.push({ status: 200, body: { CODE: 200, RESPONSE: [im({ SENDER_MOBILE: "+91-9505429074", QUERY_PRODUCT_NAME: "Oil Expeller Machine" }), im({ SENDER_MOBILE: "+91-9000000001" })] } });
+  await m.sync();
+  const raju = f.get("leads", "raju");
+  assert.deepEqual([raju.stage, raju.deal, raju.disposition, raju.repeat, raju.firstTouchAt, raju.owner], ["New", "", "", true, null, "u2"]);
+  assert.ok(all("activities").some((a) => a.leadId === "raju" && /^Pipeline step changed: Won → New · reason: new IndiaMART enquiry/.test(a.text)));
+  const task = all("tasks").find((x) => x.leadId === "raju");
+  assert.equal(task.owner, "u2");
+  assert.equal(task.status, "Open");
+  assert.match(task.title, /^Call Raju Awc: repeat enquiry for Oil Expeller Machine/);
+  const warm = f.get("leads", "warm");
+  assert.equal(warm.deal, "Interested Customer", "a lead still being worked keeps its step");
+  assert.equal(all("tasks").some((x) => x.leadId === "warm"), false);
+});

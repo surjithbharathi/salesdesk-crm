@@ -263,8 +263,16 @@ export function createMarketplaceLeads({ db, all, get, put, stamp, tx, log, keyP
           for (const k of ["email", "company", "city"]) if (!lead[k] && q[k]) fill[k] = q[k];
           if (!lead.state && q.state) Object.assign(fill, withRegion({ ...lead, ...fill }, { state: q.state }) || { state: cleanState(q.state) });
           if (q.name && !/\p{L}/u.test(String(lead.name || ""))) fill.name = q.name;
-          put("leads", { ...lead, ...fill, lastEnquiryAt: at, updatedAt: new Date(now()).toISOString() });
+          // a customer who already bought and asks again starts over as a new lead with the same owner: marked as a
+          // repeat customer, not yet called, with a call for the owner right away
+          const won = lead.disposition === "Won" || lead.deal === "Won";
+          const reopen = won ? { stage: "New", deal: "", disposition: "", repeat: true, firstTouchAt: null } : {};
+          put("leads", { ...lead, ...fill, ...reopen, lastEnquiryAt: at, updatedAt: new Date(now()).toISOString() });
           log(lead.id, "Note", `Repeat enquiry: ${head}${said ? "\n" + said : ""}`, { integrationSource: source, marketplaceId: q.id, buyLead: { ...enquiryDetails(q, source), repeat: true } });
+          if (won) {
+            log(lead.id, "System", `Pipeline step changed: Won → New · reason: new ${label} enquiry from a customer who already bought`);
+            put("tasks", stamp({ title: `Call ${lead.name || "the customer"}: repeat enquiry${q.product ? " for " + q.product : ""}`, leadId: lead.id, owner: lead.owner || "", status: "Open", due: new Date(now()).toISOString(), origin: "Repeat enquiry" }));
+          }
           status = "repeat"; leadId = lead.id;
         } else {
           let made = stamp({ name: q.name || q.company || q.phone || q.email, phone: q.phone, email: q.email, company: q.company, city: q.city, state: q.state ? cleanState(q.state) : "",
