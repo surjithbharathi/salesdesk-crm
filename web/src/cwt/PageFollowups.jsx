@@ -176,7 +176,11 @@ export default function CwtFollowups() {
   // the page shows the planned follow-ups, or the AI tasks (what to do next, picked up from calls and leads)
   const [view, setView] = useState(() => (/[?&]view=ai\b/.test(location.hash) ? "ai" : "followups"));
   const [aiCount, setAiCount] = useState(null);
-  useEffect(() => { if (view === "followups") crmGet("ai-tasks").then((d) => setAiCount(d.items.length)).catch(() => {}); }, [view]);
+  // refresh: read follow-ups (and the AI tasks) again from the CRM without reloading the page
+  const [tick, setTick] = useState(0);
+  const [spin, setSpin] = useState(false);
+  const refresh = () => { setSpin(true); setTick((t) => t + 1); Promise.resolve(crm.reload()).finally(() => setTimeout(() => setSpin(false), 400)); };
+  useEffect(() => { if (view === "followups") crmGet("ai-tasks").then((d) => setAiCount(d.items.length)).catch(() => {}); }, [view, tick]);
 
   const range = filter.key === "custom" ? [filter.from, filter.to] : presetRange(filter.key);
   const mine = useMemo(() => (crm.state ? crm.tasks.filter((t) => !assignee || t.owner === assignee) : []), [crm.state, crm.tasks, assignee]);
@@ -263,7 +267,7 @@ export default function CwtFollowups() {
       <div className="r-head">
         <div className="r-title">
           <h1>Follow Ups</h1>
-          <p>{open.length} open · {lateCount} late</p>
+          <p>{open.length} open · {lateCount} late<button type="button" className={`lv-ref fu-ref ${spin ? "spin" : ""}`} onClick={refresh} disabled={spin} aria-label="Refresh follow-ups" title="Refresh"><TIcon name="refresh" /></button></p>
         </div>
         <button type="button" className="r-btn lg" onClick={() => setCreating(true)}><TIcon name="plus" />New follow-up</button>
       </div>
@@ -285,7 +289,7 @@ export default function CwtFollowups() {
         )}
       </div>
 
-      {view === "ai" ? <AiTasks assignee={assignee} onOpenLead={setOpenId} onCount={setAiCount} /> : <>
+      {view === "ai" ? <AiTasks key={tick} assignee={assignee} onOpenLead={setOpenId} onCount={setAiCount} /> : <>
       <div className="fu-filters">
         {PRESETS.map(([k, label]) => <button key={k} type="button" className={`r-chip ${filter.key === k ? "on" : ""}`} aria-pressed={filter.key === k} onClick={() => { setFilter({ key: k }); setPop(false); }}>{label}</button>)}
         <span className="fu-datewrap">

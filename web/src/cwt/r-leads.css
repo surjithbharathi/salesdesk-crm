@@ -408,3 +408,4 @@
 .cwt .erp-addr { margin: 4px 0 0; font-style: normal; line-height: 1.45; overflow-wrap: anywhere; }
 .cwt .erp-addr-type { font-size: 11px; color: var(--r-muted); }
 .cwt .erp-cust .r-link { margin-top: 4px; font-size: 12px; }
+.cwt .fu-ref { display: inline-grid; vertical-align: middle; margin-left: 6px; }
