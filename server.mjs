@@ -612,6 +612,14 @@ function sessionToken(req) {
     ""
   );
 }
+// an AI task id from the address: sent URL-encoded ("sig:missed:…" arrives as "sig%3Amissed%3A…"), so it is decoded
+// first and then held to the characters task ids use; anything else is no match
+function aiTaskPath(m) {
+  if (!m) return null;
+  let id;
+  try { id = decodeURIComponent(m[1]); } catch { return null; }
+  return /^[\w:+.-]{1,120}$/.test(id) ? [m[0], id, m[2]] : null;
+}
 function ownLead(userId, leadId) {
   if (typeof leadId !== "string" || get("leads", leadId)?.owner !== userId)
     bad("Lead not accessible", 403);
@@ -761,7 +769,7 @@ const mobileServer = http.createServer(async (req, res) => {
       reply(200, deleteLead(leadId, { block: action === "delete-and-block", by: userId }));
       return;
     }
-    const phoneAiTask = /^\/v1\/ai-tasks\/([\w:+.-]{1,120})\/(accept|dismiss)$/.exec(url.pathname);
+    const phoneAiTask = aiTaskPath(/^\/v1\/ai-tasks\/([^/]{1,360})\/(accept|dismiss)$/.exec(url.pathname));
     if (phoneAiTask && req.method === "POST") {
       if (!identity) bad("Shared user login required", 401);
       const p = await body(req);
@@ -1405,7 +1413,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === "/api/ai-tasks" || url.pathname.startsWith("/api/ai-tasks/")) {
       if (!identity && userAuth.configured()) bad("Login required", 401);
       const uid = identity?.user.id || "";
-      const one = /^\/api\/ai-tasks\/([\w:+.-]{1,120})\/(accept|dismiss)$/.exec(url.pathname);
+      const one = aiTaskPath(/^\/api\/ai-tasks\/([^/]{1,360})\/(accept|dismiss)$/.exec(url.pathname));
       if (url.pathname === "/api/ai-tasks" && req.method === "GET") send(200, aiTasks.list(uid));
       else if (one && req.method === "POST") { sameOrigin(); const p = await body(req); send(200, one[2] === "accept" ? aiTasks.accept(one[1], p, uid) : aiTasks.dismiss(one[1], uid)); }
       else bad("Not found", 404);

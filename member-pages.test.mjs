@@ -95,4 +95,10 @@ test("a member's screen gets only what changed, and only their own leads", async
   const took = await req(`/api/leads/${free.id}`, "PATCH", { owner: me }, member);
   assert.equal(took.status, 200);
   assert.equal(took.json.owner, me);
+  // an AI task id arrives URL-encoded from the screen (sig:new:… as sig%3Anew%3A…): dismissing it works and it is gone from the list
+  const sig = `sig:new:${free.id}`;
+  const dismissed = await req(`/api/ai-tasks/${encodeURIComponent(sig)}/dismiss`, "POST", {}, member);
+  assert.equal(dismissed.status, 200, JSON.stringify(dismissed.json));
+  assert.ok(!(await req("/api/ai-tasks", "GET", undefined, member)).json.items.some((x) => x.id === sig));
+  assert.equal((await req("/api/ai-tasks/sig%ZZ/dismiss", "POST", {}, member)).status, 404, "a broken id is no match");
 });
