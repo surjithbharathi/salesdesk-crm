@@ -156,7 +156,9 @@ export function createWaGateway({ db, all, get, put, stamp, tx, log, keyPath, sy
     } catch {
       fail("Invalid JSON");
     }
-    if (!["customer.new", "message.received"].includes(event.event) || !event.data || typeof event.data !== "object") return { ignored: "event not used here" };
+    if (!["customer.new", "message.received", "message.sent"].includes(event.event) || !event.data || typeof event.data !== "object") return { ignored: "event not used here" };
+    // "message.sent" is a reply somebody typed in the WhatsApp app on the phone, so it is shown on the lead as ours
+    const outgoing = event.event === "message.sent";
     const d = event.data;
     const phone = String(d.wa_id || "");
     if (!/^[1-9]\d{7,14}$/.test(phone)) return { ignored: "no phone number for this customer" };
@@ -168,7 +170,8 @@ export function createWaGateway({ db, all, get, put, stamp, tx, log, keyPath, sy
       let lead = leadFor(phone);
       let created = false;
       if (!lead) {
-        if (!s.createLeads) return { ignored: "no lead for this number" };
+        // our own reply never makes a lead: the customer's message, or whatever made them a lead, comes first
+        if (outgoing || !s.createLeads) return { ignored: "no lead for this number" };
         const owner = s.numberOwners[d.phone_id] || s.defaultOwner || "";
         lead = stamp({ name: cleanName(d.name) || phone, phone, company: "", email: "", source: "WhatsApp", stage: "New", owner, createdBy: systemUser });
         try {
@@ -180,7 +183,7 @@ export function createWaGateway({ db, all, get, put, stamp, tx, log, keyPath, sy
         created = true;
         log(lead.id, "System", `Lead created from WhatsApp${d.number_label ? ` on ${d.number_label}` : ""}`);
       }
-      const result = record(lead, { providerId: d.message_id, jid: phone, direction: "Incoming", kind: String(d.kind || "text").slice(0, 30), text, occurredAt: at, status: "Received", phoneId: String(d.phone_id || ""), numberLabel: String(d.number_label || ""), hasFile: Boolean(d.has_file) }, { phoneId: String(d.phone_id || ""), label: String(d.number_label || "") });
+      const result = record(lead, { providerId: d.message_id, jid: phone, direction: outgoing ? "Outgoing" : "Incoming", kind: String(d.kind || "text").slice(0, 30), text, occurredAt: at, status: outgoing ? "Sent" : "Received", phoneId: String(d.phone_id || ""), numberLabel: String(d.number_label || ""), hasFile: Boolean(d.has_file) }, { phoneId: String(d.phone_id || ""), label: String(d.number_label || "") });
       return { ...result, leadId: lead.id, created };
     });
   }

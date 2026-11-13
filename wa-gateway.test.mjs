@@ -210,3 +210,27 @@ test("one-click connect: Connect makes a one-time token; the gateway hands over 
   clock += 11 * 60000;
   assert.throws(() => gw.pair({ ...handover, token: again }), status(404));
 });
+
+test("a reply sent from the WhatsApp app on the phone is shown on the lead as ours, and never makes a lead", async (t) => {
+  const f = fixture(t);
+  await ready(f);
+  // nobody is a lead yet: our own reply is not a reason to make one
+  const alone = event({ message_id: "echo-1", text: "Good morning sir" }, "message.sent");
+  assert.equal(f.gw.receive(alone, sign(alone)).ignored, "no lead for this number");
+  assert.equal(f.all("leads").length, 0);
+  // once the customer writes, the lead is there and the next reply from the phone lands on it
+  const asked = event({ message_id: "in-1", text: "Price please" });
+  f.gw.receive(asked, sign(asked));
+  const lead = f.all("leads")[0];
+  const replied = event({ message_id: "echo-2", text: "Sending the quotation", kind: "text" }, "message.sent");
+  const out = f.gw.receive(replied, sign(replied));
+  assert.equal(out.leadId, lead.id);
+  const ours = f.all("messages").find((m) => m.providerId === "echo-2");
+  assert.equal(ours.direction, "Outgoing");
+  assert.equal(ours.status, "Sent");
+  assert.equal(ours.text, "Sending the quotation");
+  assert.equal(ours.leadId, lead.id);
+  // the same reply twice is kept once
+  assert.equal(f.gw.receive(replied, sign(replied)).duplicate, true);
+  assert.equal(f.all("messages").filter((m) => m.providerId === "echo-2").length, 1);
+});

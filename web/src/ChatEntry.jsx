@@ -213,10 +213,16 @@ const Phone = () => (
   <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z" /></svg>
 );
 
+// Some calls come in with no talk time (TeleCRM keeps none for a call somebody logged by hand), so what the person
+// recorded decides whether it was answered; the talk time only decides when nobody said.
+const ANSWERED = /^(answered|connected|interested|callback|call ?back)$/i;
+const UNANSWERED = /^(no answer|not answered|missed|rejected|busy|switched off|not reachable)$/i;
 function callTitle(e) {
-  if (e.dir === "Outgoing") return e.secs > 0 ? "Outgoing call" : "Called, no answer";
-  if (e.dir === "Incoming" || e.dir === "Rejected") return e.secs > 0 ? "Incoming call" : e.dir === "Rejected" ? "Rejected call" : "Missed call";
-  return e.secs > 0 ? `${e.dir} call` : "Missed call";
+  const said = String(e.outcome || "");
+  const talked = ANSWERED.test(said) || (e.secs > 0 && !UNANSWERED.test(said));
+  if (e.dir === "Outgoing") return talked ? "Outgoing call" : "Called, no answer";
+  if (e.dir === "Incoming" || e.dir === "Rejected") return talked ? "Incoming call" : e.dir === "Rejected" ? "Rejected call" : "Missed call";
+  return talked ? `${e.dir} call` : "Missed call";
 }
 
 // The Excel upload into TeleCRM packed a lead's whole Salesmax record into one note: "Salesmax Lead Owner: Bala Salesmax Closed Reason: …".
