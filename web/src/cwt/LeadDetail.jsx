@@ -99,8 +99,9 @@ export function LeadDetail({ id, nav = null, compose: startWith = "" }) {
   const status = raw.stage === "New" ? "New" : pipelineStep(raw) || "New";
   const ownerName = crm.users.get(raw.owner)?.name || "Unassigned";
   const canEdit = crm.me?.lead;
-  // anyone may give their own lead to a colleague; team leads and admins may move any lead
-  const canAssign = canEdit || (raw.owner && raw.owner === crm.me?.id);
+  // anyone may give their own lead to a colleague or take an unassigned one for themselves; team leads and admins move any lead
+  const canAssign = canEdit || (raw.owner && raw.owner === crm.me?.id) || !raw.owner;
+  const assignTo = canEdit || raw.owner ? team : team.filter((u) => u.id === crm.me?.id);
   const isAdmin = ["owner", "admin"].includes(crm.me?.role);
   const team = (crm.me?.users || []).filter((u) => u.active !== false);
   const rating = Math.max(0, Math.min(5, Math.round(Number(raw.telecrm?.rating) || 0)));
@@ -225,7 +226,7 @@ export function LeadDetail({ id, nav = null, compose: startWith = "" }) {
               </div>
               <div className="drop">
                 <button type="button" className="ld-owner" disabled={!canAssign} aria-label={`Assignee ${ownerName}`} onClick={() => canAssign && setMenu(menu === "assign" ? "" : "assign")}>{ownerName}<span className={`av ${avClass(ownerName)}`} aria-hidden="true">{initials(ownerName)}</span></button>
-                {menu === "assign" && <div className="menu" onMouseLeave={() => setMenu("")}>{team.map((u) => <button key={u.id} type="button" className={u.id === raw.owner ? "on" : ""} onClick={() => { setMenu(""); patch("Owner changed", { owner: u.id }); }}>{u.name}</button>)}</div>}
+                {menu === "assign" && <div className="menu" onMouseLeave={() => setMenu("")}>{assignTo.map((u) => <button key={u.id} type="button" className={u.id === raw.owner ? "on" : ""} onClick={() => { setMenu(""); patch("Owner changed", { owner: u.id }); }}>{!raw.owner && u.id === crm.me?.id && !canEdit ? "Assign to me" : u.name}</button>)}</div>}
               </div>
             </div>
           </div>

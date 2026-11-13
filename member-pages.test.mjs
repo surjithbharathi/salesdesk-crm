@@ -87,4 +87,12 @@ test("a member's screen gets only what changed, and only their own leads", async
   assert.equal(given.status, 200);
   assert.equal(given.json.owner, users[0].id);
   assert.equal((await req(`/api/leads/${mine.id}`, "PATCH", { owner: me }, member)).status, 403, "once given away it is not theirs to take back");
+  // an open lead nobody owns is shown to everyone and may be taken for oneself, but not handed to someone else
+  const mark = (await req("/api/state", "GET", undefined, member)).json.syncSeq;
+  const free = (await req("/api/leads", "POST", { name: "Free", phone: "+919800000103", owner: "", source: "Test" }, admin)).json;
+  assert.ok((await req(`/api/state/changes?after=${mark}`, "GET", undefined, member)).json.changes.leads.some((l) => l.id === free.id), "an unassigned lead is shown");
+  assert.equal((await req(`/api/leads/${free.id}`, "PATCH", { owner: users[0].id }, member)).status, 403);
+  const took = await req(`/api/leads/${free.id}`, "PATCH", { owner: me }, member);
+  assert.equal(took.status, 200);
+  assert.equal(took.json.owner, me);
 });

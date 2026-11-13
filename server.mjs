@@ -1751,7 +1751,9 @@ const server = http.createServer(async (req, res) => {
         const existing = id ? get(kind, id) : null;
         if (id && !existing) bad("Record not found", 404);
         if (kind === "leads") {
-          if (id) ownLead(identity.user.id, id);
+          // an open lead nobody owns may be taken by a member for themselves; otherwise only their own lead
+          const claim = id && !existing.owner && !existing.archived && p.owner === identity.user.id;
+          if (id && !claim) ownLead(identity.user.id, id);
           // a member may give their own lead to an active colleague (never take someone else's); a new lead is their own
           const giveTo = id && typeof p.owner === "string" && p.owner !== identity.user.id ? get("users", p.owner) : null;
           if (!giveTo || giveTo.active === false) p.owner = identity.user.id;
