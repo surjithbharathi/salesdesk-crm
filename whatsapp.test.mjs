@@ -5,7 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createWhatsApp, incomingText } from "./whatsapp.mjs";
+import { createWhatsApp, incomingText, withPhone } from "./whatsapp.mjs";
 import { encryptedAuth } from "./whatsapp-auth.mjs";
 import { BufferJSON, initAuthCreds, proto } from "baileys";
 
@@ -162,4 +162,20 @@ test("sync-only adapter exposes no send method and never invokes socket sendMess
   assert.equal(wa.snapshot().sendingEnabled, false);
   assert.equal(sends, 0);
   wa.stop();
+});
+
+test("a reply typed on the phone in a chat addressed by its hidden id (@lid) is saved under the chat's phone number", async () => {
+  const sock = { signalRepository: { lidMapping: { getPNForLID: async (lid) => (lid === "12345@lid" ? "919342548217:0@s.whatsapp.net" : null) } } };
+  const fresh = () => ({ key: { id: "A1", remoteJid: "12345@lid", fromMe: true }, message: { conversation: "All correct sir" }, messageTimestamp: 1794580000 });
+  const reply = fresh();
+  assert.equal(incomingText(fresh()), null); // without the lookup the message had no number and was dropped
+  const found = incomingText(await withPhone(sock, reply));
+  assert.equal(found.phone, "919342548217");
+  assert.equal(found.direction, "Outgoing");
+  // an id the link has not learned yet stays skipped; a chat that already has its number is left alone
+  const unknown = { key: { id: "A2", remoteJid: "999@lid", fromMe: true }, message: { conversation: "x" } };
+  assert.equal(incomingText(await withPhone(sock, unknown)), null);
+  const known = { key: { id: "A3", remoteJid: "12345@lid", remoteJidAlt: "918888888888@s.whatsapp.net" }, message: { conversation: "hi" } };
+  assert.equal(incomingText(await withPhone(sock, known)).phone, "918888888888");
+  assert.equal(incomingText(await withPhone({}, fresh())), null); // a socket without the lookup does not throw
 });
