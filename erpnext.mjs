@@ -213,6 +213,36 @@ export function createErpnext({ db, all, get, put, log, keyPath, checkUrl = publ
     };
   }
 
+  // the ERPNext customer behind a lead, with GSTIN and primary address, read live (kept 15 minutes per number)
+  const customers = new Map();
+  async function customerFor(leadId) {
+    const s = raw(); if (!ready(s)) return null;
+    const lead = get("leads", leadId); if (!lead) fail("Lead not found", 404);
+    const phone = tail10(lead.phone); if (!phone) return null;
+    const hit = customers.get(phone);
+    if (hit && now() - hit.at < 15 * 60 * 1000) return hit.data;
+    // the customer named on this number's latest quotation or invoice, else the one with this mobile number
+    const party = db.prepare("SELECT body FROM erp_docs WHERE phone=? ORDER BY modified DESC LIMIT 20").all(phone).map((r) => JSON.parse(r.body))
+      .map((d) => (d.kind === "Sales Invoice" ? d.customer : d.quotation_to && d.quotation_to !== "Customer" ? "" : d.party_name)).find(Boolean)
+      || ((await api(`/api/resource/Customer?fields=${q(["name"])}&filters=${q([["mobile_no", "like", `%${phone}`]])}&limit_page_length=1`, {}, s))?.data || [])[0]?.name;
+    let data = null;
+    if (party) {
+      const c = (await api(`/api/resource/Customer/${encodeURIComponent(party)}`, {}, s))?.data;
+      if (c) {
+        let addr = c.customer_primary_address;
+        if (!addr) addr = ((await api(`/api/resource/Address?fields=${q(["name"])}&filters=${q([["Dynamic Link", "link_doctype", "=", "Customer"], ["Dynamic Link", "link_name", "=", c.name], ["disabled", "=", 0]])}&order_by=${encodeURIComponent("is_primary_address desc, modified desc")}&limit_page_length=1`, {}, s))?.data || [])[0]?.name;
+        const a = addr ? (await api(`/api/resource/Address/${encodeURIComponent(addr)}`, {}, s))?.data : null;
+        data = {
+          name: c.name, customerName: c.customer_name || c.name, gstin: c.gstin || a?.gstin || "",
+          address: a ? { type: a.address_type || "", lines: [a.address_line1, a.address_line2].filter(Boolean), city: a.city || "", state: a.state || "", pincode: a.pincode || "", country: a.country || "" } : null,
+          url: `${s.baseUrl}/app/customer/${encodeURIComponent(c.name)}`,
+        };
+      }
+    }
+    customers.set(phone, { at: now(), data });
+    return data;
+  }
+
   // ---------------------------------------------------------------- making a quotation
   async function items(text) {
     const s = raw(); if (!ready(s)) fail("ERPNext is not connected", 409);
@@ -224,6 +254,18 @@ export function createErpnext({ db, all, get, put, log, keyPath, checkUrl = publ
     const s = raw(); if (!ready(s)) fail("ERPNext is not connected", 409);
     const lead = get("leads", leadId); if (!lead) fail("Lead not found", 404);
     const phone = tail10(lead.phone); if (!phone) fail("This lead has no mobile number to find the customer by");
+    // open: no quotation is made here; the customer is found (or created) and ERPNext's own new-quotation page opens with it filled in
+    if (input.open === true) {
+      let customer = (await customerFor(leadId))?.name;
+      if (!customer) {
+        const name = String(lead.company || lead.name || "").trim();
+        customer = (await api("/api/resource/Customer", { method: "POST", body: JSON.stringify({ customer_name: !name || /^\+?\d[\d\s]+$/.test(name) ? "+91" + phone : name.slice(0, 140), customer_type: "Individual", mobile_no: phone }) }, s))?.data?.name;
+        if (!customer) fail("ERPNext did not create the customer", 502);
+        customers.delete(phone);
+        log(lead.id, "System", `ERPNext customer ${customer} created from the CRM${actorName ? " by " + actorName : ""} for a new quotation`);
+      }
+      return { customer, url: `${s.baseUrl}/app/quotation/new?quotation_to=Customer&party_name=${encodeURIComponent(customer)}` };
+    }
     const lines = (Array.isArray(input.items) ? input.items : []).slice(0, 30).map((x) => ({ item_code: String(x.code || "").slice(0, 140), qty: Number(x.qty) || 0, rate: Number(x.rate) || 0 }));
     if (!lines.length || lines.some((l) => !l.item_code || l.qty <= 0 || l.rate < 0)) fail("Choose at least one item with a quantity");
     // the customer: one with this mobile number, else a new one named after the lead
@@ -246,5 +288,5 @@ export function createErpnext({ db, all, get, put, log, keyPath, checkUrl = publ
 
   const timer = setInterval(() => { void sync(); }, EVERY);
   timer.unref?.();
-  return { settings, save, test, sync, forLead, items, createQuotation, close: () => clearInterval(timer) };
+  return { settings, save, test, sync, forLead, customerFor, items, createQuotation, close: () => clearInterval(timer) };
 }

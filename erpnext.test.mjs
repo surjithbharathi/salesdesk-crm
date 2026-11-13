@@ -17,13 +17,14 @@ function world(t) {
   const log = (leadId, type, text) => notes.push({ leadId, text });
   put("leads", { id: "L1", name: "Durga Oils", phone: "+91 86399 67636", deal: "Interested Customer", stage: "Opportunity" });
   put("leads", { id: "L2", name: "Raj Tools", phone: "8866579555", deal: "Won", stage: "Closed" });
-  const erp = { Quotation: [], "Sales Invoice": [], Customer: [{ name: "Raj Machinery", mobile_no: "8866579555" }], made: [] };
+  const erp = { Quotation: [], "Sales Invoice": [], Customer: [{ name: "Raj Machinery", customer_name: "Raj Machinery", mobile_no: "8866579555", gstin: "33AAAAA0000A1Z5", customer_primary_address: "Raj Machinery-Billing" }], Address: [{ name: "Raj Machinery-Billing", address_type: "Billing", address_line1: "12 Mill Road", address_line2: "Peelamedu", city: "Coimbatore", state: "Tamil Nadu", pincode: "641004", country: "India" }], made: [] };
   const fetchImpl = async (url, init = {}) => {
     const u = new URL(url), path = decodeURIComponent(u.pathname);
     const ok = (data) => ({ ok: true, status: 200, json: async () => data });
     assert.equal(init.headers.Authorization, "token k1:s1");
     if (path === "/api/method/frappe.auth.get_logged_user") return ok({ message: "crm@devi" });
-    const kind = path.replace("/api/resource/", "");
+    const [kind, one] = path.replace("/api/resource/", "").split("/");
+    if (one && init.method !== "POST") return ok({ data: (erp[kind] || []).find((r) => r.name === one) });
     if (init.method === "POST") {
       const body = JSON.parse(init.body);
       erp.made.push({ kind, body });
@@ -106,4 +107,22 @@ test("a draft quotation is made from a lead, for an existing customer or a new o
   assert.ok(notes.some((n) => /drafted from the CRM by Surjith/.test(n.text)));
   assert.equal(api.forLead("L1").quotations[0].status, "Draft");
   await assert.rejects(api.createQuotation("L1", { items: [] }), /Choose at least one item/);
+});
+
+test("a lead shows its ERPNext customer with address, and a new quotation opens in ERPNext", async (t) => {
+  const { api, erp, notes } = world(t);
+  assert.equal(await api.customerFor("L2"), null, "nothing while ERPNext is off");
+  await api.save({ baseUrl: "https://erp.example", apiKey: "k1", apiSecret: "s1", enabled: true });
+  const c = await api.customerFor("L2");
+  assert.equal(c.customerName, "Raj Machinery");
+  assert.equal(c.gstin, "33AAAAA0000A1Z5");
+  assert.deepEqual(c.address.lines, ["12 Mill Road", "Peelamedu"]);
+  assert.equal(c.address.pincode, "641004");
+  const open = await api.createQuotation("L2", { open: true }, "Surjith");
+  assert.equal(open.url, "https://erp.example/app/quotation/new?quotation_to=Customer&party_name=Raj%20Machinery");
+  assert.equal(erp.made.length, 0, "nothing is made in ERPNext for a known customer");
+  const fresh = await api.createQuotation("L1", { open: true }, "Surjith");
+  assert.deepEqual(erp.made.map((m) => m.kind), ["Customer"], "only the customer, never a quotation");
+  assert.match(fresh.url, /party_name=Durga%20Oils$/);
+  assert.ok(notes.some((n) => /customer Durga Oils created from the CRM by Surjith/.test(n.text)));
 });
