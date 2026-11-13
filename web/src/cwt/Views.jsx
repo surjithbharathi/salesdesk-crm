@@ -21,13 +21,13 @@ const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, "-");
 // Old links (?view=won, ?view=new, ?queue=…) still land on the matching view.
 const stageView = (s) => "st-" + slug(s);
 const OLD_VIEW = { won: stageView("Won"), new: "fresh" };
-const QUEUE_VIEW = { "": "active", all: "all", new: "fresh", untouched: "untouched", unassigned: "unassigned", closed: stageView("Won") };
+const QUEUE_VIEW = { "": "active", all: "all", new: "fresh", untouched: "untouched", waiting: "waiting", unassigned: "unassigned", closed: stageView("Won") };
 const CUSTOMER_STEPS = ["Advance Received", "Machine Dispatched", "Machine Delivered - Need to Start", "Won"];
 const WORK_VIEWS = [["active", "All Active"], ["fresh", "New Lead"], ["today", "Assigned Today"], ["neverPicked", "Never Picked"], ["discussion", "Need Discussion"], ["interested", "Intrested"], ["customer", "Is Customer"], ["due", "Follow-up Due"], ["unassigned", "Unassigned"]];
 const STAGE_VIEWS = STATUSES.map((s) => [stageView(s), s]);
 const OTHER_VIEWS = [["all", "All Leads"], ["mine", "My Leads"], ["untouched", "Not called yet"], ["report", "Status vs Assignee Report"]];
 const STAGE_OF_VIEW = Object.fromEntries(STATUSES.map((s) => [stageView(s), s]));
-const LABEL = Object.fromEntries([...WORK_VIEWS, ...STAGE_VIEWS, ...OTHER_VIEWS]);
+const LABEL = { ...Object.fromEntries([...WORK_VIEWS, ...STAGE_VIEWS, ...OTHER_VIEWS]), waiting: "New, not called (last 7 days)" };
 // Which upload a lead came from: a file added in Settings, the Salesmax import, or TeleCRM's Excel upload
 const uploadOf = (l) => l.upload?.name || (l.importedFrom === "salesmax" ? "Salesmax import" : l.importTouch || /^excel$/i.test(l.source || "") ? "TeleCRM Excel upload" : "");
 const SMART_KEY = "salesdesk-smart-views";
@@ -94,6 +94,8 @@ export default function Views({ params }) {
       due: (l) => active(l) && crm.nextDue.has(l.id) && Date.parse(crm.nextDue.get(l.id)) <= endOfDay.getTime(),
       unassigned: (l) => active(l) && !l.owner,
       untouched: (l) => active(l) && !l.firstTouchAt && !facts.calls.get(l.id),
+      // the dashboard tile: given an owner 2 hours to 7 days ago and still not called
+      waiting: (l) => { const t = Date.parse(l.createdAt) || 0, now = Date.now(); return active(l) && !l.archived && l.owner && !l.firstTouchAt && !facts.calls.get(l.id) && t < now - 2 * 3600000 && t > now - 7 * 86400000; },
     }[id] || (() => true);
   };
   const team = crm.me?.users?.filter((u) => u.active !== false) || [];
