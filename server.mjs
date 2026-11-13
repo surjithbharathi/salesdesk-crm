@@ -39,6 +39,8 @@ import { createClickToCall } from "./click-to-call.mjs";
 import { bridgeConfig, createAutomationBridge } from "./automation-bridge.mjs";
 import { createWorkflows } from "./workflows.mjs";
 import { createSalesmaxImport } from "./salesmax-import.mjs";
+import { createAppUpdate } from "./app-update.mjs";
+import { pipeline as streamPipeline } from "node:stream/promises";
 
 const port = Number(process.env.PORT || 3100);
 const publicOrigin = process.env.PUBLIC_ORIGIN || "";
@@ -643,6 +645,8 @@ function loginDevice(identity) {
   }
   return device;
 }
+// Private Android self-update: the admin copies salesdesk.apk and latest.json into this folder (see APP_UPDATE.md).
+const appUpdate = createAppUpdate(process.env.APP_UPDATE_DIR || fileURLToPath(new URL("./data/app-update/", import.meta.url)));
 // Separate device-only listener: never proxies the unauthenticated web/admin app.
 const mobilePort = Number(process.env.MOBILE_PORT || port + 1);
 const mobileServer = http.createServer(async (req, res) => {
@@ -860,6 +864,23 @@ const mobileServer = http.createServer(async (req, res) => {
       else if (url.pathname === "/v1/click-to-call/ack")
         reply(200, clickToCall.acknowledge(identity.user.id, device.id, p.id, p.status));
       else bad("Not found", 404);
+      return;
+    }
+    // signed-in phones only: is there a newer app, and the APK itself (checksum in a header, checked again on the phone)
+    if (req.method === "GET" && url.pathname === "/v1/app/update") {
+      reply(200, await appUpdate.info());
+      return;
+    }
+    if (req.method === "GET" && url.pathname === "/v1/app/update/apk") {
+      const apk = await appUpdate.apk();
+      if (!apk) bad("No app update has been published", 404);
+      res.writeHead(200, {
+        "Content-Type": "application/vnd.android.package-archive",
+        "Content-Length": apk.size,
+        "X-Content-SHA256": apk.sha256,
+        "Content-Disposition": 'attachment; filename="salesdesk.apk"',
+      });
+      await streamPipeline(apk.stream, res).catch(() => res.destroy());
       return;
     }
     if (req.method === "GET" && url.pathname === "/v1/targets") {

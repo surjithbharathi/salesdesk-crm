@@ -8,6 +8,8 @@ Workspace isolation; Ultra Admin / Super Admin / Admin / Manager / Caller hierar
 
 SMTP is disabled until an administrator configures a mailbox. OTP login and unauthenticated forgot-password emails are not implemented. Cross-workspace user management uses manual setup links; invitation emails are sent inside the target workspace. WhatsApp still uses the workspace connection; per-user WhatsApp is unfinished. No private production settings are supplied here.
 
+Android app updates are private and in-app, without the Play Store. Phones download a newer signed APK from the CRM's device API. Release steps and the same-signing-key rule are in [APP_UPDATE.md](APP_UPDATE.md).
+
 ## Continue on another computer
 
 Read `CLAUDE.md` and `docs/CLAUDE_HANDOFF.md` first. Use Node 22.13+ and run `npm ci`, `npm run check`, `npm test`. Initialize synthetic local data with `node scripts/init-local.mjs`, then `. ./.env.local` and `node server.mjs`. `npm start` runs the HTTPS workspace gateway and needs a configured origin. SMTP tests can use `SALESDESK_TEST_TMP=/tmp`. Docker builds from source and includes ffmpeg for audio conversion. Persist `/app/data`, including SQLite and companion encryption key files, on private storage. Never commit or overwrite a production data directory.

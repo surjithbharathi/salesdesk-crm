@@ -2,6 +2,8 @@
 
 **Continuing on another computer? Start with [HANDOFF.md](HANDOFF.md).** It contains setup, deployment state, Android signing caveats, completed work and outstanding acceptance checks. No runtime database, private screenshots or secrets are included in this public repository.
 
+The Android app updates itself from the CRM, without the Play Store. To release a new phone version, follow [APP_UPDATE.md](APP_UPDATE.md).
+
 Android 0.9.0 UI source now includes a modern violet/neutral theme, Lucide icons, Home shortcuts, contact rows and expandable Settings. A separate sample-data preview is installed and both preview/online builds assemble and lint. The existing phone app remains 0.8.3 until its original signing key is available. See [UI_REDESIGN.md](android-companion/UI_REDESIGN.md) for verification limits and build instructions.
 
 Recording auto-match source now uses call end time and actual audio duration, independent of filenames, with unique-match and personal-call ambiguity checks. Twelve matcher regression cases pass. This requires the updated signed Android app; the original installed app has not received it.
