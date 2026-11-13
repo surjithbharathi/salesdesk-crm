@@ -60,3 +60,21 @@ test("the owner can be changed by the lead's owner, an admin, or anyone for a le
   const inactive = { ...w, users: () => [{ id: "u1", name: "Surjith" }, { id: "u3", name: "Left", active: false }] };
   assert.deepEqual(leadScreen(inactive, "mine", { id: "u1", admin: false }).team.map((u) => u.id), ["u1"]);
 });
+
+test("a lead the TeleCRM copy owns is its real owner's: they can edit it, and the copy is not in the team list", () => {
+  const w = world();
+  w.db.prepare("INSERT OR REPLACE INTO records VALUES(?,?,?)").run("leads", "mirrored", JSON.stringify({ id: "mirrored", name: "From TeleCRM", phone: "919840011111", owner: "tc-user-1", stage: "New" }));
+  w.db.prepare("INSERT OR REPLACE INTO records VALUES(?,?,?)").run("activities", "m1", JSON.stringify({ id: "m1", leadId: "mirrored", type: "Note", text: "Said yes", userId: "tc-user-1", occurredAt: "2026-11-02T10:00:00Z" }));
+  const users = () => [{ id: "u1", name: "Surjith" }, { id: "u2", name: "Priya" }, { id: "tc-user-1", name: "Surjith" }];
+  const links = new Map([["tc-user-1", "u1"]]);
+  const r = leadScreen({ ...w, users, links }, "mirrored", { id: "u1", admin: false });
+  assert.equal(r.canEdit, true, "the owner can change the stage from the phone");
+  assert.equal(r.canArchive, true);
+  assert.equal(r.canAssign, true);
+  assert.equal(r.lead.owner, "u1");
+  assert.equal(r.lead.ownerName, "Surjith");
+  assert.equal(r.activities[0].by, "Surjith");
+  assert.deepEqual(r.team.map((u) => u.id), ["u1", "u2"], "the copy is not offered as a person to give the lead to");
+  // a colleague still cannot open it
+  assert.throws(() => leadScreen({ ...w, users, links }, "mirrored", { id: "u2", admin: false }), /colleague/);
+});

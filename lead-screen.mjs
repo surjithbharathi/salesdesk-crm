@@ -4,11 +4,15 @@ const FIELDS = ["id", "name", "phone", "countryCode", "mobileNumber", "company",
 const ACT = ["id", "type", "text", "direction", "duration", "outcome", "occurredAt", "createdAt", "recordingId", "voiceNoteId", "importedFrom", "sender", "via", "numberLabel", "buyLead"];
 const pick = (o, keys) => Object.fromEntries(keys.filter((k) => o[k] !== undefined && o[k] !== "" && o[k] !== null).map((k) => [k, o[k]]));
 
-export function leadScreen({ db, get, users }, id, viewer) {
+// `links` maps a TeleCRM copy of a person (or an old account) to their real login, as the web screens see them: without it
+// a lead the mirror wrote looks like a colleague's, so its owner could not edit their own lead from the phone.
+export function leadScreen({ db, get, users, links = new Map() }, id, viewer) {
+  const real = (userId) => (userId && links.get(userId)) || userId || "";
   let lead = get("leads", id);
   if (lead?.mergedInto) lead = get("leads", lead.mergedInto) || lead;
   if (!lead || lead.archived) throw Object.assign(new Error("Lead not found"), { status: 404 });
-  if (!viewer.admin && lead.owner && lead.owner !== viewer.id) throw Object.assign(new Error("This lead belongs to a colleague"), { status: 403 });
+  const owner = real(lead.owner);
+  if (!viewer.admin && owner && owner !== viewer.id) throw Object.assign(new Error("This lead belongs to a colleague"), { status: 403 });
   const everyone = users();
   const people = new Map(everyone.map((u) => [u.id, u.name || u.username || ""]));
   const badges = new Map(everyone.map((u) => [u.id, u.badge || ""]));
@@ -22,21 +26,21 @@ export function leadScreen({ db, get, users }, id, viewer) {
   const when = (a) => String(a.occurredAt || a.createdAt || "");
   const activities = rows("activities").sort((a, b) => when(b).localeCompare(when(a))).slice(0, 200)
     .map((a) => {
-      const u = onNumber(a.numberLabel), who = a.senderId || a.userId || lead.owner;
+      const u = onNumber(a.numberLabel), who = real(a.senderId || a.userId || lead.owner);
       return { ...pick(a, ACT), ...(typeof a.text === "string" && a.text.length > 2000 ? { text: a.text.slice(0, 1999) + "…" } : {}),
-        by: u?.name || people.get(a.userId || lead.owner) || "", badge: u?.badge || badges.get(who) || "" };
+        by: u?.name || people.get(real(a.userId || lead.owner)) || "", badge: u?.badge || badges.get(who) || "" };
     });
   const tasks = rows("tasks").filter((t) => t.status !== "Done").sort((a, b) => String(a.due).localeCompare(String(b.due)))
     .map((t) => ({ id: t.id, title: t.title, due: t.due, status: t.status || "Open" }));
   return {
-    lead: { ...pick(lead, FIELDS), ownerName: people.get(lead.owner) || "" },
+    lead: { ...pick(lead, FIELDS), ...(owner ? { owner } : {}), ownerName: people.get(owner) || "" },
     activities, tasks,
-    canEdit: lead.owner === viewer.id,
+    canEdit: owner === viewer.id,
     // the lead menu: the owner (or an administrator) may archive; only an administrator may delete or block
-    canArchive: lead.owner === viewer.id || Boolean(viewer.admin),
+    canArchive: owner === viewer.id || Boolean(viewer.admin),
     canDelete: Boolean(viewer.admin),
     // the owner can be changed by the lead's owner, an administrator, or anyone for a lead nobody owns yet
-    canAssign: lead.owner === viewer.id || Boolean(viewer.admin) || !lead.owner,
-    team: everyone.filter((u) => u.active !== false).map((u) => ({ id: u.id, name: u.name || u.username || "" })).filter((u) => u.name),
+    canAssign: owner === viewer.id || Boolean(viewer.admin) || !owner,
+    team: everyone.filter((u) => u.active !== false && !links.has(u.id)).map((u) => ({ id: u.id, name: u.name || u.username || "" })).filter((u) => u.name),
   };
 }

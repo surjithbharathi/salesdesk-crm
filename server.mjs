@@ -749,7 +749,7 @@ const mobileServer = http.createServer(async (req, res) => {
     if (phoneLead && req.method === "GET") {
       if (!identity) bad("Shared user login required", 401);
       const admin = identity.user.role === "admin" || ["owner", "admin"].includes(workspaceAccess.profile(identity.user.id).role);
-      reply(200, leadScreen({ db, get, users: () => all("users") }, phoneLead[1], { id: identity.user.id, admin }));
+      reply(200, leadScreen({ db, get, users: () => all("users"), links: userLinks() }, phoneLead[1], { id: identity.user.id, admin }));
       return;
     }
     // the phone's lead menu, as on the web: the owner archives a lead (kept, out of the lists); an administrator deletes it for
