@@ -439,7 +439,7 @@ export function LeadDetail({ id, nav = null, compose: startWith = "" }) {
               {enquiry.note && <p className="ld-enq-intro">"{enquiry.note}"</p>}
             </section>
           )}
-          <ErpPanel leadId={raw.id} canEdit={canEdit} />
+          <ErpPanel leadId={raw.id} canEdit /* everyone who may open this lead; the server checks leads.write */ />
         </aside>
       </div>
     </div>
