@@ -129,7 +129,10 @@ public class MainActivity extends Activity {
         bar.addView(heading,new LinearLayout.LayoutParams(0,-2,1));
         ImageButton refresh=new ImageButton(this);refresh.setImageResource(R.drawable.ic_refresh_cw);refresh.setColorFilter(ACCENT);refresh.setPadding(dp(12),dp(12),dp(12),dp(12));refresh.setContentDescription("Sync now");GradientDrawable rb=surface(Color.WHITE,22);rb.setStroke(dp(1),LINE);refresh.setBackground(rb);bar.addView(refresh,new LinearLayout.LayoutParams(dp(44),dp(44)));refresh.setOnClickListener(v->refresh());root.addView(bar);
         overlay=new FrameLayout(this);
+        final int wasAt=pageScroll!=null?pageScroll.getScrollY():0; final String wasOn=scrolledAt;
         ScrollView scroll=new ScrollView(this);scroll.setClipToPadding(false);scroll.setVerticalScrollBarEnabled(false);content=column();content.setPadding(dp(16),dp(4),dp(16),dp(24));scroll.addView(content);overlay.addView(scroll,new FrameLayout.LayoutParams(-1,-1));root.addView(overlay,new LinearLayout.LayoutParams(-1,0,1));
+        pageScroll=scroll; scrolledAt=screen+"|"+filter+"|"+search;
+        if(wasAt>0&&scrolledAt.equals(wasOn))scroll.post(()->scroll.scrollTo(0,wasAt));
         if(screen.equals("My day"))MyDayView.draw(this);else if(screen.equals("Dashboard"))home();else if(screen.equals("Leads"))LeadsView.draw(this);else if(screen.equals("Tickets"))tickets();else if(screen.equals("Users"))workspaceUsers();else if(screen.equals("To-do"))TodoView.draw(this);else if(screen.equals("Activity"))activity();else if(screen.equals("Calls"))calls();else if(screen.equals("More"))more();else if(screen.equals("Advanced"))advancedPreferences();else settings();
         // the bottom bar: white, a soft pill behind the open tab; More holds everything that is not a daily screen
         LinearLayout nav=horizontal();nav.setPadding(dp(4),dp(6),dp(4),dp(8));nav.setBackgroundColor(Color.WHITE);View top=new View(this);top.setBackgroundColor(LINE);root.addView(top,new LinearLayout.LayoutParams(-1,1));
@@ -138,6 +141,9 @@ public class MainActivity extends Activity {
         for(int i=0;i<names.length;i++){final String target=names[i];boolean selected=target.equals("More")?!daily:screen.equals(target);LinearLayout item=column();item.setGravity(Gravity.CENTER);item.setPadding(0,dp(4),0,dp(2));item.setContentDescription(target);item.setSelected(selected);item.setFocusable(true);item.setMinimumHeight(dp(56));ImageView icon=glyph(icons[i],selected?ACCENT:MUTED);icon.setPadding(dp(16),dp(5),dp(16),dp(5));if(selected)icon.setBackground(surface(SOFT,15));item.addView(icon,new LinearLayout.LayoutParams(dp(60),dp(32)));TextView label=Ui.text(this,target,11,selected,selected?ACCENT:MUTED);label.setPadding(0,dp(3),0,0);label.setGravity(Gravity.CENTER_HORIZONTAL);label.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);label.setSingleLine(true);label.setEllipsize(android.text.TextUtils.TruncateAt.END);item.addView(label,new LinearLayout.LayoutParams(-1,-2));nav.addView(item,new LinearLayout.LayoutParams(0,-2,1));item.setOnClickListener(v->{screen=target;render();});}root.addView(nav);
     }
     FrameLayout overlay;
+    // the page scrolls back to where it was when a screen is drawn again (a call row opened, a sync finished); a different
+    // screen, or a different list on the same screen, starts at the top
+    private ScrollView pageScroll; private String scrolledAt = "";
     // the title over each screen: My day greets the person under today's date
     String[] titleFor(String s){
         if(s.equals("My day")){JSONObject user=workspace.optJSONObject("user");String name=user==null?"":user.optString("name","").split(" ")[0];int hour=Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
