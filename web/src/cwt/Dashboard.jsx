@@ -70,8 +70,11 @@ export default function Dashboard({ meta }) {
 
     const open = crm.leads.filter((l) => !l.archived && l.stage !== "Closed");
     const unassigned = open.filter((l) => !l.owner).length;
-    // only the last 7 days: older uncalled leads are old stock, not a lead going cold now
-    const waiting = open.filter((l) => !l.firstTouchAt && inTeam(l.owner) && l.owner && ms(l.createdAt) < now - 2 * 3600000 && ms(l.createdAt) > now - 7 * DAY).length;
+    // only the last 7 days: older uncalled leads are old stock, not a lead going cold now.
+    // A lead is reached by a call (any) or a WhatsApp message we sent.
+    const reached = new Set();
+    for (const a of crm.activities) if (a.type === "Call" || (a.type === "Message" && a.direction === "Outgoing")) reached.add(a.leadId);
+    const waiting = open.filter((l) => !l.firstTouchAt && !reached.has(l.id) && inTeam(l.owner) && l.owner && ms(l.createdAt) < now - 2 * 3600000 && ms(l.createdAt) > now - 7 * DAY).length;
 
     // The last call of each person (any direction), for "now" and idle
     const lastCall = new Map();
@@ -158,7 +161,7 @@ export default function Dashboard({ meta }) {
       <section className="rd-tiles" aria-label="Needs your attention">
         <Tile tone="amber" label="UNASSIGNED LEADS" count={d.attention.unassigned} note={d.attention.unassigned ? "share them out" : "all leads have an owner"} href={hashFor("/leads", { queue: "unassigned" })} />
         <Tile tone="red" label="LATE FOLLOW-UPS" count={d.attention.late} note={d.attention.worst ? `most with ${d.attention.worst[0]} (${d.attention.worst[1]})` : "none late"} href={hashFor("/todo")} />
-        <Tile tone="blue" label="NEW, NOT CALLED IN 2 H" count={d.attention.waiting} note="last 7 days · see the list" href={hashFor("/leads", { queue: "waiting" })} />
+        <Tile tone="blue" label="NEW, NO CALL OR WHATSAPP IN 2 H" count={d.attention.waiting} note="last 7 days · see the list" href={hashFor("/leads", { queue: "waiting" })} />
         <Tile tone="plain" label="IDLE CALLERS" count={idleNames.length}
           note={idleNames.length ? `${idleNames.slice(0, 2).join(", ")}${idleNames.length > 2 ? ` and ${idleNames.length - 2} more` : ""}, no call in 2 h` : "everyone called in the last 2 h"}
           onClick={() => teamRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} />
