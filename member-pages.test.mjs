@@ -81,4 +81,10 @@ test("a member's screen gets only what changed, and only their own leads", async
   assert.ok(!JSON.stringify(d.json.changes).includes("Theirs"), "nobody else's lead is sent");
   assert.ok(!(d.json.deleted.leads || []).includes(mine.id));
   assert.ok((d.json.deleted.leads || []).includes(theirs.id), "another person's lead is only named as not shown");
+  // a member gives their own lead to a colleague, and cannot take someone else's
+  assert.equal((await req(`/api/leads/${theirs.id}`, "PATCH", { owner: me }, member)).status, 403);
+  const given = await req(`/api/leads/${mine.id}`, "PATCH", { owner: users[0].id }, member);
+  assert.equal(given.status, 200);
+  assert.equal(given.json.owner, users[0].id);
+  assert.equal((await req(`/api/leads/${mine.id}`, "PATCH", { owner: me }, member)).status, 403, "once given away it is not theirs to take back");
 });

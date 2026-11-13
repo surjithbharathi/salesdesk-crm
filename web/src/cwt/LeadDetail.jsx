@@ -99,6 +99,8 @@ export function LeadDetail({ id, nav = null, compose: startWith = "" }) {
   const status = raw.stage === "New" ? "New" : pipelineStep(raw) || "New";
   const ownerName = crm.users.get(raw.owner)?.name || "Unassigned";
   const canEdit = crm.me?.lead;
+  // anyone may give their own lead to a colleague; team leads and admins may move any lead
+  const canAssign = canEdit || (raw.owner && raw.owner === crm.me?.id);
   const isAdmin = ["owner", "admin"].includes(crm.me?.role);
   const team = (crm.me?.users || []).filter((u) => u.active !== false);
   const rating = Math.max(0, Math.min(5, Math.round(Number(raw.telecrm?.rating) || 0)));
@@ -222,7 +224,7 @@ export function LeadDetail({ id, nav = null, compose: startWith = "" }) {
                 {menu === "status" && <div className="menu" onMouseLeave={() => setMenu("")}>{STATUSES.map((s) => <button key={s} type="button" className={s === status ? "on" : ""} onClick={() => setStatus(s)}><i className={`ld-dot st-${slug(s)}`} />{s}</button>)}</div>}
               </div>
               <div className="drop">
-                <button type="button" className="ld-owner" disabled={!canEdit} aria-label={`Assignee ${ownerName}`} onClick={() => canEdit && setMenu(menu === "assign" ? "" : "assign")}>{ownerName}<span className={`av ${avClass(ownerName)}`} aria-hidden="true">{initials(ownerName)}</span></button>
+                <button type="button" className="ld-owner" disabled={!canAssign} aria-label={`Assignee ${ownerName}`} onClick={() => canAssign && setMenu(menu === "assign" ? "" : "assign")}>{ownerName}<span className={`av ${avClass(ownerName)}`} aria-hidden="true">{initials(ownerName)}</span></button>
                 {menu === "assign" && <div className="menu" onMouseLeave={() => setMenu("")}>{team.map((u) => <button key={u.id} type="button" className={u.id === raw.owner ? "on" : ""} onClick={() => { setMenu(""); patch("Owner changed", { owner: u.id }); }}>{u.name}</button>)}</div>}
               </div>
             </div>

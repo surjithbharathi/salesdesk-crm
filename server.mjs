@@ -1752,7 +1752,9 @@ const server = http.createServer(async (req, res) => {
         if (id && !existing) bad("Record not found", 404);
         if (kind === "leads") {
           if (id) ownLead(identity.user.id, id);
-          p.owner = identity.user.id;
+          // a member may give their own lead to an active colleague (never take someone else's); a new lead is their own
+          const giveTo = id && typeof p.owner === "string" && p.owner !== identity.user.id ? get("users", p.owner) : null;
+          if (!giveTo || giveTo.active === false) p.owner = identity.user.id;
         } else if (kind === "tasks") {
           if (existing && existing.owner !== identity.user.id) bad("Task not accessible", 403);
           if (p.leadId || existing?.leadId) ownLead(identity.user.id, p.leadId || existing.leadId);
