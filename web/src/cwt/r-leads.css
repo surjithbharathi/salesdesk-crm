@@ -401,3 +401,10 @@
 .cwt .erp-line-name { overflow-wrap: anywhere; padding-bottom: 6px; }
 .cwt .erp-total { font-size: 12.5px; color: var(--r-ink-2); }
 @media (max-width: 480px) { .cwt .erp-lines li { grid-template-columns: minmax(0, 1fr) 64px 96px; } .cwt .erp-lines li .r-link { grid-column: 1 / -1; justify-self: start; } }
+.cwt .erp-cust { margin: 6px 0 4px; padding-bottom: 8px; border-bottom: 1px solid var(--r-line); font-size: 12.5px; color: var(--r-ink-2); }
+.cwt .erp-cust-top { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 10px; }
+.cwt .erp-cust-top a { color: var(--r-ink); font-size: 14px; font-weight: 700; overflow-wrap: anywhere; }
+.cwt .erp-gst { font-size: 11.5px; color: var(--r-muted); font-variant-numeric: tabular-nums; }
+.cwt .erp-addr { margin: 4px 0 0; font-style: normal; line-height: 1.45; overflow-wrap: anywhere; }
+.cwt .erp-addr-type { font-size: 11px; color: var(--r-muted); }
+.cwt .erp-cust .r-link { margin-top: 4px; font-size: 12px; }

@@ -22,64 +22,52 @@ function Doc({ d, kind, base }) {
   );
 }
 
-function NewQuotation({ leadId, onClose, onMade }) {
+// the ERPNext customer for this number: name, GSTIN and address, with a copy button for dispatch and courier
+function Customer({ leadId, tick }) {
   const notify = useToast();
-  const [find, setFind] = useState("");
-  const [found, setFound] = useState([]);
-  const [lines, setLines] = useState([]);
-  const [busy, setBusy] = useState(false);
+  const [c, setC] = useState(null);
   useEffect(() => {
-    if (find.trim().length < 2) { setFound([]); return undefined; }
-    const t = setTimeout(() => { crmGet(`erpnext/items?q=${encodeURIComponent(find.trim())}`).then(setFound).catch((e) => notify(e.message)); }, 300);
-    return () => clearTimeout(t);
-  }, [find]);
-  const add = (it) => { setLines((l) => (l.some((x) => x.code === it.code) ? l : [...l, { code: it.code, name: it.name, qty: 1, rate: it.rate }])); setFind(""); setFound([]); };
-  const edit = (i, patch) => setLines((l) => l.map((x, j) => (j === i ? { ...x, ...patch } : x)));
-  const total = lines.reduce((a, x) => a + (Number(x.qty) || 0) * (Number(x.rate) || 0), 0);
-  async function make(e) {
-    e.preventDefault();
-    setBusy(true);
-    try {
-      const r = await crmSend("POST", `erpnext/lead/${encodeURIComponent(leadId)}/quotation`, { items: lines.map((x) => ({ code: x.code, qty: Number(x.qty), rate: Number(x.rate) })) });
-      notify(`Draft ${r.name} made in ERPNext`);
-      window.open(r.url, "_blank", "noopener");
-      onMade();
-    } catch (err) { notify(err.message); setBusy(false); }
-  }
+    let live = true;
+    setC(null);
+    crmGet(`erpnext/lead/${encodeURIComponent(leadId)}/customer`).then((r) => live && setC(r.customer)).catch(() => {});
+    return () => { live = false; };
+  }, [leadId, tick]);
+  if (!c) return null;
+  const a = c.address, place = a ? [a.city, [a.state, a.pincode].filter(Boolean).join(" ")].filter(Boolean).join(", ") : "";
+  const text = [c.customerName, ...(a ? [...a.lines, place] : []), c.gstin ? `GSTIN ${c.gstin}` : ""].filter(Boolean).join("\n");
+  const copy = () => navigator.clipboard.writeText(text).then(() => notify("Address copied"), () => notify("Could not copy"));
   return (
-    <>
-      <div className="r-scrim" onClick={onClose} />
-      <form className="r-dialog erp-new" role="dialog" aria-modal="true" aria-label="New quotation" onSubmit={make}>
-        <h2>New quotation in ERPNext</h2>
-        <label className="r-field"><span>Add a machine or item</span><input type="search" value={find} onChange={(e) => setFind(e.target.value)} placeholder="Name or item code" autoFocus /></label>
-        {found.length > 0 && (
-          <div className="fu-matches" role="listbox" aria-label="Items">
-            {found.map((it) => <button key={it.code} type="button" role="option" aria-selected="false" onClick={() => add(it)}><b>{it.name}</b><span>{it.code}{it.rate ? ` · ${inr(it.rate)}` : ""}</span></button>)}
-          </div>
-        )}
-        {lines.length > 0 && (
-          <ul className="erp-lines">
-            {lines.map((x, i) => (
-              <li key={x.code}>
-                <span className="erp-line-name">{x.name}</span>
-                <label>Qty<input type="number" min="1" step="1" value={x.qty} onChange={(e) => edit(i, { qty: e.target.value })} /></label>
-                <label>Rate<input type="number" min="0" step="1" value={x.rate} onChange={(e) => edit(i, { rate: e.target.value })} /></label>
-                <button type="button" className="r-link" onClick={() => setLines((l) => l.filter((_, j) => j !== i))} aria-label={`Remove ${x.name}`}>Remove</button>
-              </li>
-            ))}
-          </ul>
-        )}
-        <p className="erp-total">Total before tax {inr(total)}. It is saved as a draft: check taxes and terms in ERPNext, then submit it there.</p>
-        <div className="r-dialog-acts"><button type="button" className="r-btn ghost" onClick={onClose}>Cancel</button><button type="submit" className="r-btn" disabled={busy || !lines.length || lines.some((x) => !(Number(x.qty) > 0))}>Make draft quotation</button></div>
-      </form>
-    </>
+    <div className="erp-cust">
+      <div className="erp-cust-top">
+        <a href={c.url} target="_blank" rel="noreferrer">{c.customerName}</a>
+        {c.gstin && <span className="erp-gst">GSTIN {c.gstin}</span>}
+      </div>
+      {a ? (
+        <>
+          <address className="erp-addr">{a.lines.map((l) => <React.Fragment key={l}>{l}<br /></React.Fragment>)}{place}{a.type && <span className="erp-addr-type"> · {a.type}</span>}</address>
+          <button type="button" className="r-link" onClick={copy}>Copy address</button>
+        </>
+      ) : <p className="erp-addr">No address for this customer in ERPNext.</p>}
+    </div>
   );
 }
 
 export default function ErpPanel({ leadId, canEdit }) {
   const [data, setData] = useState(null);
   const [tick, setTick] = useState(0);
-  const [creating, setCreating] = useState(false);
+  const [opening, setOpening] = useState(false);
+  const notify = useToast();
+  // ERPNext's own new-quotation page, with this lead's customer filled in (created in ERPNext first if it is new)
+  async function openNew() {
+    const tab = window.open("about:blank", "_blank"); // opened on the click, so the browser does not block it
+    setOpening(true);
+    try {
+      const r = await crmSend("POST", `erpnext/lead/${encodeURIComponent(leadId)}/quotation`, { open: true });
+      if (tab) { tab.opener = null; tab.location.href = r.url; } else window.location.href = r.url;
+      setTick((t) => t + 1);
+    } catch (e) { if (tab) tab.close(); notify(e.message); }
+    finally { setOpening(false); }
+  }
   useEffect(() => {
     let live = true;
     crmGet(`erpnext/lead/${encodeURIComponent(leadId)}`).then((d) => live && setData(d)).catch(() => live && setData(null));
@@ -91,6 +79,7 @@ export default function ErpPanel({ leadId, canEdit }) {
   return (
     <section className="r-card ld-enq erp" aria-label="ERPNext">
       <p className="ld-kicker">ERPNext</p>
+      {data.connected && <Customer leadId={leadId} tick={tick} />}
       {(quotations.length > 0 || invoices.length > 0) ? (
         <div className="erp-totals">
           <div><span>Quoted</span><b>{short(totals.quoted)}</b></div>
@@ -99,8 +88,7 @@ export default function ErpPanel({ leadId, canEdit }) {
       ) : <p className="ld-enq-intro">No quotation{seeInvoices ? " or invoice" : ""} for this number in ERPNext yet.</p>}
       {quotations.length > 0 && <><p className="erp-head">Quotations</p><ul className="erp-list">{quotations.slice(0, 8).map((d) => <Doc key={d.name} d={d} kind="q" base={base} />)}</ul></>}
       {invoices.length > 0 && <><p className="erp-head">Invoices</p><ul className="erp-list">{invoices.slice(0, 8).map((d) => <Doc key={d.name} d={d} kind="i" base={base} />)}</ul></>}
-      {canEdit && data.connected && <button type="button" className="r-btn ghost erp-make" onClick={() => setCreating(true)}>Create quotation in ERPNext</button>}
-      {creating && <NewQuotation leadId={leadId} onClose={() => setCreating(false)} onMade={() => { setCreating(false); setTick((t) => t + 1); }} />}
+      {canEdit && data.connected && <button type="button" className="r-btn ghost erp-make" onClick={openNew} disabled={opening}>{opening ? "Opening ERPNext…" : "Create quotation in ERPNext"}</button>}
     </section>
   );
 }

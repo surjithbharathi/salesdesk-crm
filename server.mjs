@@ -1400,7 +1400,7 @@ const server = http.createServer(async (req, res) => {
           "/api/whatsapp/status",
           "/api/click-to-call/devices",
           "/api/notifications",
-        ].includes(url.pathname) || /^\/api\/mobile\/recordings\/[a-f0-9-]{36}$/.test(url.pathname) || /^\/api\/leads\/[\w-]{1,80}\/history$/.test(url.pathname) || /^\/api\/erpnext\/lead\/[\w-]{1,80}$/.test(url.pathname) || url.pathname === "/api/erpnext/items";
+        ].includes(url.pathname) || /^\/api\/mobile\/recordings\/[a-f0-9-]{36}$/.test(url.pathname) || /^\/api\/leads\/[\w-]{1,80}\/history$/.test(url.pathname) || /^\/api\/erpnext\/lead\/[\w-]{1,80}(\/customer)?$/.test(url.pathname) || url.pathname === "/api/erpnext/items";
       const allowedWrite =
         (url.pathname === "/api/click-to-call/request" && req.method === "POST") ||
         (url.pathname === "/api/notifications/read" && req.method === "POST") ||
@@ -1435,13 +1435,15 @@ const server = http.createServer(async (req, res) => {
     // ERPNext: the connection is for administrators; a lead's quotes and invoices for whoever may work that lead
     if (url.pathname.startsWith("/api/erpnext/")) {
       const isAdmin = () => !identity || ["owner", "admin"].includes(workspaceAccess.profile(identity.user.id).role);
-      const leadMatch = /^\/api\/erpnext\/lead\/([A-Za-z0-9_-]{1,80})(\/quotation)?$/.exec(url.pathname);
+      const leadMatch = /^\/api\/erpnext\/lead\/([A-Za-z0-9_-]{1,80})(\/quotation|\/customer)?$/.exec(url.pathname);
       if (leadMatch) {
         const lead = get("leads", leadMatch[1]);
         if (!lead) bad("Lead not found", 404);
         if (!isAdmin() && lead.owner && lead.owner !== identity.user.id) bad("This lead belongs to a colleague", 403);
         if (!leadMatch[2] && req.method === "GET") { send(200, erpnext.forLead(lead.id, { seeInvoices: !identity || ["owner", "admin", "manager"].includes(workspaceAccess.profile(identity.user.id).role) })); return; }
-        if (leadMatch[2] && req.method === "POST") { sameOrigin(); if (identity) workspaceAccess.requirePermission(identity, "leads.write"); send(200, await erpnext.createQuotation(lead.id, await body(req), identity?.user.name || "")); return; }
+        // the ERPNext customer with GSTIN and address, read live
+        if (leadMatch[2] === "/customer" && req.method === "GET") { send(200, { customer: await erpnext.customerFor(lead.id) }); return; }
+        if (leadMatch[2] === "/quotation" && req.method === "POST") { sameOrigin(); if (identity) workspaceAccess.requirePermission(identity, "leads.write"); send(200, await erpnext.createQuotation(lead.id, await body(req), identity?.user.name || "")); return; }
         bad("Method not allowed", 405);
       }
       if (url.pathname === "/api/erpnext/items" && req.method === "GET") { if (identity) workspaceAccess.requirePermission(identity, "leads.write"); send(200, await erpnext.items(url.searchParams.get("q") || "")); return; }
