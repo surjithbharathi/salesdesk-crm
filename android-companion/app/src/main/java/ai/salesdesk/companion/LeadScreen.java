@@ -199,7 +199,8 @@ final class LeadScreen {
         LinearLayout cell = a.column(); cell.setGravity(Gravity.CENTER_HORIZONTAL);
         ImageView i = a.glyph(icon, fg); i.setPadding(dp(14), dp(14), dp(14), dp(14)); i.setBackground(a.surface(bg, 16));
         cell.addView(i, new LinearLayout.LayoutParams(dp(52), dp(52)));
-        TextView t = Ui.text(a, label, 12, true, MainActivity.INK); t.setPadding(0, dp(6), 0, 0); cell.addView(t);
+        // the label fills the cell, so it needs its own centre: without it Call, WhatsApp, Note and Follow-up sat left of their icons
+        TextView t = Ui.text(a, label, 12, true, MainActivity.INK); t.setGravity(Gravity.CENTER_HORIZONTAL); t.setPadding(0, dp(6), 0, 0); cell.addView(t);
         cell.setFocusable(true); cell.setContentDescription(label); cell.setOnClickListener(v -> run.run());
         row.addView(cell, new LinearLayout.LayoutParams(0, -2, 1));
     }
