@@ -20,7 +20,7 @@ final class CallSyncWatcher {
     private void dispatch() {
         if(closed||!SecureConfig.loggedIn(context)||!SecureConfig.prefs(context).getBoolean("enabled",false))return;
         if(context.checkSelfPermission(android.Manifest.permission.READ_CALL_LOG)!=android.content.pm.PackageManager.PERMISSION_GRANTED){SecureConfig.prefs(context).edit().putBoolean("enabled",false).putString("status","Call-log permission required. Sync paused.").commit();SyncJob.schedule(context,false);return;}
-        SyncJob.requestNow(context);
+        SyncEngine.runSoon(context);
     }
     private final Runnable fallback = new Runnable() {
         public void run() { if (!closed) { sync.run(); handler.postDelayed(this, 300000); } }

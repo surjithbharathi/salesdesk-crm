@@ -19,6 +19,16 @@ final class SyncEngine {
     static final String RESTARTING = "The CRM is restarting after an update. Try again in a minute.";
     static boolean restarting(Exception e) { return e instanceof HttpError && ((HttpError) e).code >= 502 && ((HttpError) e).code <= 504; }
     static final AtomicBoolean running = new AtomicBoolean(false);
+    // a sync asked for while one is running is not dropped: the running one goes round once more when it finishes
+    static final AtomicBoolean again = new AtomicBoolean(false);
+    private static final java.util.concurrent.ExecutorService direct = java.util.concurrent.Executors.newSingleThreadExecutor();
+    /** Sync now, in this process (the call watcher lives in a foreground service), instead of waiting for Android's job
+     *  scheduler, which can hold a one-off job back for many minutes. A failure falls back to the scheduled job. */
+    static void runSoon(Context context) {
+        Context c = context.getApplicationContext();
+        try { direct.execute(() -> { try { run(c); } catch (Exception e) { SyncJob.requestNow(c); } }); }
+        catch (Exception e) { SyncJob.requestNow(c); }
+    }
     static volatile boolean cancelled;
     static void cancel() { cancelled = true; }
     static void check(Context c) throws Exception { if (cancelled || !SecureConfig.loggedIn(c) || !SecureConfig.prefs(c).getBoolean("enabled", false)) throw new Exception("Sync paused; sign in and enable business sync"); }
@@ -148,15 +158,22 @@ final class SyncEngine {
     }
 
     static void run(Context c) throws Exception {
-        if(!running.compareAndSet(false,true)) return; cancelled=false;
+        if(!running.compareAndSet(false,true)) { again.set(true); return; }
+        try { do { again.set(false); cancelled=false; runOnce(c); } while(again.get()); }
+        finally { running.set(false); }
+    }
+
+    private static void runOnce(Context c) throws Exception {
         try(QueueDb helper=new QueueDb(c)) {
             if(!SecureConfig.prefs(c).getBoolean("rematchFileNames",false)){helper.getWritableDatabase().execSQL("UPDATE calls SET uploaded=0, uri='', mode='' WHERE uploaded=-2");SecureConfig.prefs(c).edit().putBoolean("rematchFileNames",true).apply();}
             check(c); if(c.checkSelfPermission(Manifest.permission.READ_CALL_LOG)!=PackageManager.PERMISSION_GRANTED) throw new Exception("Call-log permission missing");
             if(c.checkSelfPermission(Manifest.permission.READ_PHONE_STATE)==PackageManager.PERMISSION_GRANTED && c.getSystemService(android.telecom.TelecomManager.class).isInCall()) return;
             SQLiteDatabase db=helper.getWritableDatabase();
             JSONArray targets; boolean online=true;
-            try { targets=new JSONArray(request(c,"/v1/targets","GET",null,Collections.emptyMap())); SecureConfig.prefs(c).edit().putString("targets",targets.toString()).commit(); }
-            catch(Exception e) { if(e instanceof HttpError && (((HttpError)e).code==401 || ((HttpError)e).code==403)) throw e; targets=new JSONArray(SecureConfig.prefs(c).getString("targets","[]")); online=false; }
+            String cachedTargets=SecureConfig.prefs(c).getString("targets","");
+            if(!cachedTargets.isEmpty()&&System.currentTimeMillis()-SecureConfig.prefs(c).getLong("targetsAt",0)<5*60000L) targets=new JSONArray(cachedTargets);
+            else try { targets=new JSONArray(request(c,"/v1/targets","GET",null,Collections.emptyMap())); SecureConfig.prefs(c).edit().putString("targets",targets.toString()).putLong("targetsAt",System.currentTimeMillis()).commit(); }
+            catch(Exception e) { if(e instanceof HttpError && (((HttpError)e).code==401 || ((HttpError)e).code==403)) throw e; targets=new JSONArray(cachedTargets.isEmpty()?"[]":cachedTargets); online=!cachedTargets.isEmpty(); }
             Set<String> phones=new HashSet<>(), named=new HashSet<>(); Map<String,String> logged=new HashMap<>(); for(int i=0;i<targets.length();i++){ phones.add(targets.getJSONObject(i).getString("phone")); if(!targets.getJSONObject(i).optBoolean("needsName"))named.add(targets.getJSONObject(i).getString("phone")); }
             long since=SecureConfig.prefs(c).getLong("since",System.currentTimeMillis()); String country=SecureConfig.prefs(c).getString("country","91");
             try(Cursor log=c.getContentResolver().query(CallLog.Calls.CONTENT_URI,new String[]{CallLog.Calls._ID,CallLog.Calls.NUMBER,CallLog.Calls.DATE,CallLog.Calls.DURATION,CallLog.Calls.TYPE,CallLog.Calls.PHONE_ACCOUNT_ID,CallLog.Calls.CACHED_NAME},CallLog.Calls.DATE+">=?",new String[]{String.valueOf(Math.max(since,System.currentTimeMillis()-365L*86400000))},CallLog.Calls.DATE+" DESC")) {
@@ -195,10 +212,11 @@ final class SyncEngine {
                 // A recording the CRM turns down for good (needs a manual match, already on another call, too big) is set aside,
                 // so it cannot hold back every recording after it; a dropped connection still stops and retries later.
                 try { request(c,"/v1/calls/"+remote+"/recording","PUT",bytes,headers); }
-                catch(HttpError e) { if(e.code==400||e.code==403||e.code==404||e.code==409||e.code==413){ ContentValues skip=new ContentValues(); skip.put("uploaded",-2); db.update("calls",skip,"local_id=?",new String[]{row.getString("local_id")}); refused++; continue; } throw e; }
+                catch(HttpError e) { if(e.code==400||e.code==403||e.code==404||e.code==409||e.code==413){ ContentValues skip=new ContentValues(); skip.put("uploaded",-2); db.update("calls",skip,"local_id=?",new String[]{row.getString("local_id")}); refused++; continue; } if(e.code==401) throw e; skipped++; break; }
+                catch(java.io.IOException io) { skipped++; break; }
                 ContentValues v=new ContentValues(); v.put("uploaded",1); db.update("calls",v,"local_id=?",new String[]{row.getString("local_id")}); uploaded++;
             }
             SecureConfig.prefs(c).edit().putString("status","Updated "+android.text.format.DateFormat.getTimeFormat(c).format(new java.util.Date())+" · "+synced+" new calls · "+uploaded+" recordings"+(refused>0?" · "+refused+" recordings need a manual match":"")+(skipped>0?" · "+skipped+" calls will be retried":"")).apply();
-        } finally { running.set(false); }
+        }
     }
 }
