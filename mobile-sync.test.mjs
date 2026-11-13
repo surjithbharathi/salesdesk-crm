@@ -80,7 +80,7 @@ test("device credentials are hashed, redacted, owner scoped, and revocable", (t)
   assert.equal(row.token_hash, createHash("sha256").update(device.token).digest("hex"));
   assert.ok(!row.body.includes(device.token));
   // every active lead's number, so the office phone still picks up calls with leads assigned to colleagues
-  assert.deepEqual(api.targets(device).map((t) => t.id).sort(), ["lead", "other-lead"]);
+  assert.deepEqual(api.targets(device), [{ id: "lead", phone: "919876543210" }, { phone: "919999999999" }], "own leads with their id, others by number only");
   for (const header of [undefined, "", `Basic ${device.token}`, "Bearer invalid"])
     assert.throws(() => api.authenticate(header), status(401));
   assert.throws(() => api.issue({ name: "Phone", owner: "absent" }), status(400));
