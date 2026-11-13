@@ -87,13 +87,25 @@ export function createMobileSync({ db, all, get, put, stamp, tx, log, keyPath, o
     return d;
   }
   // The numbers a phone syncs calls for: every active lead, whoever owns it (the office phone's leads move to the callers
-  // after assignment, and their calls must still be picked up). Names are asked for only on the phone owner's own leads.
-  const targets = (d) =>
-    all("leads")
-      .filter((l) => !l.archived && !l.mergedInto && !l.noCallSync)
-      .map((l) => ({ id: l.id, phone: phoneKeyOf(l), ...(hasName(l) || l.owner !== d.owner ? {} : { needsName: true }) }))
-      .filter((l) => /^[1-9]\d{7,14}$/.test(l.phone));
-  const ownTargets = (d) => targets(d).filter((t) => get("leads", t.id)?.owner === d.owner);
+  // after assignment, and their calls must still be picked up). The phone owner's own leads come with their id (names are
+  // asked for on those); everyone else's are the number alone, once each, so the list stays under the 1 MB the app accepts.
+  const syncable = (l) => l && !l.archived && !l.mergedInto && !l.noCallSync;
+  function targets(d) {
+    const own = [], others = new Map(); // number → when its lead last changed
+    for (const l of all("leads")) {
+      if (!syncable(l)) continue;
+      const phone = phoneKeyOf(l);
+      if (!/^[1-9]\d{7,14}$/.test(phone)) continue;
+      if (l.owner === d.owner) own.push({ id: l.id, phone, ...(hasName(l) ? {} : { needsName: true }) });
+      else { const at = String(l.updatedAt || l.createdAt || ""); if (!(others.get(phone) > at)) others.set(phone, at); }
+    }
+    for (const t of own) others.delete(t.phone);
+    // at most 30,000 other numbers (about 750 KB), the most recently active first
+    return [...own, ...[...others].sort((a, b) => b[1].localeCompare(a[1])).slice(0, 30000).map(([phone]) => ({ phone }))];
+  }
+  const ownTargets = (d) => targets(d).filter((t) => t.id);
+  // a call of this phone may take its recording while its lead is still active, whoever owns the lead now
+  const leadSyncable = (id) => syncable(get("leads", id));
   // Fills in the name the phone shows for this number. A name somebody already gave the lead is never replaced.
   function fillName(lead, value) {
     const name = cleanName(value);
@@ -206,9 +218,9 @@ export function createMobileSync({ db, all, get, put, stamp, tx, log, keyPath, o
     // and ask the person to sign in again. A lead that moved to another owner (a workflow, an import)
     // refuses an old recording this way, so a reassignment never stops the phone.
     if(c && Object.keys(policy.sims).length && (!policy.sims[c.accountId] || policy.sims[c.accountId] === "off"))fail("SIM tracking disabled",409);
-    if(c && policy.sims[c.accountId] === "leads" && !targets(d).some(l=>l.id===c.leadId))fail("Call not accessible",409);
+    if(c && policy.sims[c.accountId] === "leads" && !leadSyncable(c.leadId))fail("Call not accessible",409);
     const lead = c && get("leads", c.leadId);
-    if (!c || c.deviceId !== d.id || (!targets(d).some((l) => l.id === c.leadId) && !(c.owner === d.owner && lead?.owner === "" && lead.createdBy === d.owner)))
+    if (!c || c.deviceId !== d.id || (!leadSyncable(c.leadId) && !(c.owner === d.owner && lead?.owner === "" && lead.createdBy === d.owner)))
       fail("Call not accessible", 409);
     if (!bytes.length || bytes.length > MAX_AUDIO) fail("Recording must be 1 byte–20 MiB", 413);
     const sha = hash(bytes),
