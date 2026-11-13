@@ -198,6 +198,10 @@
 .cwt .ld-more { display: grid; place-items: center; width: 46px; height: 46px; padding: 0; border: 1px solid var(--r-line-2); border-radius: 14px; background: #fff; color: var(--r-ink-2); cursor: pointer; }
 .cwt .ld-more svg { width: 20px; height: 20px; stroke-width: 3.2; }
 .cwt .ld-more:hover { border-color: #c9d6f6; color: var(--r-blue); }
+.cwt .ld-refresh svg { fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.cwt .ld-refresh:disabled { cursor: default; }
+.cwt .ld-refresh.spin svg { animation: crm-spin .7s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .cwt .ld-refresh.spin svg { animation: none; opacity: .5; } }
 
 .cwt .ld-stages { display: flex; gap: 3px; margin-top: 16px; }
 .cwt .ld-chev { flex: 1; min-width: 0; height: 38px; padding: 0 14px; border: 0; background: #eef1f8; color: var(--r-muted); font: inherit; font-size: 12.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;
