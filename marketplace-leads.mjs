@@ -166,7 +166,7 @@ export function readTradeindia(r) {
   };
 }
 
-export function createMarketplaceLeads({ db, all, get, put, stamp, tx, log, keyPath, now = () => Date.now(), fetchImpl = (...a) => globalThis.fetch(...a), report = () => {}, timers = true }) {
+export function createMarketplaceLeads({ db, all, get, put, stamp, tx, log, keyPath, now = () => Date.now(), fetchImpl = (...a) => globalThis.fetch(...a), report = () => {}, timers = true, onIndiamart = () => {} }) {
   db.exec(`CREATE TABLE IF NOT EXISTS marketplace_settings(id INTEGER PRIMARY KEY CHECK(id=1), body BLOB);
     CREATE TABLE IF NOT EXISTS marketplace_push(id INTEGER PRIMARY KEY CHECK(id=1), body TEXT);
     CREATE TABLE IF NOT EXISTS marketplace_enquiries(source TEXT NOT NULL, id TEXT NOT NULL, at INTEGER, status TEXT, lead_id TEXT, body TEXT, PRIMARY KEY(source,id))`);
@@ -290,6 +290,8 @@ export function createMarketplaceLeads({ db, all, get, put, stamp, tx, log, keyP
   }
   function takeAll(source, rows, read, owner) {
     const out = { enquiries: rows.length, newLeads: 0, repeats: 0, skipped: 0 };
+    // IndiaMART's records also list the calls through its number (type P): the call link reads them from here
+    if (source === "indiamart") try { onIndiamart(rows); } catch (e) { report("IndiaMART call link: " + e.message); }
     for (const r of rows) {
       let status;
       try { status = take(source, read(r), owner); } catch (e) { report(`${SOURCES[source]} enquiry: ${e.message}`); status = "failed"; }

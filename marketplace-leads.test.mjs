@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { createMarketplaceLeads, readIndiamart, readTradeindia, imParam, readTime, plain, enquiryDetails } from "./marketplace-leads.mjs";
 import { phoneParts } from "./lead-phone.mjs";
 
-function fixture(t, now = { value: Date.UTC(2026, 10, 12, 6, 0, 0) }) {
+function fixture(t, now = { value: Date.UTC(2026, 10, 12, 6, 0, 0) }, extra = {}) {
   const db = new DatabaseSync(":memory:"), dir = mkdtempSync(join(tmpdir(), "salesdesk-market-"));
   t.after(() => { db.close(); rmSync(dir, { recursive: true, force: true }); });
   db.exec("CREATE TABLE records(kind TEXT,id TEXT,body TEXT,PRIMARY KEY(kind,id))");
@@ -21,7 +21,7 @@ function fixture(t, now = { value: Date.UTC(2026, 10, 12, 6, 0, 0) }) {
   const log = (leadId, type, text, extra = {}) => { const a = stamp({ leadId, type, text, ...extra }); put("activities", a); return a; };
   const replies = [], asked = [];
   const fetchImpl = async (url) => { asked.push(String(url)); const r = replies.shift() ?? { status: 200, body: [] }; return { status: r.status, text: async () => (typeof r.body === "string" ? r.body : JSON.stringify(r.body)) }; };
-  const m = createMarketplaceLeads({ db, all, get, put, stamp, tx, log, keyPath: join(dir, "key"), now: () => now.value, fetchImpl, timers: false });
+  const m = createMarketplaceLeads({ db, all, get, put, stamp, tx, log, keyPath: join(dir, "key"), now: () => now.value, fetchImpl, timers: false, ...extra });
   return { db, all, get, put, m, replies, asked, now };
 }
 const im = (v) => ({ UNIQUE_QUERY_ID: "Q" + Math.random().toString(36).slice(2), QUERY_TYPE: "B", QUERY_TIME: "2026-11-12 10:15:00", SENDER_NAME: "Malvika", SENDER_MOBILE: "+91-8328485570",
@@ -210,4 +210,14 @@ test("a won customer who asks again starts over as a new lead with the same owne
   const warm = f.get("leads", "warm");
   assert.equal(warm.deal, "Interested Customer", "a lead still being worked keeps its step");
   assert.equal(all("tasks").some((x) => x.leadId === "warm"), false);
+});
+
+test("every IndiaMART record read is handed to the call link, TradeIndia ones are not", async (t) => {
+  const seen = [];
+  const f = fixture(t, undefined, { onIndiamart: (rows) => seen.push(...rows) }), { m, replies } = f;
+  f.put("users", { id: "u1", name: "Sathiya", active: true });
+  m.save({ owner: "u1", indiamart: { key: "abcdefghijklmnop1234", enabled: true, backfillDays: 2 } });
+  replies.push({ status: 200, body: { CODE: 200, RESPONSE: [im({ UNIQUE_QUERY_ID: "P1", QUERY_TYPE: "P" }), im({ UNIQUE_QUERY_ID: "B1" })] } });
+  await m.sync();
+  assert.deepEqual(seen.map((r) => r.UNIQUE_QUERY_ID), ["P1", "B1"]);
 });

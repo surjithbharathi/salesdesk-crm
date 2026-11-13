@@ -4,6 +4,7 @@ import { createSigninMethods } from "./signin-methods.mjs";
 import { createTelecrmMirror } from "./telecrm-mirror.mjs";
 import { createMarketplaceLeads } from "./marketplace-leads.mjs";
 import { createAiTasks } from "./ai-tasks.mjs";
+import { createIndiamartCalls, isRelay as indiamartRelay } from "./indiamart-calls.mjs";
 import { createBlockedNumbers } from "./blocked-numbers.mjs";
 import { createKpi } from "./kpi.mjs";
 import { extname, resolve as resolvePath, sep } from "node:path";
@@ -553,11 +554,12 @@ const rawPut = (kind, v) => db.prepare("INSERT INTO records VALUES(?,?,?) ON CON
 // IndiaMART and TradeIndia enquiries read into leads on a schedule
 // ERPNext quotations and invoices on leads (erpnext.mjs)
 const erpnext = createErpnext({ db, all, get, put, log, keyPath: (process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname) + ".erp-key", report: (m) => console.error(m) });
-const marketplace = createMarketplaceLeads({ db, all, get, put, stamp, tx, log, keyPath: (process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname) + ".marketplace-key", report: (m) => console.error(m) });
+const marketplace = createMarketplaceLeads({ db, all, get, put, stamp, tx, log, onIndiamart: (rows) => indiamart.take(rows), keyPath: (process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname) + ".marketplace-key", report: (m) => console.error(m) });
 const salesmaxImport = createSalesmaxImport({ db, get, put: rawPut, tx, users: () => all("users") });
 // Salesmax leads left without an owner (its short names, like "Bala" for Balaji) get one at each start
 try { const fixed = salesmaxImport.fixOwners(); if (fixed.leads) console.log(`Salesmax: ${fixed.leads} leads and ${fixed.tasks} follow-ups given their owner`); } catch (e) { console.error("Salesmax owners: " + e.message); }
 const telecrm = createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecording: (callId, bytes) => mobile.importRecording(callId, bytes), shareTwins: () => mobile.shareTwins(), keyPath: (process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname) + ".telecrm-key", log: (m) => console.error(m) });
+const indiamart = createIndiamartCalls({ db, all, get, put, stamp, tx, log, keyPath: (process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname) + ".indiamart-key", report: (m) => console.error(m) });
 const waGateway = createWaGateway({ db, all, get, put, stamp, tx, log, systemUser: process.env.CRM_OWNER_USER_ID || "", keyPath: (process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname) + ".wagw-key" });
 // WhatsApp-code and Devi ERP sign-in, for people who already have a login
 const signin = createSigninMethods({ db, getUser: (id) => get("users", id), users: () => all("users"), userAuth, waGateway, checkUrl: publicHttps, publicOrigin, keyPath: (process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname) + ".signin-key", log: (event, detail) => console.log(JSON.stringify({ event, ...detail })) });
@@ -905,7 +907,10 @@ const mobileServer = http.createServer(async (req, res) => {
     if (req.method === "POST" && url.pathname === "/v1/calls") {
       if (req.headers["content-type"]?.split(";")[0] !== "application/json")
         bad("JSON required", 415);
-      reply(200, mobile.call(device, await body(req)));
+      const synced = mobile.call(device, await body(req));
+      // a call from an IndiaMART relay number goes to the buyer's own lead as soon as IndiaMART has listed it
+      if (indiamartRelay(synced.phone) && !synced.indiamartQueryId) { try { indiamart.relink(); } catch (e) { console.error("IndiaMART call link: " + e.message); } }
+      reply(200, get("mobileCalls", synced.id) || synced);
       return;
     }
     const feedback = /^\/v1\/calls\/([a-f0-9-]{36})\/feedback$/.exec(url.pathname);

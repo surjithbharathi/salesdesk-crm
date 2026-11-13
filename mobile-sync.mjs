@@ -220,13 +220,15 @@ export function createMobileSync({ db, all, get, put, stamp, tx, log, keyPath, o
   function recording(d, callId, bytes, meta) {
     const c = get("mobileCalls", callId);
     const policy=preferences(d);
+    // a call moved to the IndiaMART buyer's lead stays this phone's own call, even when that lead belongs to someone else
+    const relayed = c && c.indiamartQueryId && c.deviceId === d.id && c.owner === d.owner;
     // A refused recording is 409, not 403: the phone skips that one file and carries on. A 403 makes the app stop all sync
     // and ask the person to sign in again. A lead that moved to another owner (a workflow, an import)
     // refuses an old recording this way, so a reassignment never stops the phone.
     if(c && Object.keys(policy.sims).length && (!policy.sims[c.accountId] || policy.sims[c.accountId] === "off"))fail("SIM tracking disabled",409);
-    if(c && policy.sims[c.accountId] === "leads" && !leadSyncable(c.leadId))fail("Call not accessible",409);
+    if(c && !relayed && policy.sims[c.accountId] === "leads" && !leadSyncable(c.leadId))fail("Call not accessible",409);
     const lead = c && get("leads", c.leadId);
-    if (!c || c.deviceId !== d.id || (!leadSyncable(c.leadId) && !(c.owner === d.owner && lead?.owner === "" && lead.createdBy === d.owner)))
+    if (!c || c.deviceId !== d.id || (!relayed && !leadSyncable(c.leadId) && !(c.owner === d.owner && lead?.owner === "" && lead.createdBy === d.owner)))
       fail("Call not accessible", 409);
     if (!bytes.length || bytes.length > MAX_AUDIO) fail("Recording must be 1 byte–20 MiB", 413);
     const sha = hash(bytes),
@@ -363,7 +365,7 @@ export function createMobileSync({ db, all, get, put, stamp, tx, log, keyPath, o
   }
   function feedback(d, callId, clientId, text, bytes) {
     const call = get("mobileCalls", callId), lead = call && get("leads", call.leadId);
-    if (!call || !lead || (lead.owner !== d.owner && !(lead.owner === "" && lead.createdBy === d.owner && call.owner === d.owner))) fail("Call not accessible", 403);
+    if (!call || !lead || (lead.owner !== d.owner && !(call.indiamartQueryId && call.deviceId === d.id && call.owner === d.owner) && !(lead.owner === "" && lead.createdBy === d.owner && call.owner === d.owner))) fail("Call not accessible", 403);
     if (!/^[a-f0-9-]{36}$/.test(clientId || "") || typeof text !== "string" || text.length > 4000 || (!text.trim() && !bytes)) fail("Invalid feedback");
     const sha = hash(bytes || Buffer.from(text));
     const previous = all("activities").find((a) => a.feedbackId === clientId && a.userId === d.owner);
