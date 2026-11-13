@@ -1,5 +1,8 @@
+// An open lead nobody owns is shown to everyone, so whoever picks it up can assign it to themselves.
+export const openUnassigned = (l) => Boolean(l) && !l.owner && !l.archived && !l.mergedInto && l.stage !== "Closed";
+
 export function scopedState(all, userId) {
-  const leads = all("leads").filter((l) => l.owner === userId);
+  const leads = all("leads").filter((l) => l.owner === userId || openUnassigned(l));
   const leadIds = new Set(leads.map((l) => l.id));
   const deals = all("deals").filter((d) => d.owner === userId && leadIds.has(d.leadId));
   const conversations = all("conversations").filter((c) => leadIds.has(c.leadId));
@@ -37,9 +40,9 @@ export function scopedState(all, userId) {
 // The same rules for one record at a time, for the screen's "only what changed" updates: whether this person's screen
 // holds this record. `leadOf`, `dealOf` and `conversationOf` read the linked record (people already joined).
 export function visibleTo(kind, v, userId, { leadOf, dealOf, conversationOf }) {
-  const own = (leadId) => Boolean(leadId) && leadOf(leadId)?.owner === userId;
+  const own = (leadId) => { const l = leadId && leadOf(leadId); return Boolean(l) && (l.owner === userId || openUnassigned(l)); };
   switch (kind) {
-    case "leads": return v.owner === userId;
+    case "leads": return v.owner === userId || openUnassigned(v);
     case "users": return v.id === userId;
     case "products": return true;
     case "deals": return v.owner === userId && own(v.leadId);
