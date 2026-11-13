@@ -86,7 +86,20 @@ export function LeadDetail({ id, nav = null, compose: startWith = "" }) {
   useEffect(() => { setMenu(""); setCompose(startWith || "note"); setDraft(""); setWaText(""); setWaFull(false); setFuWhat(""); setFuOwner(""); setMoving(false); setTab("history"); }, [id]);
   useEffect(() => { if (startWith) setCompose(startWith); }, [startWith]);
   const history = useLeadHistory(id);
-  const acts = useMemo(() => [...(crm.activities || []).filter((a) => a.leadId === id), ...history].sort((a, b) => String(stampOf(b)).localeCompare(String(stampOf(a)))), [crm.activities, id, history]);
+  // TeleCRM keeps its own copy of a call the phone app also sent (same start, same length): the call is shown once,
+  // the copy that has the recording, else the phone's own
+  const twins = useMemo(() => {
+    const mine = (crm.calls || []).filter((c) => c.leadId === id && c.activityId);
+    const hide = new Set();
+    for (const t of mine.filter((c) => c.deviceId === "telecrm"))
+      for (const p of mine)
+        if (p.deviceId !== "telecrm" && Math.abs((p.startedAt || 0) - (t.startedAt || 0)) <= 120000 && Math.abs((p.duration || 0) - (t.duration || 0)) <= 3) {
+          hide.add(t.recordingId && !p.recordingId ? p.activityId : t.activityId);
+          break;
+        }
+    return hide;
+  }, [crm.calls, id]);
+  const acts = useMemo(() => [...(crm.activities || []).filter((a) => a.leadId === id && !twins.has(a.id)), ...history.filter((a) => !twins.has(a.id))].sort((a, b) => String(stampOf(b)).localeCompare(String(stampOf(a)))), [crm.activities, id, history, twins]);
   // the enquiry the lead came with (IndiaMART buy lead, a TeleCRM "lead arrived" line): the latest one
   // every enquiry, newest first: how the buyer came (buy lead, call, direct...) and how often
   const enquiries = useMemo(() => acts.map((a) => [a, fromActivity(a)]).filter(([, e]) => e.kind === "buylead").map(([a, e]) => ({ ...e.lead, at: e.lead.when || stampOf(a) })), [acts]);
