@@ -221,3 +221,19 @@ test("every IndiaMART record read is handed to the call link, TradeIndia ones ar
   await m.sync();
   assert.deepEqual(seen.map((r) => r.UNIQUE_QUERY_ID), ["P1", "B1"]);
 });
+
+test("the website form posts an enquiry: a new lead with its language, a note on a known buyer, a retry taken once", async (t) => {
+  const token = "w".repeat(40);
+  const f = fixture(t, undefined, { websiteToken: token }), { m, all } = f;
+  f.put("users", { id: "u1", name: "Office", active: true });
+  m.save({ owner: "u1" });
+  assert.throws(() => m.receiveWebsite("x".repeat(40), {}), /Not found/);
+  const post = { id: "cf7-13-abc", name: "Kumar", phone: "098765 43210", email: "k@example.com", location: "Salem, Tamil Nadu", machine: "Machine model or help me choose", language: "Tamil", message: "Groundnut, 200 kg a day", form: "Machine quotation", page: "https://oilmachineindia.com/contact/", at: 1794546000 };
+  assert.equal(m.receiveWebsite(token, post).status, "new lead");
+  const lead = all("leads").find((l) => l.phoneKey === "919876543210");
+  assert.deepEqual([lead.source, lead.name, lead.city, lead.language, lead.owner, lead.product], ["Website", "Kumar", "Salem", "Tamil", "u1", undefined]);
+  assert.ok(all("activities").some((a) => a.leadId === lead.id && /Groundnut, 200 kg a day/.test(a.text) && /Page: https:\/\/oilmachineindia\.com\/contact\//.test(a.text)));
+  assert.equal(m.receiveWebsite(token, post).status, "already taken", "a retry is taken once");
+  assert.equal(m.receiveWebsite(token, { ...post, id: "cf7-13-def", machine: "Mini oil expeller 20kg" }).status, "repeat");
+  assert.equal(all("leads").length, 1);
+});

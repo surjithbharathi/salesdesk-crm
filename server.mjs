@@ -554,7 +554,7 @@ const rawPut = (kind, v) => db.prepare("INSERT INTO records VALUES(?,?,?) ON CON
 // IndiaMART and TradeIndia enquiries read into leads on a schedule
 // ERPNext quotations and invoices on leads (erpnext.mjs)
 const erpnext = createErpnext({ db, all, get, put, log, keyPath: (process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname) + ".erp-key", report: (m) => console.error(m) });
-const marketplace = createMarketplaceLeads({ db, all, get, put, stamp, tx, log, onIndiamart: (rows) => indiamart.take(rows), keyPath: (process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname) + ".marketplace-key", report: (m) => console.error(m) });
+const marketplace = createMarketplaceLeads({ db, all, get, put, stamp, tx, log, onIndiamart: (rows) => indiamart.take(rows), websiteToken: process.env.WEBSITE_HOOK_TOKEN || "", keyPath: (process.env.CRM_DB || new URL("./data/crm.sqlite", import.meta.url).pathname) + ".marketplace-key", report: (m) => console.error(m) });
 const salesmaxImport = createSalesmaxImport({ db, get, put: rawPut, tx, users: () => all("users") });
 // Salesmax leads left without an owner (its short names, like "Bala" for Balaji) get one at each start
 try { const fixed = salesmaxImport.fixOwners(); if (fixed.leads) console.log(`Salesmax: ${fixed.leads} leads and ${fixed.tasks} follow-ups given their owner`); } catch (e) { console.error("Salesmax owners: " + e.message); }
@@ -1100,6 +1100,15 @@ const server = http.createServer(async (req, res) => {
       bad("Unrecognized host", 403);
     // IndiaMART's push API: each new enquiry arrives here at once. The long random part of the address is the only key,
     // since IndiaMART signs nothing; anything else answers "Not found".
+    // the website's enquiry form (a small WordPress plugin on oilmachineindia.com) posts each enquiry here
+    const websiteHook = /^\/hooks\/website\/([A-Za-z0-9_-]{20,80})$/.exec(url.pathname);
+    if (websiteHook && req.method === "POST") {
+      const text = (await rawBody(req)).toString("utf8");
+      let payload;
+      try { payload = JSON.parse(text || "{}"); } catch { payload = Object.fromEntries(new URLSearchParams(text)); }
+      send(200, marketplace.receiveWebsite(websiteHook[1], payload));
+      return;
+    }
     const indiamartPush = /^\/hooks\/indiamart\/([a-f0-9]{32})$/.exec(url.pathname);
     if (indiamartPush) {
       if (req.method !== "POST") bad("Method not allowed", 405);

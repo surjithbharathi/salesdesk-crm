@@ -28,7 +28,7 @@ const DAY = 86400000, IST = 19800000, MIN = 60000;
 const IM_BASE = "https://mapi.indiamart.com/wservce/crm/crmListing/v2/";
 const TI_BASE = "https://www.tradeindia.com/utils/my_inquiry.html";
 const IM_WINDOW = 7 * DAY, OVERLAP = 10 * MIN, TI_DAYS = 7, TI_PAGE = 50, TI_PAGES = 20;
-const SOURCES = { indiamart: "IndiaMART", tradeindia: "TradeIndia" };
+const SOURCES = { indiamart: "IndiaMART", tradeindia: "TradeIndia", website: "Website" };
 const IM_TYPES = { W: "Direct enquiry", B: "Buy-lead", P: "Call", BIZ: "Catalogue enquiry", V: "Catalogue view", WA: "WhatsApp enquiry" };
 const DEFAULTS = {
   intervalMinutes: 15, owner: "",
@@ -166,7 +166,7 @@ export function readTradeindia(r) {
   };
 }
 
-export function createMarketplaceLeads({ db, all, get, put, stamp, tx, log, keyPath, now = () => Date.now(), fetchImpl = (...a) => globalThis.fetch(...a), report = () => {}, timers = true, onIndiamart = () => {} }) {
+export function createMarketplaceLeads({ db, all, get, put, stamp, tx, log, keyPath, now = () => Date.now(), fetchImpl = (...a) => globalThis.fetch(...a), report = () => {}, timers = true, onIndiamart = () => {}, websiteToken = "" }) {
   db.exec(`CREATE TABLE IF NOT EXISTS marketplace_settings(id INTEGER PRIMARY KEY CHECK(id=1), body BLOB);
     CREATE TABLE IF NOT EXISTS marketplace_push(id INTEGER PRIMARY KEY CHECK(id=1), body TEXT);
     CREATE TABLE IF NOT EXISTS marketplace_enquiries(source TEXT NOT NULL, id TEXT NOT NULL, at INTEGER, status TEXT, lead_id TEXT, body TEXT, PRIMARY KEY(source,id))`);
@@ -276,7 +276,7 @@ export function createMarketplaceLeads({ db, all, get, put, stamp, tx, log, keyP
           status = "repeat"; leadId = lead.id;
         } else {
           let made = stamp({ name: q.name || q.company || q.phone || q.email, phone: q.phone, email: q.email, company: q.company, city: q.city, state: q.state ? cleanState(q.state) : "",
-            source: label, stage: "New", owner, createdBy: owner, ...(q.product ? { product: q.product } : {}), lastEnquiryAt: at,
+            source: label, stage: "New", owner, createdBy: owner, ...(q.product ? { product: q.product } : {}), ...(q.language ? { language: q.language } : {}), lastEnquiryAt: at,
             marketplace: { source, id: q.id, type: q.type, ...(q.pincode ? { pincode: q.pincode } : {}), ...(q.address ? { address: q.address } : {}) } });
           made = withRegion(made) || made;
           put("leads", made);
@@ -359,6 +359,24 @@ export function createMarketplaceLeads({ db, all, get, put, stamp, tx, log, keyP
   // IndiaMART's push: one enquiry (or a list) at a time, the moment it comes. The pull reads stay as a back-up; an enquiry
   // already taken by either is never taken twice. IndiaMART's own test sends a made-up buyer (a number like 99999 99999),
   // which is answered but not made into a lead.
+  // The website's enquiry form (oilmachineindia.com, Contact Form 7) posts each enquiry here at its secret address.
+  // The same enquiry posted twice (a retry) is taken once.
+  const LANGS = ["English", "Tamil", "Telugu", "Hindi", "Kannada", "Malayalam"];
+  function receiveWebsite(token, p = {}) {
+    const t = String(websiteToken || "");
+    if (t.length < 20 || typeof token !== "string" || token.length !== t.length || !timingSafeEqual(Buffer.from(token), Buffer.from(t))) fail("Not found", 404);
+    const phone = mobileOf(p.phone, "IN"), email = line(p.email, 200);
+    const [city, ...rest] = line(p.location, 150).split(",").map((x) => x.trim());
+    const machine = line(p.machine, 250);
+    const at = Number(p.at) > 1e9 ? Number(p.at) * (Number(p.at) < 1e12 ? 1000 : 1) : now();
+    const id = line(p.id, 100) || `web-${(phone || email).replace(/\D/g, "")}-${Math.floor(at / 60000)}`;
+    const q = { id, at, type: "enquiry", name: line(p.name, 100), phone, email, city: city || "", state: rest.join(", "),
+      product: /^machine model or help me choose$/i.test(machine) ? "" : machine,
+      message: [plain(p.message, 3000), p.form ? `Form: ${line(p.form, 100)}` : "", p.page ? `Page: ${line(p.page, 300)}` : ""].filter(Boolean).join("\n"),
+      language: LANGS.includes(line(p.language, 20)) ? line(p.language, 20) : "" };
+    const status = take("website", q, raw().owner || "");
+    return { ok: true, status: status || "already taken" };
+  }
   function receivePush(token, payload) {
     const s = raw(), t = s.indiamart.pushToken;
     if (!s.indiamart.push || !t || typeof token !== "string" || token.length !== t.length || !timingSafeEqual(Buffer.from(token), Buffer.from(t))) fail("Not found", 404);
@@ -405,5 +423,5 @@ export function createMarketplaceLeads({ db, all, get, put, stamp, tx, log, keyP
     timer = setTimeout(() => { sync().catch(() => {}); timer = setInterval(() => sync().catch(() => {}), s.intervalMinutes * MIN); timer.unref?.(); }, 7 * MIN);
     timer.unref?.();
   }
-  return { settings, save, sync, schedule, receivePush, isRunning: () => Boolean(running) };
+  return { settings, save, sync, schedule, receivePush, receiveWebsite, isRunning: () => Boolean(running) };
 }
