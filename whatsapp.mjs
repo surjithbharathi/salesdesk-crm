@@ -23,6 +23,21 @@ export function incomingText(message) {
   };
 }
 
+/** Adds the phone-number address to a message from a chat WhatsApp addresses by its hidden id (…@lid), when the link knows it. */
+const needsPhone = (raw) => /@lid$/.test(raw?.key?.remoteJid || "") && !/@s\.whatsapp\.net$/.test(raw?.key?.remoteJidAlt || "");
+export async function withPhone(sock, raw) {
+  const key = raw?.key;
+  if (!needsPhone(raw)) return raw;
+  try {
+    const pn = await sock?.signalRepository?.lidMapping?.getPNForLID(key.remoteJid);
+    const digits = /^(\d+)(?::\d+)?@s\.whatsapp\.net$/.exec(pn || "");
+    if (digits) key.remoteJidAlt = `${digits[1]}@s.whatsapp.net`;
+  } catch {
+    /* not known yet: the message is skipped, as before */
+  }
+  return raw;
+}
+
 export function createWhatsApp({ load, receive }) {
   let socket,
     auth,
@@ -95,11 +110,17 @@ export function createWhatsApp({ load, receive }) {
           timer.unref?.();
         }
       });
-      sock.ev.on("messages.upsert", (event) => {
+      sock.ev.on("messages.upsert", async (event) => {
         if (current !== generation || !["notify", "append"].includes(event.type)) return;
         for (const raw of event.messages || []) {
+          // newer chats are addressed by a hidden WhatsApp id (…@lid); a reply typed on the phone often comes without the
+          // phone number beside it, so the number is looked up from the ids this link has already learned
+          if (needsPhone(raw)) await withPhone(sock, raw); // only these wait: every other message is saved at once, in order
           const message = incomingText(raw);
-          if (!message) continue;
+          if (!message) {
+            if (/@lid$/.test(raw?.key?.remoteJid || "") && !raw?.key?.remoteJidAlt) console.log("Linked WhatsApp: a message was skipped; the chat's phone number is not known yet");
+            continue;
+          }
           try {
             if (!receive(message)) status.unmatched++;
           } catch {
