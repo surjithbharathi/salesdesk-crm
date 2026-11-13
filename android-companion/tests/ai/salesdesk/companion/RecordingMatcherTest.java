@@ -49,6 +49,18 @@ public final class RecordingMatcherTest {
         expect("a number alone, written hours later, is not enough", List.of(biz), List.of(onlyNumber), Set.of(), Map.of());
         RecordingMatcher.Audio wrongLength = new RecordingMatcher.Audio("content://long", START + 70_000, 600, "9876543210_" + at + ".m4a");
         expect("a file far longer than the call never matches", List.of(biz), List.of(wrongLength), Set.of(), Map.of());
+        // which files are worth reading: a recorder keeps years of files with a regular customer's number
+        java.text.SimpleDateFormat vivo = new java.text.SimpleDateFormat("yyyy-MM-dd HH-mm-ss");
+        String today = vivo.format(new Date(START)), lastMonth = vivo.format(new Date(START - 30L * 86_400_000));
+        check("this call's time in a contact-name file", RecordingMatcher.relevant(biz, 0, "Yashas S " + today + ".mp3"));
+        check("this number with another day's time is an older call", !RecordingMatcher.relevant(biz, 0, "+919876543210 " + lastMonth + ".mp3"));
+        check("this number with no time in the name", RecordingMatcher.relevant(biz, 0, "9876543210.m4a"));
+        check("written near the call's end, whatever the name", RecordingMatcher.relevant(biz, START + 70_000, "Someone " + lastMonth + ".mp3"));
+        check("a personal call never makes a file worth reading", !RecordingMatcher.relevant(personal, START + 70_000, "x.mp3"));
         System.out.println(passed + " recording matching cases passed");
+    }
+    static void check(String name, boolean ok) {
+        if (!ok) throw new AssertionError(name);
+        passed++;
     }
 }

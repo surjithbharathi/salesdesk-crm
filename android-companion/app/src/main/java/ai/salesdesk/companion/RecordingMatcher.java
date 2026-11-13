@@ -56,6 +56,20 @@ final class RecordingMatcher {
             && Math.abs(audio.seconds - call.seconds) <= Math.max(3, call.seconds * .15);
     }
 
+    /**
+     * Whether a recorder file is worth reading for this business call: written near the call's end, or its name
+     * carries the call's time, or its number when the name holds no time at all. A file with this customer's number
+     * but another date-time is an older call with them: it can never fit this call (see score), and a recorder keeps
+     * years of such files, so counting them crowded the real ones out and stopped all matching.
+     */
+    static boolean relevant(Call call, long modified, String name) {
+        if (!call.eligible) return false;
+        if (nearEnd(call, modified)) return true;
+        long stamp = stampOf(name);
+        if (stamp > 0) return Math.abs(stamp - call.started) <= STAMP_WINDOW_MS || Math.abs(stamp - call.ended()) <= STAMP_WINDOW_MS;
+        return numberIn(name, call.phone);
+    }
+
     /** The call's last ten digits appear in the file name (spaces, dashes, brackets and + ignored). */
     static boolean numberIn(String name, String phone) {
         if (phone.length() < 10 || name.isEmpty()) return false;
