@@ -1013,10 +1013,14 @@ const whatsapp = createWhatsApp({
       return true;
     tx(() => {
       const conversation = waConversation(lead.id);
+      // a message sent from the linked phone is the linked person's own: named after them, not after the lead's owner
+      const by = message.direction === "Outgoing" ? waLinkedUser() : null;
+      const from = by ? { sender: by.name, userId: by.id } : {};
       put(
         "messages",
         stamp({
           ...message,
+          ...from,
           provider: "baileys",
           leadId: lead.id,
           conversationId: conversation.id,
@@ -1029,15 +1033,24 @@ const whatsapp = createWhatsApp({
         direction: message.direction,
         provider: "baileys",
         occurredAt: message.occurredAt,
+        ...from,
       });
     });
     return true;
   },
 });
 db.exec("CREATE TABLE IF NOT EXISTS whatsapp_control (id INTEGER PRIMARY KEY CHECK(id=1), enabled INTEGER NOT NULL)");
+// who scanned the QR: messages sent from that phone carry their name
+if (!db.prepare("PRAGMA table_info(whatsapp_control)").all().some((c) => c.name === "linked_by"))
+  db.exec("ALTER TABLE whatsapp_control ADD COLUMN linked_by TEXT NOT NULL DEFAULT ''");
+function waLinkedUser() {
+  const id = db.prepare("SELECT linked_by FROM whatsapp_control WHERE id=1").get()?.linked_by;
+  const user = id && get("users", id);
+  return user ? { id: user.id, name: user.name } : null;
+}
 const waControl = db.prepare("SELECT enabled FROM whatsapp_control WHERE id=1").get();
 const hasWaCredentials = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='whatsapp_auth'").get() && db.prepare("SELECT 1 FROM whatsapp_auth WHERE id='creds'").get();
-if (!waControl) db.prepare("INSERT INTO whatsapp_control VALUES(1,?)").run(hasWaCredentials ? 1 : 0);
+if (!waControl) db.prepare("INSERT INTO whatsapp_control(id,enabled) VALUES(1,?)").run(hasWaCredentials ? 1 : 0);
 if (waControl?.enabled || (!waControl && hasWaCredentials)) void whatsapp.connect();
 const files = {
   "/": ["public/index.html", "text/html"],
@@ -1669,7 +1682,7 @@ const server = http.createServer(async (req, res) => {
       if (url.pathname === "/api/whatsapp/connect") {
         if (p.acknowledged !== true)
           bad("Acknowledge the unofficial-client and local message-storage risks first");
-        db.prepare("UPDATE whatsapp_control SET enabled=1 WHERE id=1").run();
+        db.prepare("UPDATE whatsapp_control SET enabled=1, linked_by=? WHERE id=1").run(identity?.user?.id || "");
         send(200, await whatsapp.connect());
         return;
       }
@@ -1685,7 +1698,7 @@ const server = http.createServer(async (req, res) => {
         db.prepare("UPDATE whatsapp_control SET enabled=0 WHERE id=1").run();
         const signedOut = await whatsapp.logout();
         if (url.pathname.endsWith("repair")) {
-          db.prepare("UPDATE whatsapp_control SET enabled=1 WHERE id=1").run();
+          db.prepare("UPDATE whatsapp_control SET enabled=1, linked_by=? WHERE id=1").run(identity?.user?.id || "");
           send(200, await whatsapp.connect());
         } else send(200, signedOut);
         return;
