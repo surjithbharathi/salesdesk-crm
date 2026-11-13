@@ -92,7 +92,7 @@ test("device credentials are hashed, redacted, owner scoped, and revocable", (t)
   assert.throws(() => api.authenticate(`Bearer ${device.token}`), status(401));
 });
 
-test("call sync permits exactly one assigned active business lead and is idempotent", (t) => {
+test("call sync lands on the lead with the number, whoever owns it, and is idempotent", (t) => {
   const f = fixture(t),
     p = f.payload();
   const c = f.api.call(f.device, p);
@@ -100,10 +100,14 @@ test("call sync permits exactly one assigned active business lead and is idempot
   assert.equal(f.all("mobileCalls").length, 1);
   assert.equal(f.all("activities").length, 1);
   assert.throws(() => f.api.call(f.device, { ...p, duration: 31 }), status(409));
-  for (const phone of ["919999999999", "918888888888", "917777777777"])
+  // an archived lead or a number that is no lead is not synced
+  for (const phone of ["918888888888", "917777777777"])
     assert.throws(() => f.api.call(f.device, { ...p, phone }), status(403));
-  f.put("leads", { id: "duplicate", owner: "owner", phone: p.phone });
-  assert.throws(() => f.api.call(f.device, f.payload({ localId: "duplicate-match" })), status(403));
+  // a colleague's lead: the office phone's call still lands on it
+  assert.equal(f.api.call(f.device, f.payload({ localId: "colleague", phone: "919999999999" })).leadId, "other-lead");
+  // two leads with one number: the phone owner's own lead wins
+  f.put("leads", { id: "duplicate", owner: "other", phone: p.phone, updatedAt: "2099-01-01T00:00:00Z" });
+  assert.equal(f.api.call(f.device, f.payload({ localId: "duplicate-match" })).leadId, "lead");
 });
 
 test("the phone's contact name fills a lead that has only its number, and never replaces a real name", (t) => {
