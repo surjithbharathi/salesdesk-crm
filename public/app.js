@@ -2199,7 +2199,7 @@ document.addEventListener("click", async (e) => {
     if (action === "csv-template")
       download(
         "lead-import-template.csv",
-        "name,company,phone,email,source,stage,value\nSample contact,Example business,+919000001234,sample@example.com,Website,New,10000\n",
+        "name,company,phone,email,source,stage,value\nSample contact,Example business,+919000000015,sample@example.com,Website,New,10000\n",
         "text/csv;charset=utf-8",
       );
     if (action.startsWith("new-")) moduleForm(action.slice(4));

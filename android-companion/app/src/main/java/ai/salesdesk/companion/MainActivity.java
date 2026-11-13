@@ -49,7 +49,7 @@ public class MainActivity extends Activity {
     JSONArray rows(String key){JSONArray a=workspace.optJSONArray(key);return a==null?new JSONArray():a;}
     String leadName(String id){for(int i=0;i<rows("leads").length();i++){JSONObject l=rows("leads").optJSONObject(i);if(l!=null&&l.optString("id").equals(id))return l.optString("name");}return "Business contact";}
     String phoneName(String number){String country=SecureConfig.prefs(this).getString("country","91"),n=SyncEngine.normalize(number,country);for(int i=0;i<rows("leads").length();i++){JSONObject l=rows("leads").optJSONObject(i);if(l!=null&&SyncEngine.normalize(l.optString("phone"),country).equals(n))return l.optString("name");}String cached=SecureConfig.prefs(this).getString("name:"+n,"");if(!cached.isEmpty())return cached;askName(n);return prettyNumber(number);}
-    // a number with no name: shown as the number itself, spaced like the phone does (+91 97862 50600)
+    // a number with no name: shown as the number itself, spaced like the phone does (+91 97862 00007)
     static String prettyNumber(String number){String d=String.valueOf(number).replaceAll("[^0-9]","");if(d.length()==12&&d.startsWith("91"))return "+91 "+d.substring(2,7)+" "+d.substring(7);if(d.length()==10)return d.substring(0,5)+" "+d.substring(5);return number==null||number.isEmpty()?"Unknown number":number;}
     // a call row knows its lead; a lead not kept on the phone is asked from the CRM once and remembered
     String callName(JSONObject r){String id=r.optString("leadId");if(!id.isEmpty())for(int i=0;i<rows("leads").length();i++){JSONObject l=rows("leads").optJSONObject(i);if(l!=null&&id.equals(l.optString("id"))&&!l.optString("name").isEmpty())return l.optString("name");}return phoneName(r.optString("phone"));}

@@ -5,7 +5,7 @@ services:
     restart: unless-stopped
     init: true
     environment:
-      PUBLIC_ORIGIN: https://salesdesk-crm.srv1696974.hstgr.cloud
+      PUBLIC_ORIGIN: https://crm.example.com
       BIND_HOST: 0.0.0.0
       CRM_DB: /app/data/crm.sqlite
     volumes:
@@ -18,12 +18,12 @@ services:
       - ALL
     labels:
       - traefik.enable=true
-      - traefik.http.routers.salesdesk-web.rule=Host(`salesdesk-crm.srv1696974.hstgr.cloud`)
+      - traefik.http.routers.salesdesk-web.rule=Host(`crm.example.com`)
       - traefik.http.routers.salesdesk-web.entrypoints=websecure
       - traefik.http.routers.salesdesk-web.tls.certresolver=letsencrypt
       - traefik.http.routers.salesdesk-web.service=salesdesk-web
       - traefik.http.services.salesdesk-web.loadbalancer.server.port=3100
-      - traefik.http.routers.salesdesk-mobile.rule=Host(`salesdesk-crm.srv1696974.hstgr.cloud`) && PathPrefix(`/v1/`)
+      - traefik.http.routers.salesdesk-mobile.rule=Host(`crm.example.com`) && PathPrefix(`/v1/`)
       - traefik.http.routers.salesdesk-mobile.priority=100
       - traefik.http.routers.salesdesk-mobile.entrypoints=websecure
       - traefik.http.routers.salesdesk-mobile.tls.certresolver=letsencrypt

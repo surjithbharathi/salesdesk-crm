@@ -69,8 +69,8 @@ test("a member's screen gets only what changed, and only their own leads", async
   const login = await req("/api/auth/login", "POST", { username: "caller", password: "Caller-password-123" });
   const member = { Cookie: login.cookie.split(";")[0] }, me = login.json.user.id;
   const start = (await req("/api/state", "GET", undefined, member)).json.syncSeq;
-  const mine = (await req("/api/leads", "POST", { name: "Mine", phone: "+919800000101", owner: me, source: "Test" }, admin)).json;
-  const theirs = (await req("/api/leads", "POST", { name: "Theirs", phone: "+919800000102", owner: users[0].id, source: "Test" }, admin)).json;
+  const mine = (await req("/api/leads", "POST", { name: "Mine", phone: "+919800000035", owner: me, source: "Test" }, admin)).json;
+  const theirs = (await req("/api/leads", "POST", { name: "Theirs", phone: "+919800000036", owner: users[0].id, source: "Test" }, admin)).json;
   await req("/api/activities", "POST", { leadId: mine.id, type: "Note", text: "Called, wants a quote" }, member);
   const d = await req(`/api/state/changes?after=${start}`, "GET", undefined, member);
   assert.equal(d.status, 200);
@@ -89,7 +89,7 @@ test("a member's screen gets only what changed, and only their own leads", async
   assert.equal((await req(`/api/leads/${mine.id}`, "PATCH", { owner: me }, member)).status, 403, "once given away it is not theirs to take back");
   // an open lead nobody owns is shown to everyone and may be taken for oneself, but not handed to someone else
   const mark = (await req("/api/state", "GET", undefined, member)).json.syncSeq;
-  const free = (await req("/api/leads", "POST", { name: "Free", phone: "+919800000103", owner: "", source: "Test" }, admin)).json;
+  const free = (await req("/api/leads", "POST", { name: "Free", phone: "+919800000037", owner: "", source: "Test" }, admin)).json;
   assert.ok((await req(`/api/state/changes?after=${mark}`, "GET", undefined, member)).json.changes.leads.some((l) => l.id === free.id), "an unassigned lead is shown");
   assert.equal((await req(`/api/leads/${free.id}`, "PATCH", { owner: users[0].id }, member)).status, 403);
   const took = await req(`/api/leads/${free.id}`, "PATCH", { owner: me }, member);

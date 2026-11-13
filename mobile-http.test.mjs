@@ -83,14 +83,14 @@ test("mobile HTTP sync authenticates devices and attaches private recordings to 
   );
   const lead = await admin("leads", "POST", {
     name: "Synthetic mobile contact",
-    phone: "919123450001",
+    phone: "919123400038",
     owner,
     source: "Test",
   });
   assert.equal(lead.status, 200);
   const excluded = await admin("leads", "POST", {
     name: "Other owner's contact",
-    phone: "919123450002",
+    phone: "919123400039",
     owner: otherOwner,
     source: "Test",
   });
@@ -101,7 +101,7 @@ test("mobile HTTP sync authenticates devices and attaches private recordings to 
   assert.ok(!targets.data.some((target) => target.id === excluded.data.id));
   const call = {
     localId: "http-call-1",
-    phone: "919123450001",
+    phone: "919123400038",
     direction: "Incoming",
     duration: 30,
     startedAt: Date.now() - 60000,
@@ -117,22 +117,22 @@ test("mobile HTTP sync authenticates devices and attaches private recordings to 
         deviceBase,
         "/v1/calls",
         "POST",
-        { ...call, localId: "other", phone: "919123450002" },
+        { ...call, localId: "other", phone: "919123400039" },
         auth,
       )
     ).status,
     403,
   );
   // a lead marked "do not sync calls": its number is not offered to the phone and its calls are refused, until the mark is removed
-  const quiet = await admin("leads", "POST", { name: "Private number", phone: "919123450003", owner, source: "Test", noCallSync: true });
+  const quiet = await admin("leads", "POST", { name: "Private number", phone: "919123400040", owner, source: "Test", noCallSync: true });
   assert.equal(quiet.status, 200);
   assert.ok(!(await request(deviceBase, "/v1/targets", "GET", undefined, auth)).data.some((t) => t.id === quiet.data.id));
-  const quietCall = { localId: "quiet-1", phone: "919123450003", direction: "Incoming", duration: 20, startedAt: Date.now() - 90000 };
+  const quietCall = { localId: "quiet-1", phone: "919123400040", direction: "Incoming", duration: 20, startedAt: Date.now() - 90000 };
   assert.equal((await request(deviceBase, "/v1/calls", "POST", quietCall, auth)).status, 403);
   assert.equal((await admin(`leads/${quiet.data.id}`, "PATCH", { noCallSync: false })).status, 200);
   assert.ok((await request(deviceBase, "/v1/targets", "GET", undefined, auth)).data.some((t) => t.id === quiet.data.id));
   // the phone fills in the name of a lead that only has its number
-  const bare = await admin("leads", "POST", { name: "919123450004", phone: "919123450004", owner, source: "Test" });
+  const bare = await admin("leads", "POST", { name: "919123400041", phone: "919123400041", owner, source: "Test" });
   assert.equal(bare.status, 200);
   assert.equal((await request(deviceBase, "/v1/targets", "GET", undefined, auth)).data.find((t) => t.id === bare.data.id).needsName, true);
   const filled = await request(deviceBase, `/v1/targets/${bare.data.id}/name`, "POST", { name: "Phone Contact" }, auth);

@@ -33,4 +33,4 @@ adb reverse tcp:3311 tcp:3311
 
 The preview requires a local CRM server and a separate test account. The preview flag changes the package id and launcher label, not authentication or consent requirements. Its call sync and calling remain off unless explicitly enabled.
 
-For the online app, omit `crmPreview` and build with `-PcrmApiOrigin=https://salesdesk-crm.srv1696974.hstgr.cloud`, using the correct original signing identity for distribution. Generated APKs, local databases, credentials and private screenshots remain excluded from Git.
+For the online app, omit `crmPreview` and build with `-PcrmApiOrigin=https://crm.example.com`, using the correct original signing identity for distribution. Generated APKs, local databases, credentials and private screenshots remain excluded from Git.

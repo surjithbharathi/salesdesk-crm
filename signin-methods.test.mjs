@@ -30,56 +30,56 @@ function fixture({ gatewayOn = true, fetchImpl } = {}) {
 }
 
 test("mobile numbers are normalised to 91XXXXXXXXXX and masked", () => {
-  assert.equal(mobileKey("98765 43210"), "919876543210");
-  assert.equal(mobileKey("+91 98765-43210"), "919876543210");
-  assert.equal(mobileKey("09876543210"), "919876543210");
+  assert.equal(mobileKey("98765 00008"), "919876500008");
+  assert.equal(mobileKey("+91 98765-00008"), "919876500008");
+  assert.equal(mobileKey("09876500008"), "919876500008");
   assert.equal(mobileKey("12345"), "");
-  assert.equal(maskMobile("919876543210"), "+91 98xxx xx210");
+  assert.equal(maskMobile("919876500008"), "+91 98xxx xx008");
 });
 
 test("WhatsApp code signs in only the person who owns the saved number", async () => {
   const { s, sent, people, advance } = fixture();
-  await assert.rejects(s.otpStart({ mobile: "9876543210" }), /not turned on/);
-  await s.save({ otpEnabled: true, mobiles: { u1: "98765 43210" } }, people);
+  await assert.rejects(s.otpStart({ mobile: "9876500008" }), /not turned on/);
+  await s.save({ otpEnabled: true, mobiles: { u1: "98765 00008" } }, people);
   assert.deepEqual(s.methods(), { otp: true, erp: false });
-  const r = await s.otpStart({ mobile: "+91 9876543210" });
-  assert.equal(r.sentTo, "+91 98xxx xx210");
+  const r = await s.otpStart({ mobile: "+91 9876500008" });
+  assert.equal(r.sentTo, "+91 98xxx xx008");
   assert.equal(sent.length, 1);
   const code = sent[0].text.slice(0, 6);
   assert.match(code, /^\d{6}$/);
-  await assert.rejects(s.otpStart({ mobile: "9876543210" }), /Wait a few seconds/);
-  assert.throws(() => s.otpVerify({ mobile: "9876543210", code: code === "000000" ? "111111" : "000000" }), /not right/);
-  const session = s.otpVerify({ mobile: "9876543210", code });
+  await assert.rejects(s.otpStart({ mobile: "9876500008" }), /Wait a few seconds/);
+  assert.throws(() => s.otpVerify({ mobile: "9876500008", code: code === "000000" ? "111111" : "000000" }), /not right/);
+  const session = s.otpVerify({ mobile: "9876500008", code });
   assert.equal(session.user.id, "u1");
   assert.match(session.token, /^[A-Za-z0-9_-]{43}$/);
-  assert.throws(() => s.otpVerify({ mobile: "9876543210", code }), /not right/, "a code works once");
+  assert.throws(() => s.otpVerify({ mobile: "9876500008", code }), /not right/, "a code works once");
   advance(31_000);
-  await s.otpStart({ mobile: "9876543210" });
+  await s.otpStart({ mobile: "9876500008" });
   advance(5 * 60 * 1000 + 1);
-  assert.throws(() => s.otpVerify({ mobile: "9876543210", code: sent[1].text.slice(0, 6) }), /expired/, "codes expire after 5 minutes");
+  assert.throws(() => s.otpVerify({ mobile: "9876500008", code: sent[1].text.slice(0, 6) }), /expired/, "codes expire after 5 minutes");
 });
 
 test("unknown numbers get the same answer but no message", async () => {
   const { s, sent, people } = fixture();
-  await s.save({ otpEnabled: true, mobiles: { u1: "9876543210" } }, people);
-  const r = await s.otpStart({ mobile: "9000000001" });
+  await s.save({ otpEnabled: true, mobiles: { u1: "9876500008" } }, people);
+  const r = await s.otpStart({ mobile: "9000000031" });
   assert.equal(r.ok, true);
   assert.equal(sent.length, 0);
 });
 
 test("five wrong codes end the code", async () => {
   const { s, sent, people } = fixture();
-  await s.save({ otpEnabled: true, mobiles: { u1: "9876543210" } }, people);
-  await s.otpStart({ mobile: "9876543210" });
+  await s.save({ otpEnabled: true, mobiles: { u1: "9876500008" } }, people);
+  await s.otpStart({ mobile: "9876500008" });
   const code = sent[0].text.slice(0, 6);
   const wrong = code === "123456" ? "654321" : "123456";
-  for (let i = 0; i < 5; i++) assert.throws(() => s.otpVerify({ mobile: "9876543210", code: wrong }));
-  assert.throws(() => s.otpVerify({ mobile: "9876543210", code }), /not right/);
+  for (let i = 0; i < 5; i++) assert.throws(() => s.otpVerify({ mobile: "9876500008", code: wrong }));
+  assert.throws(() => s.otpVerify({ mobile: "9876500008", code }), /not right/);
 });
 
 test("mobiles can only be saved for active people with a login, and not shared", async () => {
   const { s, people } = fixture();
-  await assert.rejects(s.save({ mobiles: { u2: "9876543210" } }, people), /have a login/);
+  await assert.rejects(s.save({ mobiles: { u2: "9876500008" } }, people), /have a login/);
   await assert.rejects(s.save({ mobiles: { u1: "123" } }, people), /does not look right/);
   await assert.rejects(s.save({ otpEnabled: true }, fixture({ gatewayOn: false }).people).then(() => fixture({ gatewayOn: false }).s.save({ otpEnabled: true }, people)), /gateway first/);
 });

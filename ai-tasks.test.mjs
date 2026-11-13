@@ -30,7 +30,7 @@ test("the model's answer becomes tasks; a bad answer is none", () => {
 
 test("only calls after AI tasks were switched on are read; their tasks close once done", async () => {
   const w = world({ answer: { tasks: [{ title: "Confirm the machine is ready before Saturday", action: "call", due: "2026-11-14T10:00", why: "Customer expects confirmation of machine readiness by Saturday" }] } });
-  w.put("leads", { id: "L1", name: "Murugan", phone: "+919800000001", owner: "u1", stage: "Quotation given", deal: "Advance Received", createdAt: "2026-11-01T00:00:00.000Z" });
+  w.put("leads", { id: "L1", name: "Murugan", phone: "+919800000003", owner: "u1", stage: "Quotation given", deal: "Advance Received", createdAt: "2026-11-01T00:00:00.000Z" });
   note(w, "L1", "Call IQ: old call\nNext: send brochure", "2026-11-11T05:00:00.000Z"); // before AI tasks started
   w.time.now += 10 * 60000;
   note(w, "L1", "Call IQ: Customer will visit Monday\nNext: Customer expects confirmation of machine readiness by Saturday", w.iso());
@@ -56,9 +56,9 @@ test("only calls after AI tasks were switched on are read; their tasks close onc
 test("signals: a missed call not returned and a new lead not called; accept plans a follow-up, dismiss hides", async () => {
   const w = world();
   const t = w.time.now;
-  w.put("leads", { id: "L2", name: "PUSAPATI", phone: "+919885770594", owner: "u1", stage: "New", source: "IndiaMART", createdAt: new Date(t - 3 * 3600000).toISOString() });
-  w.put("leads", { id: "L3", name: "Ravi", phone: "+919800000003", owner: "u1", stage: "New", createdAt: new Date(t - 5 * 3600000).toISOString() });
-  w.put("mobileCalls", { id: "m1", phone: "+919800000003", leadId: "L3", owner: "u1", direction: "Missed", duration: 0, startedAt: t - 3600000 });
+  w.put("leads", { id: "L2", name: "PUSAPATI", phone: "+919885700004", owner: "u1", stage: "New", source: "IndiaMART", createdAt: new Date(t - 3 * 3600000).toISOString() });
+  w.put("leads", { id: "L3", name: "Ravi", phone: "+919800000005", owner: "u1", stage: "New", createdAt: new Date(t - 5 * 3600000).toISOString() });
+  w.put("mobileCalls", { id: "m1", phone: "+919800000005", leadId: "L3", owner: "u1", direction: "Missed", duration: 0, startedAt: t - 3600000 });
   const items = w.ai.list("u1").items;
   assert.deepEqual(items.map((i) => i.kind), ["missed", "new", "new"]);
   assert.equal(items[0].title, "Call back Ravi");
@@ -78,7 +78,7 @@ test("a quiet lead shows from 3 to 14 days without contact", () => {
   const w = world();
   const t = w.time.now, day = 86400000;
   for (const [id, days] of [["Q1", 2], ["Q2", 5], ["Q3", 20]]) {
-    w.put("leads", { id, name: id, phone: "+9198000001" + id.slice(1), owner: "u1", stage: "Opportunity", deal: "Interested Customer", createdAt: new Date(t - 90 * day).toISOString(), updatedAt: new Date(t - 90 * day).toISOString() });
+    w.put("leads", { id, name: id, phone: "+9198000006" + id.slice(1), owner: "u1", stage: "Opportunity", deal: "Interested Customer", createdAt: new Date(t - 90 * day).toISOString(), updatedAt: new Date(t - 90 * day).toISOString() });
     w.put("activities", { id: "a" + id, leadId: id, type: "Call", direction: "Outgoing", duration: 30, occurredAt: new Date(t - days * day).toISOString(), createdAt: new Date(t - days * day).toISOString() });
   }
   assert.deepEqual(w.ai.list("u1").items.filter((i) => i.kind === "quiet").map((i) => i.leadId), ["Q2"]);

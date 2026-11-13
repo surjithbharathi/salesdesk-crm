@@ -8,9 +8,9 @@ function world() {
   db.exec("CREATE TABLE records(kind TEXT, id TEXT, body TEXT, PRIMARY KEY(kind,id))");
   const put = (kind, o) => db.prepare("INSERT OR REPLACE INTO records VALUES(?,?,?)").run(kind, o.id, JSON.stringify(o));
   const get = (kind, id) => { const r = db.prepare("SELECT body FROM records WHERE kind=? AND id=?").get(kind, id); return r && JSON.parse(r.body); };
-  put("leads", { id: "mine", name: "Ravi", phone: "919840012345", owner: "u1", stage: "New", probableState: "Tamil Nadu", telecrm: { x: 1 } });
-  put("leads", { id: "free", name: "My Airtel", phone: "919690002999", owner: "", stage: "New" });
-  put("leads", { id: "theirs", name: "Other", phone: "919000000000", owner: "u2", stage: "New" });
+  put("leads", { id: "mine", name: "Ravi", phone: "919840000011", owner: "u1", stage: "New", probableState: "Tamil Nadu", telecrm: { x: 1 } });
+  put("leads", { id: "free", name: "My Airtel", phone: "919690000027", owner: "", stage: "New" });
+  put("leads", { id: "theirs", name: "Other", phone: "919000000022", owner: "u2", stage: "New" });
   put("activities", { id: "a1", leadId: "mine", type: "Note", text: "Asked for price", userId: "u1", occurredAt: "2026-11-01T10:00:00Z" });
   put("activities", { id: "a2", leadId: "mine", type: "Call", direction: "Outgoing", duration: 60, userId: "u1", occurredAt: "2026-11-05T10:00:00Z", importedFrom: "salesmax" });
   put("tasks", { id: "t1", leadId: "mine", title: "Call back", due: "2026-11-12T05:00:00Z", status: "Open" });
@@ -63,7 +63,7 @@ test("the owner can be changed by the lead's owner, an admin, or anyone for a le
 
 test("a lead the TeleCRM copy owns is its real owner's: they can edit it, and the copy is not in the team list", () => {
   const w = world();
-  w.db.prepare("INSERT OR REPLACE INTO records VALUES(?,?,?)").run("leads", "mirrored", JSON.stringify({ id: "mirrored", name: "From TeleCRM", phone: "919840011111", owner: "tc-user-1", stage: "New" }));
+  w.db.prepare("INSERT OR REPLACE INTO records VALUES(?,?,?)").run("leads", "mirrored", JSON.stringify({ id: "mirrored", name: "From TeleCRM", phone: "919840000026", owner: "tc-user-1", stage: "New" }));
   w.db.prepare("INSERT OR REPLACE INTO records VALUES(?,?,?)").run("activities", "m1", JSON.stringify({ id: "m1", leadId: "mirrored", type: "Note", text: "Said yes", userId: "tc-user-1", occurredAt: "2026-11-02T10:00:00Z" }));
   const users = () => [{ id: "u1", name: "Surjith" }, { id: "u2", name: "Priya" }, { id: "tc-user-1", name: "Surjith" }];
   const links = new Map([["tc-user-1", "u1"]]);

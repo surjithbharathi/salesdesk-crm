@@ -107,7 +107,7 @@ function Numbers({ user, onSaved, onCancel }) {
   return (
     <form className="user-edit" onSubmit={save}>
       <label>Numbers {user.name} uses (phone and WhatsApp)
-        <input className="field-input" value={text} onChange={(e) => setText(e.target.value)} placeholder="90390 36589, 98428 71640" inputMode="tel" />
+        <input className="field-input" value={text} onChange={(e) => setText(e.target.value)} placeholder="90390 00067, 98428 00068" inputMode="tel" />
       </label>
       <small className="muted">Separate numbers with commas. Calls and WhatsApp messages on these numbers show {user.name}'s badge in the activity history. Saving does not sign them out.</small>
       <span className="newlead-actions">

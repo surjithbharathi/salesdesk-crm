@@ -14,10 +14,10 @@ assert.equal((await request(host,'/api/workspaces',{cookie:ownerCookie})).status
 const invite=await request(host,'/api/workspace/users',{method:'POST',cookie:ownerCookie,body:{name:'Synthetic Viewer',username:'fixture-viewer',role:'viewer'}});assert.equal(invite.status,201,'invite viewer');const viewer=await invite.json();
 assert.equal((await request(host,'/api/auth/reset',{method:'POST',body:{token:new URLSearchParams(new URL(viewer.setupUrl).hash.slice(1)).get('token'),password:'Synthetic-Viewer-Password-123'}})).status,200);
 const viewerCookie=await login(host,'fixture-viewer','Synthetic-Viewer-Password-123');
-assert.equal((await request(host,'/api/leads',{method:'POST',cookie:viewerCookie,body:{name:'Denied lead',phone:'+919000000099',stage:'New'}})).status,403,'viewer cannot create lead');
+assert.equal((await request(host,'/api/leads',{method:'POST',cookie:viewerCookie,body:{name:'Denied lead',phone:'+919000000057',stage:'New'}})).status,403,'viewer cannot create lead');
 assert.equal((await request(host,'/api/workspace/users',{cookie:viewerCookie})).status,403,'viewer cannot manage users');
 assert.equal((await request(host,'/api/call-ai/keys',{cookie:viewerCookie})).status,403,'viewer cannot access API keys');
-const privateLead=await request(host,'/api/leads',{method:'POST',cookie:ownerCookie,body:{name:'Synthetic tenant-private lead',phone:'+919000000098',stage:'New',owner:viewer.userId}});assert.equal(privateLead.status,200,'workspace owner creates private lead');
+const privateLead=await request(host,'/api/leads',{method:'POST',cookie:ownerCookie,body:{name:'Synthetic tenant-private lead',phone:'+919000000058',stage:'New',owner:viewer.userId}});assert.equal(privateLead.status,200,'workspace owner creates private lead');
 const viewerState=await (await request(host,'/api/state',{cookie:viewerCookie})).json();assert.ok(viewerState.leads.some(lead=>lead.name==='Synthetic tenant-private lead'));
 const rootState=await (await request(rootHost,'/api/state',{cookie:rootCookie})).json();assert.ok(!rootState.leads.some(lead=>lead.name==='Synthetic tenant-private lead'),'tenant data absent from main database');
 const accessUpdate=await request(host,'/api/workspace/users/'+viewer.userId,{method:'PATCH',cookie:ownerCookie,body:{role:'member',active:true,permissions:{'calls.read':false}}});assert.equal(accessUpdate.status,200);

@@ -1,5 +1,44 @@
 # Salesdesk CRM
 
+A sales CRM for a small team that sells machines over the phone: leads, calls with their
+recordings, follow-ups, WhatsApp, quotations and daily goals, with an Android app that
+syncs the phone's call log and a web screen for the office.
+
+It was built for one company (Devi Industries, oil-mill machinery in Coimbatore) and is
+released so anyone can read it, run it, or take parts of it. There is no hosted service
+and no support: run your own copy.
+
+## What is in it
+
+- **Server** (Node.js, SQLite, no framework): leads, activities, follow-ups, users and
+  permissions, with a separate device API on its own port for the phones.
+- **Web** (React, built with Vite): the office screens — leads, follow-ups, calls,
+  reports and settings.
+- **Android app** (plain Java, no frameworks): the call log and its recordings go to the
+  right lead, with a caller popup, click to call and an in-app updater.
+- **Connections**, each optional and off until a key is entered: IndiaMART and TradeIndia
+  enquiries, a WhatsApp gateway, ERPNext quotations and invoices, a TeleCRM copy, call
+  transcription (Sarvam or OpenAI) and an MCP server.
+
+## Running it
+
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). In short: `npm install`, `npm test`, then
+`node workspace-gateway.mjs`. The Android app is built with Gradle from
+`android-companion` (see its README).
+
+Every key and token is entered in Settings and kept encrypted beside the database; none
+is in this repository. The phone numbers in the tests are made up.
+
+## Licence
+
+[GNU AGPL-3.0](LICENSE). You may use, change and share it. If you run a changed version
+as a service for other people, you must offer them your changes as source as well.
+
+## History
+
+The notes below are the project's own changelog, kept as they were written.
+
+
 **Continuing on another computer? Start with [HANDOFF.md](HANDOFF.md).** It contains setup, deployment state, Android signing caveats, completed work and outstanding acceptance checks. No runtime database, private screenshots or secrets are included in this public repository.
 
 The Android app updates itself from the CRM, without the Play Store. To release a new phone version, follow [APP_UPDATE.md](APP_UPDATE.md).

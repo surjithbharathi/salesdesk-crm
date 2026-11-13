@@ -46,12 +46,12 @@ test("a TeleCRM call takes the phone app's recording of the same call", (t) => {
   const m = createMobileSync({ db, all, get, put, stamp: (v) => ({ id: randomUUID(), ...v }), tx, log: () => {}, keyPath: join(dir, "audio-key") });
   const at = Date.UTC(2026, 10, 9, 11, 22);
   // phone call with a recording; TeleCRM logged the same call 50 s later (at its end) with the number in another form
-  put("mobileCalls", { id: "P1", deviceId: "dev-1", phone: "919741218951", startedAt: at, duration: 48, activityId: "PA1", recordingId: "rec-1" });
-  put("mobileCalls", { id: "tcc-1", deviceId: "telecrm", phone: "9741218951", startedAt: at + 50000, duration: 47, activityId: "TA1", recordingPath: "x/rec.mp3" });
+  put("mobileCalls", { id: "P1", deviceId: "dev-1", phone: "919741200042", startedAt: at, duration: 48, activityId: "PA1", recordingId: "rec-1" });
+  put("mobileCalls", { id: "tcc-1", deviceId: "telecrm", phone: "9741200042", startedAt: at + 50000, duration: 47, activityId: "TA1", recordingPath: "x/rec.mp3" });
   put("activities", { id: "TA1", type: "Call" });
   // another call to the same number an hour later, and a different number at the same time: neither takes it
-  put("mobileCalls", { id: "tcc-2", deviceId: "telecrm", phone: "919741218951", startedAt: at + 3600000, duration: 48, activityId: "TA2" });
-  put("mobileCalls", { id: "tcc-3", deviceId: "telecrm", phone: "917353360065", startedAt: at, duration: 48, activityId: "TA3" });
+  put("mobileCalls", { id: "tcc-2", deviceId: "telecrm", phone: "919741200042", startedAt: at + 3600000, duration: 48, activityId: "TA2" });
+  put("mobileCalls", { id: "tcc-3", deviceId: "telecrm", phone: "917353300043", startedAt: at, duration: 48, activityId: "TA3" });
   assert.equal(m.shareTwins(), 1);
   assert.equal(get("mobileCalls", "tcc-1").recordingId, "rec-1");
   assert.equal(get("mobileCalls", "tcc-1").twinCallId, "P1");

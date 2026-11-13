@@ -2,7 +2,7 @@
 
 ## Current known environment (verify before acting)
 
-Live URL: https://salesdesk-crm.srv2101310.hstgr.cloud/ on Hostinger NEW VPS `srv2101310.hstgr.cloud`. Only this VPS is authorized for CRM work. Do not modify the old VPS, OpenClaw, WAHA or shared Traefik services.
+Live URL: https://crm.example.com/ on Hostinger NEW VPS `your VPS.hstgr.cloud`. Only this VPS is authorized for CRM work. Do not modify the old VPS, OpenClaw, WAHA or shared Traefik services.
 
 Compose project directory: `/docker/salesdesk-crm`; file `docker-compose.yml`; service `salesdesk`; current known container `salesdesk-crm-salesdesk-1`. Persistent private host storage: `/opt/salesdesk-crm/data` -> `/app/data`. Application runs as UID 1000. Latest known image `salesdesk-crm-web:0.18.0-20261028` (verify live state). Runtime image is local to that VPS; the root Dockerfile in this branch rebuilds from upstream Node + locked packages and needs a fresh build test.
 
@@ -11,7 +11,7 @@ Main HTTPS router forwards to 3100; main device `/v1/` router may forward to 310
 ## Runtime settings
 
 - `CRM_DB=/app/data/crm.sqlite`
-- `PUBLIC_ORIGIN=https://salesdesk-crm.srv2101310.hstgr.cloud`
+- `PUBLIC_ORIGIN=https://crm.example.com`
 - `CRM_OWNER_USER_ID`: private runtime ID of the approved Ultra Admin, obtained from existing DB/config by an authorized operator; not supplied here.
 - `BIND_HOST=0.0.0.0` inside Docker; gateway controls child binding.
 - `PORT` / `MOBILE_PORT` are child runtime ports; production gateway uses fixed3100/main3102/mobile3101. Do not assume changing PORT remaps all gateway listeners.

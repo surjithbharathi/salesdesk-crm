@@ -36,18 +36,18 @@ public final class RecordingMatcherTest {
         // file-name clues: the number and the date-time a recorder writes into the name
         java.text.SimpleDateFormat f = new java.text.SimpleDateFormat("yyyyMMdd_HHmmss");
         String at = f.format(new java.util.Date(START));
-        RecordingMatcher.Call biz = new RecordingMatcher.Call("biz", START, 60, true, "919876543210");
-        RecordingMatcher.Call personal = new RecordingMatcher.Call("me", START + 15_000, 58, false, "919000011111");
-        RecordingMatcher.Audio named = new RecordingMatcher.Audio("content://named", START + 70_000, 60, "Call recording +91 98765 43210_" + at + ".m4a");
+        RecordingMatcher.Call biz = new RecordingMatcher.Call("biz", START, 60, true, "919876500008");
+        RecordingMatcher.Call personal = new RecordingMatcher.Call("me", START + 15_000, 58, false, "919000000009");
+        RecordingMatcher.Audio named = new RecordingMatcher.Audio("content://named", START + 70_000, 60, "Call recording +91 98765 00008_" + at + ".m4a");
         expect("number in the name settles a clash with a personal call", List.of(biz, personal), List.of(named), Set.of(), Map.of("biz", named.uri));
         if (!RecordingMatcher.pick(List.of(biz, personal), List.of(named), Set.of()).get("biz").mode.equals("file")) throw new AssertionError("mode file"); passed++;
-        RecordingMatcher.Audio copied = new RecordingMatcher.Audio("content://copied", START + 7_200_000, 60, "9876543210_" + at + ".mp3");
+        RecordingMatcher.Audio copied = new RecordingMatcher.Audio("content://copied", START + 7_200_000, 60, "9876500008_" + at + ".mp3");
         expect("number and time in the name match a file copied hours later", List.of(biz), List.of(copied), Set.of(), Map.of("biz", copied.uri));
-        RecordingMatcher.Call again = new RecordingMatcher.Call("again", START + 3_600_000, 60, true, "919876543210");
+        RecordingMatcher.Call again = new RecordingMatcher.Call("again", START + 3_600_000, 60, true, "919876500008");
         expect("the time in the name picks the right call of two with one number", List.of(biz, again), List.of(copied), Set.of(), Map.of("biz", copied.uri));
-        RecordingMatcher.Audio onlyNumber = new RecordingMatcher.Audio("content://onlynumber", START + 7_200_000, 60, "9876543210.m4a");
+        RecordingMatcher.Audio onlyNumber = new RecordingMatcher.Audio("content://onlynumber", START + 7_200_000, 60, "9876500008.m4a");
         expect("a number alone, written hours later, is not enough", List.of(biz), List.of(onlyNumber), Set.of(), Map.of());
-        RecordingMatcher.Audio wrongLength = new RecordingMatcher.Audio("content://long", START + 70_000, 600, "9876543210_" + at + ".m4a");
+        RecordingMatcher.Audio wrongLength = new RecordingMatcher.Audio("content://long", START + 70_000, 600, "9876500008_" + at + ".m4a");
         expect("a file far longer than the call never matches", List.of(biz), List.of(wrongLength), Set.of(), Map.of());
         System.out.println(passed + " recording matching cases passed");
     }

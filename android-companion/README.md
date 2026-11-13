@@ -3,7 +3,7 @@
 Build with JDK 17, Gradle 9.1.0, Android SDK 36 and AGP 9.0.1:
 
 ```sh
-gradle :app:assembleDebug :app:lintDebug -PcrmApiOrigin=https://salesdesk-crm.srv2101310.hstgr.cloud
+gradle :app:assembleDebug :app:lintDebug -PcrmApiOrigin=https://crm.example.com
 ```
 
 Open this folder directly in Android Studio if Gradle is not on PATH. The project does not contain a Gradle wrapper binary. Debug output: `app/build/outputs/apk/debug/app-debug.apk`. Release requires operator signing and HTTPS.
@@ -21,10 +21,10 @@ The first tab is now **My day**: level and progress, the next lead to call, goal
 To try it next to the installed app without replacing it, build the preview variant, which has its own package id (`ai.salesdesk.companion.preview`) and data:
 
 ```sh
-gradle :app:assembleDebug -PcrmPreview=true -PcrmApiOrigin=https://salesdesk-crm.srv2101310.hstgr.cloud
+gradle :app:assembleDebug -PcrmPreview=true -PcrmApiOrigin=https://crm.example.com
 ```
 
-Production CRM is `salesdesk-crm.srv2101310.hstgr.cloud`. The old `srv1696974` host is not the live CRM.
+Production CRM is `crm.example.com`. The old `the old host` host is not the live CRM.
 
 ## 0.16.0: lead names from the phone
 

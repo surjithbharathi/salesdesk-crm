@@ -41,7 +41,7 @@ export const ago = (t) => {
   return d < 30 ? `${d}d ago` : `${Math.floor(d / 30)}mo ago`;
 };
 
-// "919741218951" -> "+91 97412 18951"
+// "919741200042" -> "+91 97412 00042"
 export const prettyPhone = (p) => {
   const d = String(p || "").replace(/\D/g, "");
   if (d.length === 10) return `+91 ${d.slice(0, 5)} ${d.slice(5)}`;

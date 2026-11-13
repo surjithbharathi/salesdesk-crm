@@ -49,7 +49,7 @@ export default function SigninMethods() {
           <div className="sec-line"><b>Mobile number of each person</b></div>
           <div className="sec-grid">
             {data.people.map((p) => (
-              <label key={p.id}>{p.name}<input className="field-input" name={`m-${p.id}`} inputMode="tel" defaultValue={p.mobile ? `+${p.mobile}` : ""} placeholder="+91 98765 43210" /></label>
+              <label key={p.id}>{p.name}<input className="field-input" name={`m-${p.id}`} inputMode="tel" defaultValue={p.mobile ? `+${p.mobile}` : ""} placeholder="+91 98765 00008" /></label>
             ))}
           </div>
           {!data.people.length && <Note>No one has a login yet.</Note>}
@@ -66,7 +66,7 @@ export default function SigninMethods() {
           </Steps>
           <label className="check"><input type="checkbox" name="erpEnabled" defaultChecked={data.erpEnabled} /> <span><b>Show "Devi ERP" on the sign-in screen.</b></span></label>
           <div className="sec-grid">
-            <label>ERP address<input className="field-input" name="erpBaseUrl" type="url" defaultValue={data.erpBaseUrl} placeholder="https://deviindustries.com" /></label>
+            <label>ERP address<input className="field-input" name="erpBaseUrl" type="url" defaultValue={data.erpBaseUrl} placeholder="https://erp.example.com" /></label>
             <label>Client ID<input className="field-input" name="erpClientId" defaultValue={data.erpClientId} autoComplete="off" /></label>
             <label>Client secret<input className="field-input" name="erpClientSecret" type="password" autoComplete="new-password" placeholder={data.erpHasSecret ? "Saved. Leave blank to keep it" : "From the OAuth client"} /></label>
           </div>

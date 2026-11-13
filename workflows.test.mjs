@@ -268,7 +268,7 @@ test("update a field, cancel tasks, call an API, numbers in conditions", async (
     { type: "webhook", url: "https://n8n.example.com/webhook/big" },
     { type: "webhook", url: "https://broken.example.com/hook" },
   ]));
-  const big = s.lead({ name: "Big", value: 250000, phone: "+919800000001" }), small = s.lead({ name: "Small", value: 5000 });
+  const big = s.lead({ name: "Big", value: 250000, phone: "+919800000003" }), small = s.lead({ name: "Small", value: 5000 });
   s.put("tasks", { id: "t2", leadId: big.id, title: "manual", status: "Open" });
   await s.wf.tick();
   assert.equal(s.get("leads", big.id).source, "Big order (Coimbatore)");
@@ -278,7 +278,7 @@ test("update a field, cancel tasks, call an API, numbers in conditions", async (
   assert.equal(tasks.find((t) => t.id === "t2").status, "Open", "a person's task is kept");
   assert.equal(s.posted.length, 2);
   assert.equal(s.posted[0].body.lead.name, "Big");
-  assert.equal(s.posted[0].body.lead.phone, "+919800000001");
+  assert.equal(s.posted[0].body.lead.phone, "+919800000003");
   assert.equal(s.posted[0].body.event, "lead_created");
   const run = s.wf.list().runs.find((r) => r.leadId === big.id);
   assert.equal(run.ok, false);
@@ -288,7 +288,7 @@ test("update a field, cancel tasks, call an API, numbers in conditions", async (
 
 test("a test run says what each box would do and changes nothing", async () => {
   const s = setup();
-  const l = s.lead({ name: "Ravi", owner: "u1", value: 500000, phone: "+919800000002" });
+  const l = s.lead({ name: "Ravi", owner: "u1", value: 500000, phone: "+919800000069" });
   const input = { flow: {
     nodes: [
       { id: "t", type: "trigger", x: 0, y: 0, config: { type: "lead_created" } },
@@ -370,8 +370,8 @@ test("several When boxes: any of them starts the flow, each event once, and the 
 
 test("a new lead without a state gets its probable state from the number, not once a state is set", async () => {
   const { valueOf } = await import("./workflows.mjs");
-  assert.equal(valueOf({ phone: "+919786000001" }, "probableState"), "Tamil Nadu");
-  assert.equal(valueOf({ phone: "+919786000001", state: "Kerala" }, "probableState"), "");
-  assert.equal(valueOf({ phone: "+919786000001", probableState: "Karnataka" }, "probableState"), "Karnataka");
+  assert.equal(valueOf({ phone: "+919786000012" }, "probableState"), "Tamil Nadu");
+  assert.equal(valueOf({ phone: "+919786000012", state: "Kerala" }, "probableState"), "");
+  assert.equal(valueOf({ phone: "+919786000012", probableState: "Karnataka" }, "probableState"), "Karnataka");
   assert.equal(valueOf({ phone: "12345" }, "probableState"), "");
 });

@@ -11,7 +11,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'SALESDESK_ENQUIRY_URL', 'https://crm.deviindustries.com/hooks/website/__TOKEN__' );
+define( 'SALESDESK_ENQUIRY_URL', 'https://crm.example.com/hooks/website/__TOKEN__' );
 
 /** Posts one enquiry to the CRM. True when the CRM answered 200. */
 function salesdesk_enquiry_send( $body ) {

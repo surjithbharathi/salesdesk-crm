@@ -15,9 +15,9 @@ function world(t) {
   const put = (k, v) => db.prepare("INSERT OR REPLACE INTO records VALUES(?,?,?)").run(k, v.id, JSON.stringify(v));
   const notes = [];
   const log = (leadId, type, text) => notes.push({ leadId, text });
-  put("leads", { id: "L1", name: "Durga Oils", phone: "+91 86399 67636", deal: "Interested Customer", stage: "Opportunity" });
-  put("leads", { id: "L2", name: "Raj Tools", phone: "8866579555", deal: "Won", stage: "Closed" });
-  const erp = { Quotation: [], "Sales Invoice": [], Customer: [{ name: "Raj Machinery", customer_name: "Raj Machinery", mobile_no: "8866579555", gstin: "33AAAAA0000A1Z5", customer_primary_address: "Raj Machinery-Billing" }], Address: [{ name: "Raj Machinery-Billing", address_type: "Billing", address_line1: "12 Mill Road", address_line2: "Peelamedu", city: "Coimbatore", state: "Tamil Nadu", pincode: "641004", country: "India" }], made: [] };
+  put("leads", { id: "L1", name: "Durga Oils", phone: "+91 86399 00016", deal: "Interested Customer", stage: "Opportunity" });
+  put("leads", { id: "L2", name: "Raj Tools", phone: "8866500017", deal: "Won", stage: "Closed" });
+  const erp = { Quotation: [], "Sales Invoice": [], Customer: [{ name: "Raj Machinery", customer_name: "Raj Machinery", mobile_no: "8866500017", gstin: "33AAAAA0000A1Z5", customer_primary_address: "Raj Machinery-Billing" }], Address: [{ name: "Raj Machinery-Billing", address_type: "Billing", address_line1: "12 Mill Road", address_line2: "Peelamedu", city: "Coimbatore", state: "Tamil Nadu", pincode: "641004", country: "India" }], made: [] };
   const fetchImpl = async (url, init = {}) => {
     const u = new URL(url), path = decodeURIComponent(u.pathname);
     const ok = (data) => ({ ok: true, status: 200, json: async () => data });
@@ -59,12 +59,12 @@ test("settings keep the key secret and need address, key and secret before turni
 test("the first read only takes stock; later quotations and invoices note the lead and move it forward, never back", async (t) => {
   const { api, erp, notes, get } = world(t);
   await api.save({ baseUrl: "https://erp.example", apiKey: "k1", apiSecret: "s1", enabled: true });
-  erp.Quotation.push({ name: "Q-OLD", party_name: "Durga", contact_mobile: "8639967636", grand_total: 100, status: "Open", docstatus: 1, modified: "2026-10-01 10:00:00" });
+  erp.Quotation.push({ name: "Q-OLD", party_name: "Durga", contact_mobile: "8639900016", grand_total: 100, status: "Open", docstatus: 1, modified: "2026-10-01 10:00:00" });
   const first = await api.sync();
   assert.equal(first.firstRun, true);
   assert.equal(notes.length, 0);
   assert.equal(get("leads", "L1").deal, "Interested Customer", "history does not move anyone");
-  erp.Quotation.push({ name: "Q-1", party_name: "Durga", contact_mobile: "8639967636", grand_total: 224200, status: "Open", docstatus: 1, modified: "2026-11-12 10:00:00" });
+  erp.Quotation.push({ name: "Q-1", party_name: "Durga", contact_mobile: "8639900016", grand_total: 224200, status: "Open", docstatus: 1, modified: "2026-11-12 10:00:00" });
   erp["Sales Invoice"].push({ name: "I-1", customer: "Raj Machinery", contact_mobile: "", grand_total: 1000, outstanding_amount: 1000, status: "Unpaid", docstatus: 1, modified: "2026-11-12 10:00:00" });
   await api.sync();
   assert.equal(get("leads", "L1").deal, "Quotation Shared");
@@ -72,7 +72,7 @@ test("the first read only takes stock; later quotations and invoices note the le
   assert.equal(get("leads", "L2").deal, "Won", "a won lead is not moved back by an unpaid invoice");
   assert.deepEqual(api.forLead("L2").invoices.map((i) => i.name), ["I-1"], "invoice found through the customer's mobile");
   assert.equal(notes.some((n) => /I-1|Invoice/.test(n.text)), false, "invoices are not written on the shared timeline");
-  erp["Sales Invoice"].push({ name: "I-2", customer: "Durga", contact_mobile: "8639967636", grand_total: 224200, outstanding_amount: 100000, status: "Partly Paid", docstatus: 1, modified: "2026-11-12 11:00:00" });
+  erp["Sales Invoice"].push({ name: "I-2", customer: "Durga", contact_mobile: "8639900016", grand_total: 224200, outstanding_amount: 100000, status: "Partly Paid", docstatus: 1, modified: "2026-11-12 11:00:00" });
   await api.sync();
   assert.equal(get("leads", "L1").deal, "Advance Received");
   assert.ok(notes.some((n) => n.leadId === "L1" && /→ Advance Received · reason: payment recorded in ERPNext$/.test(n.text)), "a move by payment names no invoice or amount");

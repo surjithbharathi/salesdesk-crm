@@ -40,7 +40,7 @@ export default function Blocked() {
       </Section>
       <Section title="Block a number" desc="The number does not need a lead. Existing leads with it stay until you delete them.">
         <form className="sec-grid" onSubmit={(e) => { e.preventDefault(); const f = new FormData(e.currentTarget); const form = e.currentTarget; act(() => crmSend("POST", "blocked-numbers", { phone: f.get("phone"), name: f.get("name") }), "Number blocked").then(() => form.reset()); }}>
-          <label>Mobile number<input className="field-input" name="phone" required inputMode="tel" placeholder="97873 33953" /></label>
+          <label>Mobile number<input className="field-input" name="phone" required inputMode="tel" placeholder="97873 00010" /></label>
           <label>Whose number (optional)<input className="field-input" name="name" maxLength={200} placeholder="Family, staff, spam" /></label>
           <div className="newlead-actions"><button className="btn btn-primary" disabled={busy}>Block number</button></div>
         </form>

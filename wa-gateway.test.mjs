@@ -27,7 +27,7 @@ function fixture(t, { fetchImpl } = {}) {
   return { gw, all, get, put, calls };
 }
 const sign = (body, secret = SECRET) => "sha256=" + createHmac("sha256", secret).update(body).digest("hex");
-const event = (over = {}, name = "message.received") => Buffer.from(JSON.stringify({ event: name, delivery_id: "d1", sent_at: 1, data: { wa_id: "919876500001", name: "Ravi Kumar", phone_id: "111", number_label: "Sales 1", kind: "text", text: "Price please", has_file: false, message_id: "wamid.A1", is_new_customer: true, at: 1794000000, ...over } }));
+const event = (over = {}, name = "message.received") => Buffer.from(JSON.stringify({ event: name, delivery_id: "d1", sent_at: 1, data: { wa_id: "919876500050", name: "Ravi Kumar", phone_id: "111", number_label: "Sales 1", kind: "text", text: "Price please", has_file: false, message_id: "wamid.A1", is_new_customer: true, at: 1794000000, ...over } }));
 async function ready(f) {
   await f.gw.save({ baseUrl: "https://wa.example.com", apiKey: "key-1", webhookSecret: SECRET, enabled: true, numberOwners: { 111: "sales" } });
 }
@@ -61,7 +61,7 @@ test("a signed customer message makes a lead under the number's owner, with the 
   const first = f.gw.receive(body, sign(body));
   assert.equal(first.created, true);
   const lead = f.get("leads", first.leadId);
-  assert.deepEqual([lead.name, lead.phone, lead.source, lead.stage, lead.owner], ["Ravi Kumar", "919876500001", "WhatsApp", "New", "sales"]);
+  assert.deepEqual([lead.name, lead.phone, lead.source, lead.stage, lead.owner], ["Ravi Kumar", "919876500050", "WhatsApp", "New", "sales"]);
   const [message] = f.all("messages");
   assert.deepEqual([message.provider, message.direction, message.text, message.phoneId, message.leadId], ["gateway", "Incoming", "Price please", "111", lead.id]);
   assert.ok(f.all("activities").some((a) => a.type === "Message" && a.leadId === lead.id));
@@ -101,7 +101,7 @@ test("a bad signature, a turned-off link or a customer without a number is refus
 test("a message from a number that is already a lead is attached to it, files get a placeholder text", async (t) => {
   const f = fixture(t);
   await ready(f);
-  f.put("leads", { id: "known", name: "Known Customer", phone: "+91 98765 00001", owner: "owner", stage: "Prospecting" });
+  f.put("leads", { id: "known", name: "Known Customer", phone: "+91 98765 00050", owner: "owner", stage: "Prospecting" });
   const body = event({ text: "", kind: "image", has_file: true, message_id: "wamid.IMG" });
   const r = f.gw.receive(body, sign(body));
   assert.deepEqual([r.leadId, r.created], ["known", false]);
@@ -120,7 +120,7 @@ test("sending goes out through the gateway from the number the customer wrote to
   assert.equal(call.url, "https://wa.example.com/api/send");
   assert.equal(call.init.headers["X-Api-Key"], "key-1");
   const sent = JSON.parse(call.init.body);
-  assert.deepEqual([sent.to, sent.text, sent.from_phone_id], ["919876500001", "Vanakkam, price list attached soon", "111"]);
+  assert.deepEqual([sent.to, sent.text, sent.from_phone_id], ["919876500050", "Vanakkam, price list attached soon", "111"]);
   assert.match(sent.idempotency_key, /^salesdesk:/);
   const stored = f.all("messages").find((m) => m.direction === "Outgoing");
   assert.deepEqual([stored.status, stored.userId, stored.text], ["Sent", "sales", "Vanakkam, price list attached soon"]);
@@ -135,12 +135,12 @@ test("sending goes out through the gateway from the number the customer wrote to
 test("a refusal or silence from the gateway becomes a clear error and nothing is saved", async (t) => {
   const f = fixture(t, { fetchImpl: async () => ({ ok: false, status: 400, json: async () => ({ detail: "template not approved" }) }) });
   await ready(f);
-  f.put("leads", { id: "l", name: "L", phone: "919876500009", owner: "owner" });
+  f.put("leads", { id: "l", name: "L", phone: "919876500066", owner: "owner" });
   await assert.rejects(f.gw.send("l", { text: "hi" }, "owner"), (e) => e.status === 502 && /template not approved/.test(e.message));
   assert.equal(f.all("messages").length, 0);
   const down = fixture(t, { fetchImpl: async () => { throw new Error("offline"); } });
   await ready(down);
-  down.put("leads", { id: "l", name: "L", phone: "919876500009", owner: "owner" });
+  down.put("leads", { id: "l", name: "L", phone: "919876500066", owner: "owner" });
   await assert.rejects(down.gw.send("l", { text: "hi" }, "owner"), status(502));
 });
 
@@ -152,7 +152,7 @@ test("history adds the missing messages of both directions once", async (t) => {
   ];
   const f = fixture(t, { fetchImpl: async (url) => ({ ok: true, status: 200, json: async () => (url.includes("/api/messages") ? rows : {}) }) });
   await ready(f);
-  f.put("leads", { id: "l", name: "L", phone: "919876500001", owner: "owner" });
+  f.put("leads", { id: "l", name: "L", phone: "919876500050", owner: "owner" });
   assert.deepEqual(await f.gw.history("l"), { added: 3, total: 3 });
   assert.deepEqual(await f.gw.history("l"), { added: 0, total: 3 });
   assert.deepEqual(f.all("messages").map((m) => m.direction).sort(), ["Incoming", "Outgoing", "Outgoing"]);

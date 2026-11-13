@@ -49,13 +49,13 @@ function fixture(t) {
   const api = createMobileSync({ db, all, get, put, stamp, tx, log, keyPath });
   put("users", { id: "owner", active: true });
   put("users", { id: "other", active: true });
-  put("leads", { id: "lead", name: "Saved lead", owner: "owner", phone: "+91 98765 43210" });
+  put("leads", { id: "lead", name: "Saved lead", owner: "owner", phone: "+91 98765 00008" });
   put("leads", { id: "other-lead", owner: "other", phone: "919999999999" });
   put("leads", { id: "archived", owner: "owner", phone: "918888888888", archived: true });
   const device = api.issue({ name: "Test phone", owner: "owner" });
   const payload = (overrides) => ({
     localId: "call-1",
-    phone: "919876543210",
+    phone: "919876500008",
     startedAt: Date.now() - 60000,
     duration: 30,
     direction: "Outgoing",
@@ -80,7 +80,7 @@ test("device credentials are hashed, redacted, owner scoped, and revocable", (t)
   assert.equal(row.token_hash, createHash("sha256").update(device.token).digest("hex"));
   assert.ok(!row.body.includes(device.token));
   // every active lead's number, so the office phone still picks up calls with leads assigned to colleagues
-  assert.deepEqual(api.targets(device), [{ id: "lead", phone: "919876543210" }, { phone: "919999999999" }], "own leads with their id, others by number only");
+  assert.deepEqual(api.targets(device), [{ id: "lead", phone: "919876500008" }, { phone: "919999999999" }], "own leads with their id, others by number only");
   for (const header of [undefined, "", `Basic ${device.token}`, "Bearer invalid"])
     assert.throws(() => api.authenticate(header), status(401));
   assert.throws(() => api.issue({ name: "Phone", owner: "absent" }), status(400));
@@ -116,13 +116,13 @@ test("call sync lands on the lead with the number, whoever owns it, and is idemp
 
 test("the phone's contact name fills a lead that has only its number, and never replaces a real name", (t) => {
   const f = fixture(t);
-  f.put("leads", { id: "bare", name: "919812345678", owner: "owner", phone: "919812345678" });
-  f.put("leads", { id: "bare-2", name: "+91 98123 45679", owner: "owner", phone: "919812345679" });
+  f.put("leads", { id: "bare", name: "919812300044", owner: "owner", phone: "919812300044" });
+  f.put("leads", { id: "bare-2", name: "+91 98123 00045", owner: "owner", phone: "919812300045" });
   const flagged = f.api.targets(f.device);
   assert.equal(flagged.find((l) => l.id === "bare").needsName, true);
   assert.equal(flagged.find((l) => l.id === "lead").needsName, undefined);
   // through a synced call
-  f.api.call(f.device, f.payload({ localId: "named", phone: "919812345678", name: "  ரவி\n Kumar  " }));
+  f.api.call(f.device, f.payload({ localId: "named", phone: "919812300044", name: "  ரவி\n Kumar  " }));
   assert.equal(f.get("leads", "bare").name, "ரவி Kumar");
   assert.equal(f.get("leads", "bare").nameSource, "phone");
   assert.equal(f.api.targets(f.device).find((l) => l.id === "bare").needsName, undefined);
@@ -130,7 +130,7 @@ test("the phone's contact name fills a lead that has only its number, and never 
   f.api.call(f.device, f.payload({ localId: "typed", name: "Other name" }));
   assert.equal(f.get("leads", "lead").name, "Saved lead");
   // leads whose calls synced earlier are named directly; a number or empty text is not a name
-  assert.equal(f.api.nameLead(f.device, "bare-2", "98123 45679").named, false);
+  assert.equal(f.api.nameLead(f.device, "bare-2", "98123 00045").named, false);
   assert.equal(f.api.nameLead(f.device, "bare-2", "").named, false);
   assert.equal(f.api.nameLead(f.device, "bare-2", "Anbu Traders").named, true);
   assert.equal(f.get("leads", "bare-2").name, "Anbu Traders");
@@ -142,10 +142,10 @@ test("the phone's contact name fills a lead that has only its number, and never 
   // a new lead made from a call in all-calls mode takes the name straight away
   const account = "a".repeat(64);
   f.api.preferences(f.device, { sims: { [account]: "all" }, assignment: "self", consent: true });
-  const fresh = f.api.call(f.device, f.payload({ localId: "fresh", phone: "917012345678", accountId: account, name: "Fresh Contact" }));
+  const fresh = f.api.call(f.device, f.payload({ localId: "fresh", phone: "917012300046", accountId: account, name: "Fresh Contact" }));
   assert.equal(f.get("leads", fresh.leadId).name, "Fresh Contact");
-  const unnamed = f.api.call(f.device, f.payload({ localId: "unnamed", phone: "917012345679", accountId: account }));
-  assert.equal(f.get("leads", unnamed.leadId).name, "917012345679");
+  const unnamed = f.api.call(f.device, f.payload({ localId: "unnamed", phone: "917012300047", accountId: account }));
+  assert.equal(f.get("leads", unnamed.leadId).name, "917012300047");
 });
 
 test("invalid call metadata is rejected without creating activities", (t) => {
@@ -157,7 +157,7 @@ test("invalid call metadata is rejected without creating activities", (t) => {
     { direction: "Unknown" },
     { startedAt: Date.now() + 600000 },
     { startedAt: 0 },
-    { phone: "+919876543210" },
+    { phone: "+919876500008" },
   ])
     assert.throws(() => f.api.call(f.device, f.payload(change)), status(400));
   assert.equal(f.all("activities").length, 0);
@@ -261,7 +261,7 @@ test("ambiguous automatic time matches require explicit manual review", (t) => {
 test("a refused recording is 409, so the phone skips that file and keeps syncing instead of signing out", (t) => {
   const f = fixture(t),
     a = f.api.call(f.device, f.payload());
-  f.put("leads", { id: "lead", name: "Saved lead", owner: "other", phone: "+91 98765 43210", archived: true });
+  f.put("leads", { id: "lead", name: "Saved lead", owner: "other", phone: "+91 98765 00008", archived: true });
   assert.throws(() => f.api.recording(f.device, a.id, f.audio, f.meta(a)), status(409));
   assert.throws(() => f.api.recording(f.device, "no-such-call", f.audio, {}), status(409));
 });

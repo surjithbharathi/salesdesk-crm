@@ -1,6 +1,6 @@
 # Hostinger VPS deployment and one-button updates
 
-GitHub source: `surjithbharathi/salesdesk-crm`, branch `main`. Hostinger project: `salesdesk-crm` alongside existing services. HTTPS endpoint: `https://salesdesk-crm.srv1696974.hstgr.cloud`.
+GitHub source: `surjithbharathi/salesdesk-crm`, branch `main`. Hostinger project: `salesdesk-crm` alongside existing services. HTTPS endpoint: `https://crm.example.com`.
 
 Latest verification, 22 October 2026 about 9:14 PM IST: updated only `salesdesk-crm` through hPanel Actions → Update after successful image build `39798710184`. Live `app.js` now matches repository source and contains `refreshSyncedCalls`. HTTPS returns 200; unauthenticated protected web/device APIs return 401. Existing signed-in session, 12 leads and the test-call recording remained available; online browser playback progressed without a media error. OpenClaw, Traefik and WAHA remained Running. Hostinger connector package corruption was repaired and its MCP initialization/tool discovery passed; account-authenticated MCP access was not exercised in the stale running session, so the deployment used hPanel.
 
@@ -12,6 +12,6 @@ Persistent data lives in the private VPS directory `/opt/salesdesk-crm/data`, mo
 
 PUBLIC_ORIGIN enables exact HTTPS host/origin checks and Secure cookies. Public startup refuses an unconfigured account database rather than exposing first-admin registration. Only Traefik HTTPS routes expose web and authenticated `/v1/` device API; no host ports are published by Salesdesk. Main container is unprivileged, drops capabilities, has CPU/memory limits and no Docker socket. The existing Traefik configuration is reused without modification.
 
-Android is built with `-PcrmApiOrigin=https://salesdesk-crm.srv1696974.hstgr.cloud`; end users enter username/password only. Changing endpoint requires a fresh login and pauses previous sync/calling consent. Call/recording compatibility and background calling still require permission/real-device verification. Mobile binary changes require reinstall/update of the APK; redeploying the web server alone does not update installed Android code.
+Android is built with `-PcrmApiOrigin=https://crm.example.com`; end users enter username/password only. Changing endpoint requires a fresh login and pauses previous sync/calling consent. Call/recording compatibility and background calling still require permission/real-device verification. Mobile binary changes require reinstall/update of the APK; redeploying the web server alone does not update installed Android code.
 
 Before a major upgrade, back up the SQLite database consistently plus adjacent encryption keys in private storage. Never restore a stale local snapshot over live production data during ordinary code updates. Keep past images/commits for code rollback; database rollback/migrations require a separate backup decision. No automatic rollback or GitHub Actions SSH secrets are provisioned by this flow.

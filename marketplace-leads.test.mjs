@@ -24,12 +24,12 @@ function fixture(t, now = { value: Date.UTC(2026, 10, 12, 6, 0, 0) }, extra = {}
   const m = createMarketplaceLeads({ db, all, get, put, stamp, tx, log, keyPath: join(dir, "key"), now: () => now.value, fetchImpl, timers: false, ...extra });
   return { db, all, get, put, m, replies, asked, now };
 }
-const im = (v) => ({ UNIQUE_QUERY_ID: "Q" + Math.random().toString(36).slice(2), QUERY_TYPE: "B", QUERY_TIME: "2026-11-12 10:15:00", SENDER_NAME: "Malvika", SENDER_MOBILE: "+91-8328485570",
+const im = (v) => ({ UNIQUE_QUERY_ID: "Q" + Math.random().toString(36).slice(2), QUERY_TYPE: "B", QUERY_TIME: "2026-11-12 10:15:00", SENDER_NAME: "Malvika", SENDER_MOBILE: "+91-8328400028",
   SENDER_EMAIL: "m@example.com", SENDER_CITY: "Hyderabad", SENDER_STATE: "Telangana", SENDER_COUNTRY_ISO: "IN", QUERY_PRODUCT_NAME: "Cold Press Oil Machine",
   QUERY_MESSAGE: "Requirement for Cold Press Oil Machine<br>Production Capacity: 100 kg/hr", ...v });
-const ti = (v) => ({ rfi_id: "R" + Math.random().toString(36).slice(2), sender_name: "Narayan lal kumawat", sender_mobile: "+919057567249", sender_co: "Narayan", sender_city: "Begun",
+const ti = (v) => ({ rfi_id: "R" + Math.random().toString(36).slice(2), sender_name: "Narayan lal kumawat", sender_mobile: "+919057500029", sender_co: "Narayan", sender_city: "Begun",
   sender_state: "Rajasthan", sender_country: "IN", subject: "Looking for suppliers of Ss Press Oil Machine", product_name: "Ss Press Oil Machine", quantity: "1 Piece",
-  message: 'Buyer: Mobile - <a href="tel:+919057567249">+919057567249</a> Company Name - Narayan', generated_date: "2026-11-12", generated_time: "11:20:05", inquiry_type: "Direct Inquiry", ...v });
+  message: 'Buyer: Mobile - <a href="tel:+919057500029">+919057500029</a> Company Name - Narayan', generated_date: "2026-11-12", generated_time: "11:20:05", inquiry_type: "Direct Inquiry", ...v });
 
 test("helpers read both sites' times, numbers and text", () => {
   assert.equal(imParam(Date.UTC(2026, 10, 10, 13, 27, 0)), "10-Nov-202618:57:00");
@@ -38,26 +38,26 @@ test("helpers read both sites' times, numbers and text", () => {
   assert.equal(readTime("2026-11-10", "18:57:00"), Date.UTC(2026, 10, 10, 13, 27, 0));
   assert.equal(plain('Hi<br>call <a href="x">+91 98</a> &amp; go'), "Hi\ncall +91 98 & go");
   const a = readIndiamart(im({ QUERY_TYPE: "W" }));
-  assert.equal(a.phone, "+918328485570");
+  assert.equal(a.phone, "+918328400028");
   assert.equal(a.type, "Direct enquiry");
   assert.equal(a.message, "Requirement for Cold Press Oil Machine\nProduction Capacity: 100 kg/hr");
-  const b = readTradeindia(ti({ sender_mobile: "9057567249" }));
-  assert.equal(b.phone, "+919057567249");
+  const b = readTradeindia(ti({ sender_mobile: "9057500029" }));
+  assert.equal(b.phone, "+919057500029");
   assert.equal(b.at, Date.UTC(2026, 10, 12, 5, 50, 5));
-  assert.equal(readTradeindia({ RFI_ID: "1", SENDER_MOBILE: "919057567249" }).phone, "+919057567249", "field names in any case");
+  assert.equal(readTradeindia({ RFI_ID: "1", SENDER_MOBILE: "919057500029" }).phone, "+919057500029", "field names in any case");
 });
 
 test("IndiaMART enquiries become leads once; a known buyer gets a note instead", async (t) => {
   const f = fixture(t), { m, replies, asked, all } = f;
   f.put("users", { id: "u1", name: "Sathiya", active: true });
-  f.put("leads", { id: "old", name: "+919486583682", phone: "+919486583682", stage: "New", owner: "u1" });
+  f.put("leads", { id: "old", name: "+919486500030", phone: "+919486500030", stage: "New", owner: "u1" });
   m.save({ owner: "u1", indiamart: { key: "abcdefghijklmnop1234", enabled: true, backfillDays: 2 } });
-  const first = im(), repeat = im({ UNIQUE_QUERY_ID: "Q2", QUERY_TYPE: "W", SENDER_NAME: "Akhil Services", SENDER_MOBILE: "+91-9486583682", SENDER_STATE: "TAMILNADU" });
+  const first = im(), repeat = im({ UNIQUE_QUERY_ID: "Q2", QUERY_TYPE: "W", SENDER_NAME: "Akhil Services", SENDER_MOBILE: "+91-9486500030", SENDER_STATE: "TAMILNADU" });
   replies.push({ status: 200, body: { CODE: 200, STATUS: "SUCCESS", RESPONSE: [first, repeat, im({ UNIQUE_QUERY_ID: "Q3", SENDER_MOBILE: "", SENDER_EMAIL: "" })] } });
   const out = await m.sync();
   assert.match(asked[0], /glusr_crm_key=abcdefghijklmnop1234&start_time=10-Nov-2026/);
   assert.deepEqual([out.results.indiamart.ok, out.results.indiamart.newLeads, out.results.indiamart.repeats, out.results.indiamart.skipped], [true, 1, 1, 1]);
-  const made = all("leads").find((l) => l.phoneKey === "918328485570");
+  const made = all("leads").find((l) => l.phoneKey === "918328400028");
   assert.equal(made.source, "IndiaMART");
   assert.equal(made.owner, "u1");
   assert.equal(made.state, "Telangana");
@@ -90,20 +90,20 @@ test("IndiaMART's wait-5-minutes answer keeps the place for the next read", asyn
 test("TradeIndia enquiries are read page by page and day by day", async (t) => {
   const f = fixture(t), { m, replies, asked, all } = f;
   f.db.exec("CREATE TABLE blocked_numbers(phone TEXT PRIMARY KEY, name TEXT, by TEXT, at TEXT)");
-  f.db.prepare("INSERT INTO blocked_numbers VALUES('9000000001','x','u','now')").run();
+  f.db.prepare("INSERT INTO blocked_numbers VALUES('9000000031','x','u','now')").run();
   assert.throws(() => m.save({ tradeindia: { enabled: true } }), /user id, profile id and key/);
   m.save({ tradeindia: { userid: "12345", profileId: "67890", key: "a1b2c3d4e5f6", enabled: true, backfillDays: 3 } });
   const page1 = Array.from({ length: 50 }, (_, i) => ti({ rfi_id: "P" + i, sender_mobile: "+9198765" + String(10000 + i) }));
-  replies.push({ status: 200, body: page1 }, { status: 200, body: [ti({ rfi_id: "LAST" }), ti({ rfi_id: "BLK", sender_mobile: "9000000001" })] });
+  replies.push({ status: 200, body: page1 }, { status: 200, body: [ti({ rfi_id: "LAST" }), ti({ rfi_id: "BLK", sender_mobile: "9000000031" })] });
   const out = await m.sync();
   assert.match(asked[0], /my_inquiry\.html\?userid=12345&profile_id=67890&key=a1b2c3d4e5f6&from_date=2026-11-10&to_date=2026-11-12&limit=50&page_no=1/);
   assert.match(asked[1], /page_no=2/);
   assert.deepEqual([out.results.tradeindia.newLeads, out.results.tradeindia.skipped], [51, 1]);
-  const lead = all("leads").find((l) => l.phoneKey === "919057567249");
+  const lead = all("leads").find((l) => l.phoneKey === "919057500029");
   assert.equal(lead.source, "TradeIndia");
   assert.equal(lead.company, "Narayan");
   assert.ok(all("activities").some((a) => a.leadId === lead.id && /^TradeIndia direct inquiry about Ss Press Oil Machine \(1 Piece\)\nLooking for suppliers/.test(a.text)));
-  assert.equal(all("leads").some((l) => l.phoneKey === "919000000001"), false, "a blocked number is never made a lead");
+  assert.equal(all("leads").some((l) => l.phoneKey === "919000000031"), false, "a blocked number is never made a lead");
   // the next read starts again from the last day read
   replies.push({ status: 200, body: { error: "No Record Found" } });
   const next = await m.sync();
@@ -127,16 +127,16 @@ test("IndiaMART's push makes the lead at once, only at its own address, and neve
   assert.match(on.indiamart.pushPath, /^\/hooks\/indiamart\/[a-f0-9]{32}$/);
   const token = on.indiamart.pushPath.split("/").pop();
   assert.throws(() => m.receivePush("f".repeat(32), { RESPONSE: im() }), /Not found/, "a wrong address is refused");
-  const lead = im({ UNIQUE_QUERY_ID: "PUSH1", SENDER_MOBILE: "+91-9876500011", SENDER_NAME: "Ravi" });
+  const lead = im({ UNIQUE_QUERY_ID: "PUSH1", SENDER_MOBILE: "+91-9876500032", SENDER_NAME: "Ravi" });
   assert.deepEqual(m.receivePush(token, { CODE: 200, STATUS: "SUCCESS", RESPONSE: lead }), { CODE: 200, STATUS: "SUCCESS" });
-  assert.equal(all("leads").filter((l) => l.phoneKey === "919876500011").length, 1);
-  assert.equal(all("leads").find((l) => l.phoneKey === "919876500011").source, "IndiaMART");
+  assert.equal(all("leads").filter((l) => l.phoneKey === "919876500032").length, 1);
+  assert.equal(all("leads").find((l) => l.phoneKey === "919876500032").source, "IndiaMART");
   // IndiaMART sends it again, and the pull read later lists it too: still one lead
   m.receivePush(token, { RESPONSE: lead });
   m.save({ indiamart: { key: "abcdefghijklmnop1234", enabled: true } });
   replies.push({ status: 200, body: { CODE: 200, RESPONSE: [lead] } });
   await m.sync();
-  assert.equal(all("leads").filter((l) => l.phoneKey === "919876500011").length, 1);
+  assert.equal(all("leads").filter((l) => l.phoneKey === "919876500032").length, 1);
   // IndiaMART's test buyer is answered but not made a lead
   assert.equal(m.receivePush(token, { RESPONSE: im({ UNIQUE_QUERY_ID: "TEST1", SENDER_MOBILE: "+91-9999999999" }) }).CODE, 200);
   assert.equal(all("leads").some((l) => l.phoneKey === "919999999999"), false);
@@ -150,7 +150,7 @@ test("IndiaMART's push makes the lead at once, only at its own address, and neve
 });
 
 test("an IndiaMART message is taken apart: specs, requirement type, search words and the buyer's own words", () => {
-  const q = readIndiamart(im({ QUERY_TYPE: "B", QUERY_PRODUCT_NAME: "Coconut Oil Extraction Machine", QUERY_MCAT_NAME: "Oil Extraction Machine", SENDER_MOBILE_ALT: "+91-9447055555", RECEIVER_MOBILE: "9790012345",
+  const q = readIndiamart(im({ QUERY_TYPE: "B", QUERY_PRODUCT_NAME: "Coconut Oil Extraction Machine", QUERY_MCAT_NAME: "Oil Extraction Machine", SENDER_MOBILE_ALT: "+91-9447000033", RECEIVER_MOBILE: "9790000034",
     QUERY_MESSAGE: "Requirement for Coconut Oil Extraction Machine<br>Buyer Searched for coconut oil machine<br>Production Capacity : 20 kg/hr<br>Motor Power : 5 HP<br>Buyer Filled Details : Buyer is located in Kerala and prefers to discuss the motor power.<br>Probable Requirement Type : Business Use<br>Suppliers from Jaipur will be preferred" }));
   const d = enquiryDetails(q);
   assert.equal(d.kind, "Buy-lead");
@@ -161,8 +161,8 @@ test("an IndiaMART message is taken apart: specs, requirement type, search words
   assert.deepEqual(d.specs, [["Production Capacity", "20 kg/hr"], ["Motor Power", "5 HP"]]);
   assert.match(d.buyerNote, /located in Kerala/);
   assert.deepEqual(d.notes, ["Suppliers from Jaipur will be preferred"]);
-  assert.equal(d.mobile2, "+919447055555");
-  assert.equal(d.receivedOn, "9790012345");
+  assert.equal(d.mobile2, "+919447000033");
+  assert.equal(d.receivedOn, "9790000034");
   assert.equal(d.intro, "", "the 'Requirement for' line repeats the product");
   assert.equal(enquiryDetails(readIndiamart(im({ QUERY_TYPE: "BIZ", QUERY_MESSAGE: "I viewed your product, 'Oil Press Machine'" }))).intro, "Viewed your product Oil Press Machine");
 });
@@ -170,7 +170,7 @@ test("an IndiaMART message is taken apart: specs, requirement type, search words
 test("each enquiry note carries the enquiry taken apart, and older notes get it at the next start", async (t) => {
   const f = fixture(t), { m, replies, all } = f;
   m.save({ indiamart: { key: "abcdefghijklmnop1234", enabled: true } });
-  replies.push({ status: 200, body: { CODE: 200, RESPONSE: [im({ UNIQUE_QUERY_ID: "N1", SENDER_MOBILE: "+91-9876511111", QUERY_MESSAGE: "Capacity : 5 ton/day<br>Probable Requirement Type : Business Use" })] } });
+  replies.push({ status: 200, body: { CODE: 200, RESPONSE: [im({ UNIQUE_QUERY_ID: "N1", SENDER_MOBILE: "+91-9876500021", QUERY_MESSAGE: "Capacity : 5 ton/day<br>Probable Requirement Type : Business Use" })] } });
   await m.sync();
   const note = all("activities").find((a) => a.marketplaceId === "N1");
   assert.equal(note.buyLead.requirement, "Business use");
@@ -195,10 +195,10 @@ test("a one-line IndiaMART message is split at each known key", () => {
 test("a won customer who asks again starts over as a new lead with the same owner and a call to make", async (t) => {
   const f = fixture(t), { m, replies, all } = f;
   f.put("users", { id: "u2", name: "Balaji", active: true });
-  f.put("leads", { id: "raju", name: "Raju Awc", phone: "+919505429074", stage: "Closed", deal: "Won", disposition: "Won", owner: "u2", firstTouchAt: "2026-10-01T00:00:00Z" });
-  f.put("leads", { id: "warm", name: "Warm", phone: "+919000000001", stage: "Opportunity", deal: "Interested Customer", owner: "u2" });
+  f.put("leads", { id: "raju", name: "Raju Awc", phone: "+919505400024", stage: "Closed", deal: "Won", disposition: "Won", owner: "u2", firstTouchAt: "2026-10-01T00:00:00Z" });
+  f.put("leads", { id: "warm", name: "Warm", phone: "+919000000031", stage: "Opportunity", deal: "Interested Customer", owner: "u2" });
   m.save({ owner: "u2", indiamart: { key: "abcdefghijklmnop1234", enabled: true, backfillDays: 2 } });
-  replies.push({ status: 200, body: { CODE: 200, RESPONSE: [im({ SENDER_MOBILE: "+91-9505429074", QUERY_PRODUCT_NAME: "Oil Expeller Machine" }), im({ SENDER_MOBILE: "+91-9000000001" })] } });
+  replies.push({ status: 200, body: { CODE: 200, RESPONSE: [im({ SENDER_MOBILE: "+91-9505400024", QUERY_PRODUCT_NAME: "Oil Expeller Machine" }), im({ SENDER_MOBILE: "+91-9000000031" })] } });
   await m.sync();
   const raju = f.get("leads", "raju");
   assert.deepEqual([raju.stage, raju.deal, raju.disposition, raju.repeat, raju.firstTouchAt, raju.owner], ["New", "", "", true, null, "u2"]);
@@ -228,9 +228,9 @@ test("the website form posts an enquiry: a new lead with its language, a note on
   f.put("users", { id: "u1", name: "Office", active: true });
   m.save({ owner: "u1" });
   assert.throws(() => m.receiveWebsite("x".repeat(40), {}), /Not found/);
-  const post = { id: "cf7-13-abc", name: "Kumar", phone: "098765 43210", email: "k@example.com", location: "Salem, Tamil Nadu", machine: "Machine model or help me choose", language: "Tamil", message: "Groundnut, 200 kg a day", form: "Machine quotation", page: "https://oilmachineindia.com/contact/", at: 1794546000 };
+  const post = { id: "cf7-13-abc", name: "Kumar", phone: "098765 00008", email: "k@example.com", location: "Salem, Tamil Nadu", machine: "Machine model or help me choose", language: "Tamil", message: "Groundnut, 200 kg a day", form: "Machine quotation", page: "https://oilmachineindia.com/contact/", at: 1794546000 };
   assert.equal(m.receiveWebsite(token, post).status, "new lead");
-  const lead = all("leads").find((l) => l.phoneKey === "919876543210");
+  const lead = all("leads").find((l) => l.phoneKey === "919876500008");
   assert.deepEqual([lead.source, lead.name, lead.city, lead.language, lead.owner, lead.product], ["Website", "Kumar", "Salem", "Tamil", "u1", undefined]);
   assert.ok(all("activities").some((a) => a.leadId === lead.id && /Groundnut, 200 kg a day/.test(a.text) && /Page: https:\/\/oilmachineindia\.com\/contact\//.test(a.text)));
   assert.equal(m.receiveWebsite(token, post).status, "already taken", "a retry is taken once");

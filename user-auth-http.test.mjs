@@ -81,13 +81,13 @@ test("shared company login protects browser and mobile data with user scoping", 
   const ownLead = await web("leads", "POST", {
     name: "Member synthetic lead",
     owner: member,
-    phone: "919123450099",
+    phone: "919123400062",
     source: "Test",
   });
   const excludedLead = await web("leads", "POST", {
     name: "Admin private lead",
     owner,
-    phone: "919123450098",
+    phone: "919123400063",
     source: "Test",
   });
   assert.equal(ownLead.status, 200);
@@ -191,7 +191,7 @@ test("shared company login protects browser and mobile data with user scoping", 
     "POST",
     {
       localId: "shared-login-call",
-      phone: "919123450099",
+      phone: "919123400062",
       startedAt: Date.now() - 60000,
       duration: 30,
       direction: "Outgoing",
@@ -204,7 +204,7 @@ test("shared company login protects browser and mobile data with user scoping", 
     mobile,
     "/v1/leads",
     "POST",
-    { name: "Created on mobile", phone: "919123450097" },
+    { name: "Created on mobile", phone: "919123400064" },
     auth,
   );
   assert.equal(createdLead.status, 200);

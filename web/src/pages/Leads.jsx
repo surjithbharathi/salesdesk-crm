@@ -50,7 +50,7 @@ function NewLead({ crm, onDone, onCancel }) {
   return (
     <form className="newlead" onSubmit={submit}>
       <label>Name<input className="field-input" name="name" required maxLength={200} autoFocus /></label>
-      <label>Phone<input className="field-input" name="phone" type="tel" inputMode="tel" required placeholder="98400 11111" /></label>
+      <label>Phone<input className="field-input" name="phone" type="tel" inputMode="tel" required placeholder="98400 00026" /></label>
       <label>Where did they come from
         <input className="field-input" name="source" list="lead-sources" placeholder="IndiaMART, Website, Referral" maxLength={200} />
         <datalist id="lead-sources">{sources.map((s) => <option key={s} value={s} />)}</datalist>

@@ -8,8 +8,8 @@ function fixture(t) {
   t.after(() => db.close());
   let time = 100000;
   const leads = {
-    lead: { id: "lead", owner: "u", phone: "+91 98765 43210" },
-    other: { id: "other", owner: "v", phone: "919876543211" },
+    lead: { id: "lead", owner: "u", phone: "+91 98765 00008" },
+    other: { id: "other", owner: "v", phone: "919876500013" },
   };
   const devices = {
     phone: { id: "phone", owner: "u", name: "My phone" },
@@ -40,7 +40,7 @@ test("Ready same-user phone claims a web call only once and acknowledges without
   assert.equal(f.service.poll("u", "phone", true).command, null);
   const r = request(f);
   assert.equal(r.status, "Pending");
-  assert.equal(r.phone, "+919876543210");
+  assert.equal(r.phone, "+919876500008");
   const claimed = f.service.poll("u", "phone", true).command;
   assert.equal(claimed.id, r.id);
   assert.equal(f.service.poll("u", "phone", true).command, null);
@@ -80,7 +80,7 @@ test("Idempotency survives repeated clicks, rejects request reuse and never reis
   assert.equal(request(f, { requestId: id }).id, a.id);
   f.service.poll("u", "phone", true);
   assert.equal(request(f, { requestId: id }).status, "Claimed");
-  f.leads.lead.phone = "919111112222";
+  f.leads.lead.phone = "919111100014";
   assert.throws(() => request(f, { requestId: id }), /already used/);
 });
 test("Pending calls cancel if lead changes owner/number or the bridge is paused", (t) => {

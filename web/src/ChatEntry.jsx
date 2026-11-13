@@ -193,7 +193,7 @@ function querySpecs(q) {
 
 const phoneText = (n) => { const d = String(n || "").replace(/[^0-9]/g, ""); return d.length === 12 && d.startsWith("91") ? `+91 ${d.slice(2, 7)} ${d.slice(7)}` : n; };
 
-// The team member whose phone / WhatsApp number appears in a label like "Sales 90390 36589" (numbers are set in Settings, People).
+// The team member whose phone / WhatsApp number appears in a label like "Sales 90390 00067" (numbers are set in Settings, People).
 export function userForNumber(users, label) {
   const digits = String(label || "").replace(/[^0-9]/g, "");
   if (digits.length < 8) return null;

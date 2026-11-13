@@ -63,7 +63,7 @@ test("CRM lifecycle, transaction rollback, validation, and persistent storage", 
     const created = await request("leads", "POST", {
       name: "QA contact",
       company: "QA business",
-      phone: "+919111112222",
+      phone: "+919111100014",
       owner,
       source: "Test",
       value: 5000,
@@ -183,7 +183,7 @@ test("CRM lifecycle, transaction rollback, validation, and persistent storage", 
     assert.equal(
       (
         await request("import", "POST", {
-          leads: [{ name: "Must roll back", phone: "+919333334444" }, { name: "" }],
+          leads: [{ name: "Must roll back", phone: "+919333300055" }, { name: "" }],
         })
       ).status,
       400,
@@ -191,8 +191,8 @@ test("CRM lifecycle, transaction rollback, validation, and persistent storage", 
     assert.equal((await request("state")).data.leads.length, count);
     const imported = await request("import", "POST", {
       leads: [
-        { name: "Duplicate", phone: "+919111112222" },
-        { name: "New import", phone: "+919555556666" },
+        { name: "Duplicate", phone: "+919111100014" },
+        { name: "New import", phone: "+919555500056" },
       ],
     });
     assert.deepEqual(imported.data, { added: 1, skipped: 1 });

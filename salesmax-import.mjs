@@ -29,7 +29,7 @@ export function istToIso(v) {
   const t = Date.parse(s);
   return Number.isFinite(t) ? new Date(t).toISOString() : "";
 }
-// "+919876543210|+919812345678" → the first number in this CRM's form, and the others as text
+// "+919876500008|+919812300044" → the first number in this CRM's form, and the others as text
 export function phoneOf(v) {
   const all = String(v ?? "").split(/[|,;/]/).map((x) => x.trim()).filter(Boolean);
   for (const raw of all) {

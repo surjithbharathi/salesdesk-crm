@@ -29,42 +29,42 @@ function fixture(t, now) {
   const im = createIndiamartCalls({ db, all, get, put, stamp, tx, log, keyPath: join(dir, "im-key"), now: () => now.value, fetchImpl });
   return { db, all, get, put, mobile, im, replies, asked };
 }
-const enquiry = (v) => ({ UNIQUE_QUERY_ID: "Q" + Math.random().toString(36).slice(2), QUERY_TYPE: "P", SENDER_NAME: "Murugan", SENDER_MOBILE: "+91-9443012345", SENDER_COUNTRY_ISO: "IN", SENDER_CITY: "Salem", SENDER_STATE: "Tamil Nadu", QUERY_PRODUCT_NAME: "Wooden Cold Press Oil Machine", RECEIVER_MOBILE: "9876500000", ...v });
+const enquiry = (v) => ({ UNIQUE_QUERY_ID: "Q" + Math.random().toString(36).slice(2), QUERY_TYPE: "P", SENDER_NAME: "Murugan", SENDER_MOBILE: "+91-9443000018", SENDER_COUNTRY_ISO: "IN", SENDER_CITY: "Salem", SENDER_STATE: "Tamil Nadu", QUERY_PRODUCT_NAME: "Wooden Cold Press Oil Machine", RECEIVER_MOBILE: "9876500019", ...v });
 
 test("helpers read IndiaMART time and recognise relay numbers", () => {
   assert.equal(istParam(Date.UTC(2026, 10, 10, 13, 27, 0)), "10-Nov-202618:57:00");
   assert.equal(queryTime("2026-11-10 18:57:00"), Date.UTC(2026, 10, 10, 13, 27, 0));
   assert.equal(queryTime("10-Nov-2026 18:57:00"), Date.UTC(2026, 10, 10, 13, 27, 0));
-  assert.ok(isRelay("918048250260"));
-  assert.ok(!isRelay("919786250600"));
-  assert.ok(isRelay("919786250600", ["919786250600"]));
+  assert.ok(isRelay("918048200020"));
+  assert.ok(!isRelay("919786200007"));
+  assert.ok(isRelay("919786200007", ["919786200007"]));
 });
 
 test("a call through the IndiaMART number moves with its recording to the buyer's lead", async (t) => {
   const now = { value: Date.now() }, f = fixture(t, now), { mobile, im, put, get, all } = f;
-  put("users", { id: "u1", name: "Surjith", phone: "+919876500000", active: true });
-  put("users", { id: "u2", name: "Bala", phone: "+919876511111", active: true });
-  put("leads", { id: "relay", name: "IndiaMART Buyer", phone: "+918048250260", owner: "u1", stage: "New" });
+  put("users", { id: "u1", name: "Surjith", phone: "+919876500019", active: true });
+  put("users", { id: "u2", name: "Bala", phone: "+919876500021", active: true });
+  put("leads", { id: "relay", name: "IndiaMART Buyer", phone: "+918048200020", owner: "u1", stage: "New" });
   const device = mobile.issue({ name: "Phone", owner: "u1" });
   const at = now.value - 20 * 60000;
-  const call = mobile.call(device, { localId: "c1", phone: "918048250260", direction: "Incoming", startedAt: at, duration: 244 });
+  const call = mobile.call(device, { localId: "c1", phone: "918048200020", direction: "Incoming", startedAt: at, duration: 244 });
   assert.equal(call.leadId, "relay");
   const audio = Buffer.concat([Buffer.from("ID3"), Buffer.alloc(64, 1)]);
   const rec = mobile.recording(device, call.id, audio, { mode: "auto", duration: 244, modified: at + 244000 });
 
   // a different, unrelated call a minute later from a real mobile stays where it is
-  put("leads", { id: "other", name: "Other", phone: "+919786250600", owner: "u1" });
-  const other = mobile.call(device, { localId: "c2", phone: "919786250600", direction: "Incoming", startedAt: at + 60000, duration: 240 });
+  put("leads", { id: "other", name: "Other", phone: "+919786200007", owner: "u1" });
+  const other = mobile.call(device, { localId: "c2", phone: "919786200007", direction: "Incoming", startedAt: at + 60000, duration: 240 });
 
   im.save({ key: "abcdefghijklmnopqrstuvwxyz012345", enabled: true, backfillDays: 7 });
-  f.replies.push({ CODE: 200, STATUS: "SUCCESS", RESPONSE: [enquiry({ QUERY_TIME: ist(at + 5000), CALL_DURATION: "245" }), { UNIQUE_QUERY_ID: "W1", QUERY_TYPE: "W", SENDER_MOBILE: "+91-9000000000" }] });
+  f.replies.push({ CODE: 200, STATUS: "SUCCESS", RESPONSE: [enquiry({ QUERY_TIME: ist(at + 5000), CALL_DURATION: "245" }), { UNIQUE_QUERY_ID: "W1", QUERY_TYPE: "W", SENDER_MOBILE: "+91-9000000022" }] });
   const out = await im.sync();
   assert.match(f.asked[0], /crmListing\/v2\/\?glusr_crm_key=abcdefghijklmnopqrstuvwxyz012345&start_time=\d{2}-[A-Z][a-z]{2}-\d{4}\d{2}:\d{2}:\d{2}&end_time=/);
   assert.equal(out.lastRun.ok, true);
   assert.equal(out.lastRun.linked, 1);
-  assert.deepEqual(out.relays, ["+918048250260"]);
+  assert.deepEqual(out.relays, ["+918048200020"]);
 
-  const buyer = all("leads").find((l) => l.phoneKey === "919443012345");
+  const buyer = all("leads").find((l) => l.phoneKey === "919443000018");
   assert.equal(buyer.name, "Murugan");
   assert.equal(buyer.source, "IndiaMART");
   assert.equal(buyer.owner, "u1");
@@ -87,10 +87,10 @@ test("a call through the IndiaMART number moves with its recording to the buyer'
 
 test("an enquiry waits for the phone's call, and a late recording still reaches the buyer's lead owned by someone else", async (t) => {
   const now = { value: Date.now() }, f = fixture(t, now), { mobile, im, put, get } = f;
-  put("users", { id: "u1", name: "Surjith", phone: "+919876500000", active: true });
+  put("users", { id: "u1", name: "Surjith", phone: "+919876500019", active: true });
   put("users", { id: "u2", name: "Bala", active: true });
-  put("leads", { id: "buyer", name: "Murugan Oils", phone: "+919443012345", owner: "u2", source: "IndiaMART" });
-  put("leads", { id: "relay", name: "IndiaMART Buyer", phone: "+918048250260", owner: "u1" });
+  put("leads", { id: "buyer", name: "Murugan Oils", phone: "+919443000018", owner: "u2", source: "IndiaMART" });
+  put("leads", { id: "relay", name: "IndiaMART Buyer", phone: "+918048200020", owner: "u1" });
   const device = mobile.issue({ name: "Phone", owner: "u1" });
   const at = now.value - 10 * 60000;
   im.save({ key: "abcdefghijklmnopqrstuvwxyz012345", enabled: true });
@@ -98,7 +98,7 @@ test("an enquiry waits for the phone's call, and a late recording still reaches 
   assert.equal((await im.sync()).lastRun.waiting, 1);
 
   // the phone sends its call log later; the server links it straight away
-  const call = mobile.call(device, { localId: "c1", phone: "918048250260", direction: "Incoming", startedAt: at - 30000, duration: 92 });
+  const call = mobile.call(device, { localId: "c1", phone: "918048200020", direction: "Incoming", startedAt: at - 30000, duration: 92 });
   assert.equal(im.relink().linked, 1);
   const moved = get("mobileCalls", call.id);
   assert.equal(moved.leadId, "buyer");
@@ -112,12 +112,12 @@ test("an enquiry waits for the phone's call, and a late recording still reaches 
 test("two calls that fit equally are left alone; a refused key is reported", async (t) => {
   const now = { value: Date.now() }, f = fixture(t, now), { mobile, im, put, get } = f;
   put("users", { id: "u1", name: "Surjith", active: true });
-  put("leads", { id: "relay", name: "IndiaMART Buyer", phone: "+918048250260", owner: "u1" });
-  put("leads", { id: "relay2", name: "IndiaMART", phone: "+918048251111", owner: "u1" });
+  put("leads", { id: "relay", name: "IndiaMART Buyer", phone: "+918048200020", owner: "u1" });
+  put("leads", { id: "relay2", name: "IndiaMART", phone: "+918048200023", owner: "u1" });
   const device = mobile.issue({ name: "Phone", owner: "u1" });
   const at = now.value - 10 * 60000;
-  const a = mobile.call(device, { localId: "a", phone: "918048250260", direction: "Incoming", startedAt: at, duration: 60 });
-  const b = mobile.call(device, { localId: "b", phone: "918048251111", direction: "Incoming", startedAt: at + 10000, duration: 60 });
+  const a = mobile.call(device, { localId: "a", phone: "918048200020", direction: "Incoming", startedAt: at, duration: 60 });
+  const b = mobile.call(device, { localId: "b", phone: "918048200023", direction: "Incoming", startedAt: at + 10000, duration: 60 });
   im.save({ key: "abcdefghijklmnopqrstuvwxyz012345" });
   f.replies.push({ CODE: 200, STATUS: "SUCCESS", RESPONSE: [enquiry({ QUERY_TIME: ist(at + 5000), CALL_DURATION: "60", RECEIVER_MOBILE: "" })] });
   const out = await im.sync();
@@ -135,15 +135,15 @@ test("two calls that fit equally are left alone; a refused key is reported", asy
 test("records handed over by the enquiry import link the call without a read or key of its own", async (t) => {
   const now = { value: Date.now() }, f = fixture(t, now), { mobile, im, put, get, all, asked } = f;
   put("users", { id: "u1", name: "Office Phone", active: true });
-  put("leads", { id: "relay", name: "IndiaMART Buyer", phone: "+918048250260", owner: "u1", stage: "New" });
+  put("leads", { id: "relay", name: "IndiaMART Buyer", phone: "+918048200020", owner: "u1", stage: "New" });
   const device = mobile.issue({ name: "Office", owner: "u1" });
   const at = now.value - 10 * 60000;
-  const call = mobile.call(device, { localId: "p1", phone: "918048250260", direction: "Incoming", startedAt: at, duration: 120 });
-  const out = im.take([enquiry({ QUERY_TIME: ist(at + 3000), CALL_DURATION: "121", SENDER_MOBILE: "+91-9505429074", SENDER_NAME: "Raju" }), { UNIQUE_QUERY_ID: "B9", QUERY_TYPE: "B", SENDER_MOBILE: "+91-9000000000" }]);
+  const call = mobile.call(device, { localId: "p1", phone: "918048200020", direction: "Incoming", startedAt: at, duration: 120 });
+  const out = im.take([enquiry({ QUERY_TIME: ist(at + 3000), CALL_DURATION: "121", SENDER_MOBILE: "+91-9505400024", SENDER_NAME: "Raju" }), { UNIQUE_QUERY_ID: "B9", QUERY_TYPE: "B", SENDER_MOBILE: "+91-9000000022" }]);
   assert.deepEqual([out.calls, out.linked], [1, 1]);
   assert.equal(asked.length, 0, "IndiaMART is not asked again");
   const moved = get("mobileCalls", call.id);
-  const buyer = all("leads").find((l) => l.phoneKey === "919505429074");
+  const buyer = all("leads").find((l) => l.phoneKey === "919505400024");
   assert.equal(moved.leadId, buyer.id);
   assert.equal(moved.indiamartQueryId !== undefined, true);
   assert.equal(im.take([]).calls, 0);
@@ -152,11 +152,11 @@ test("records handed over by the enquiry import link the call without a read or 
 test("a call synced after IndiaMART listed it is linked when the phone sends it", async (t) => {
   const now = { value: Date.now() }, f = fixture(t, now), { mobile, im, put, get, all } = f;
   put("users", { id: "u1", name: "Office Phone", active: true });
-  put("leads", { id: "relay", name: "IndiaMART Buyer", phone: "+918048250260", owner: "u1", stage: "New" });
+  put("leads", { id: "relay", name: "IndiaMART Buyer", phone: "+918048200020", owner: "u1", stage: "New" });
   const device = mobile.issue({ name: "Office", owner: "u1" });
   const at = now.value - 10 * 60000;
-  assert.deepEqual(im.take([enquiry({ QUERY_TIME: ist(at), CALL_DURATION: "60", SENDER_MOBILE: "+91-9440012345" })]), { calls: 1, linked: 0, waiting: 1 });
-  const call = mobile.call(device, { localId: "p2", phone: "918048250260", direction: "Incoming", startedAt: at - 2000, duration: 60 });
+  assert.deepEqual(im.take([enquiry({ QUERY_TIME: ist(at), CALL_DURATION: "60", SENDER_MOBILE: "+91-9440000025" })]), { calls: 1, linked: 0, waiting: 1 });
+  const call = mobile.call(device, { localId: "p2", phone: "918048200020", direction: "Incoming", startedAt: at - 2000, duration: 60 });
   assert.equal(im.relink().linked, 1);
-  assert.equal(get("mobileCalls", call.id).leadId, all("leads").find((l) => l.phoneKey === "919440012345").id);
+  assert.equal(get("mobileCalls", call.id).leadId, all("leads").find((l) => l.phoneKey === "919440000025").id);
 });

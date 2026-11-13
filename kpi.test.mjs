@@ -19,7 +19,7 @@ function fixture(t, store = {}) {
   const kpi = createKpi({ db, all: (kind) => data[kind] || [], get: (kind, id) => (data[kind] || []).find((r) => r.id === id), deviceOwners: () => new Map([["d1", "u1"], ["d2", "u2"]]) });
   return { db, data, kpi };
 }
-const lead = (id, owner, over = {}) => ({ id, name: "Lead " + id, phone: "9840011111", owner, stage: "New", createdAt: "2026-10-20T10:00:00.000Z", ...over });
+const lead = (id, owner, over = {}) => ({ id, name: "Lead " + id, phone: "9840000026", owner, stage: "New", createdAt: "2026-10-20T10:00:00.000Z", ...over });
 const call = (id, leadId, deviceId, minutes, duration, direction = "Outgoing") => ({ id, leadId, deviceId, startedAt: at(minutes), duration, direction });
 const stage = (leadId, to, minutes, from = "Opportunity") => ({ id: "a" + leadId + to, leadId, type: "System", text: `Lead stage changed: ${from} → ${to}`, createdAt: new Date(at(minutes)).toISOString() });
 

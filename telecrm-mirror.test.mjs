@@ -7,9 +7,9 @@ import { join } from "node:path";
 import { createTelecrmMirror, mapStatus } from "./telecrm-mirror.mjs";
 
 const members = [
-  { name: "Sathiya", email: "sathiya@deviindustries.com", status: "Working", phone_number: "918282827732", permission_template_name: "Default Manager Permissions" },
-  { name: "Balaji", email: "bala@deviindustries.com", status: "Working", phone_number: "919039036583", permission_template_name: "Default Caller Permissions" },
-  { name: "Old Hand", email: "old@deviindustries.com", status: "DELETED", permission_template_name: "Default Caller Permissions" },
+  { name: "Sathiya", email: "sathiya@example.com", status: "Working", phone_number: "918282800059", permission_template_name: "Default Manager Permissions" },
+  { name: "Balaji", email: "bala@example.com", status: "Working", phone_number: "919039000060", permission_template_name: "Default Caller Permissions" },
+  { name: "Old Hand", email: "old@example.com", status: "DELETED", permission_template_name: "Default Caller Permissions" },
 ];
 function world(t) {
   const db = new DatabaseSync(":memory:");
@@ -61,7 +61,7 @@ function world(t) {
   const mirror = createTelecrmMirror({ db, all, get, put: rawPut, rawPut, tx, attachRecording, now: () => clock, keyPath: join(dir, "key"), fetchImpl });
   return { mirror, db, all, get, rawPut, tele, audio, tick: (ms) => { clock += ms; } };
 }
-const lead = (id, over = {}, f = {}) => ({ id, employeeid: "bala@deviindustries.com", status: "New Lead", rating: 2, score: 10, fields: { name: "Customer " + id, phone: "9198765" + String(id.length * 11111).padStart(5, "0").slice(0, 5), lead_source: "IndiaMart", created_on: 1799000000000, modified_on: 1, last_activity_on: 1, ...f }, ...over });
+const lead = (id, over = {}, f = {}) => ({ id, employeeid: "bala@example.com", status: "New Lead", rating: 2, score: 10, fields: { name: "Customer " + id, phone: "9198765" + String(id.length * 11111).padStart(5, "0").slice(0, 5), lead_source: "IndiaMart", created_on: 1799000000000, modified_on: 1, last_activity_on: 1, ...f }, ...over });
 const connect = (w) => w.mirror.save({ enterpriseId: "6aa78f9ca033a69fb29aaa60", token: "sync-token-1", enabled: true });
 
 test("settings keep the token secret and cannot be enabled half set up", (t) => {
@@ -89,26 +89,26 @@ test("a full run mirrors people, leads, their timeline and the follow-up as a ta
     lead("aaa", { status: "Quotation Shared" }, { "next_follow-up_on": 1801000000000, expected_revenue: "250000", city: "Erode" }),
     lead("bbbb", { status: "Lost" }, { "next_follow-up_on": 1801000000000, lost_reason: "Budget Issues" }),
   ];
-  const bala = "bala@deviindustries.com";
+  const bala = "bala@example.com";
   w.tele.actions.aaa = [
     { id: "x1", type: "OUTGOING_CALL", creationTimestamp: 1799500000000, employeeid: bala, duration: 95, feedback: "CONNECTED", callRecording: { name: "call.m4a", filePath: "ent/uid/call.mp3" } },
     { id: "x1b", type: "MISSED_CALL", creationTimestamp: 1799550000000, employeeid: "", duration: 0, feedback: "NA", callRecording: null },
     { id: "x2", type: "USER_NOTE", creationTimestamp: 1799600000000, employeeid: bala, text: "Wants 2 hp motor" },
-    { id: "x3", type: "ACTION_1013", creationTimestamp: 1799700000000, employeeid: bala, fields: { notes: "Customer | Sales 82828 27732\nPrice please?" } },
-    { id: "x4", type: "ACTION_1013", creationTimestamp: 1799800000000, employeeid: bala, fields: { notes: "Sent from gateway | Sales 82828 27732\nRs 2.5 lakh with GST" } },
-    { id: "x5", type: "ACTION_1013", creationTimestamp: 1799900000000, employeeid: bala, fields: { notes: "Sent from WhatsApp | Sales 82828 27732\nOk sir, will call you" } },
+    { id: "x3", type: "ACTION_1013", creationTimestamp: 1799700000000, employeeid: bala, fields: { notes: "Customer | Sales 82828 00059\nPrice please?" } },
+    { id: "x4", type: "ACTION_1013", creationTimestamp: 1799800000000, employeeid: bala, fields: { notes: "Sent from gateway | Sales 82828 00059\nRs 2.5 lakh with GST" } },
+    { id: "x5", type: "ACTION_1013", creationTimestamp: 1799900000000, employeeid: bala, fields: { notes: "Sent from WhatsApp | Sales 82828 00059\nOk sir, will call you" } },
   ];
   const r = await w.mirror.sync();
   assert.equal(r.ok, true, r.message);
   assert.equal(r.mode, "full");
   const users = w.all("users");
   assert.equal(users.length, 3);
-  assert.equal(users.find((u) => u.email === "sathiya@deviindustries.com").role, "Manager");
-  assert.equal(users.find((u) => u.email === "bala@deviindustries.com").role, "Sales representative");
-  assert.equal(users.find((u) => u.email === "old@deviindustries.com").active, false);
+  assert.equal(users.find((u) => u.email === "sathiya@example.com").role, "Manager");
+  assert.equal(users.find((u) => u.email === "bala@example.com").role, "Sales representative");
+  assert.equal(users.find((u) => u.email === "old@example.com").active, false);
   const a = w.all("leads").find((l) => l.telecrm.id === "aaa");
   assert.deepEqual([a.deal, a.stage, a.city, a.value, a.source], ["Quotation Shared", "Quotation given", "Erode", 250000, "IndiaMart"]);
-  assert.equal(a.owner, users.find((u) => u.email === "bala@deviindustries.com").id);
+  assert.equal(a.owner, users.find((u) => u.email === "bala@example.com").id);
   assert.match(a.phone, /^\+91/);
   const acts = w.all("activities").filter((x) => x.leadId === a.id);
   assert.deepEqual(acts.map((x) => x.type).sort(), ["Call", "Call", "Message", "Message", "Message", "Note"]);
@@ -126,7 +126,7 @@ test("a full run mirrors people, leads, their timeline and the follow-up as a ta
   assert.equal(r.recordings, 1);
   // WhatsApp: a conversation with both directions, who wrote, and which number
   const msgs = w.all("messages").filter((m) => m.leadId === a.id).sort((p, q) => p.occurredAt.localeCompare(q.occurredAt));
-  assert.deepEqual(msgs.map((m) => [m.direction, m.text, m.numberLabel, m.sender, m.via || ""]), [["Incoming", "Price please?", "Sales 82828 27732", a.name, ""], ["Outgoing", "Rs 2.5 lakh with GST", "Sales 82828 27732", "Balaji", "Gateway"], ["Outgoing", "Ok sir, will call you", "Sales 82828 27732", "Balaji", "WhatsApp"]]);
+  assert.deepEqual(msgs.map((m) => [m.direction, m.text, m.numberLabel, m.sender, m.via || ""]), [["Incoming", "Price please?", "Sales 82828 00059", a.name, ""], ["Outgoing", "Rs 2.5 lakh with GST", "Sales 82828 00059", "Balaji", "Gateway"], ["Outgoing", "Ok sir, will call you", "Sales 82828 00059", "Balaji", "WhatsApp"]]);
   assert.equal(msgs[1].senderId, a.owner);
   assert.ok(!acts.some((x) => x.type === "Note" && /^ACTION_1013/.test(x.text)), "no WhatsApp line is left as a note");
   assert.equal(acts.filter((x) => x.type === "Message").length, 3);
@@ -154,7 +154,7 @@ test("changes in TeleCRM reach the mirror: new status, new owner, a cleared foll
   w.tele.leads = [lead("aaa", {}, { "next_follow-up_on": 1801000000000 })];
   await w.mirror.sync();
   w.tick(120000);
-  w.tele.leads = [{ ...lead("aaa", { status: "Advance Received", employeeid: "sathiya@deviindustries.com" }, { modified_on: 2, last_activity_on: 2 }) }, lead("cccc", {}, {})];
+  w.tele.leads = [{ ...lead("aaa", { status: "Advance Received", employeeid: "sathiya@example.com" }, { modified_on: 2, last_activity_on: 2 }) }, lead("cccc", {}, {})];
   w.tele.touched = new Set(["aaa"]);
   w.tele.actions.aaa = [{ id: "n1", type: "STATUS_CHANGE", created_on: 1800000001000, fields: { status: "Advance Received" } }];
   const r = await w.mirror.sync();
@@ -162,7 +162,7 @@ test("changes in TeleCRM reach the mirror: new status, new owner, a cleared foll
   assert.equal(r.changed, 2);
   const a = w.all("leads").find((l) => l.telecrm.id === "aaa");
   assert.equal(a.deal, "Advance Received");
-  assert.equal(w.all("users").find((u) => u.id === a.owner).email, "sathiya@deviindustries.com");
+  assert.equal(w.all("users").find((u) => u.id === a.owner).email, "sathiya@example.com");
   assert.equal(w.get("tasks", "tct-aaa").status, "Done");
   assert.ok(w.all("leads").some((l) => l.telecrm.id === "cccc"));
   const said = w.all("activities").filter((x) => x.leadId === a.id).map((x) => x.text || x.description || "");
@@ -174,18 +174,18 @@ test("a lead first linked to TeleCRM keeps the owner given here and TeleCRM is t
   const w = world(t);
   connect(w);
   await w.mirror.sync();
-  const sathiya = w.all("users").find((u) => u.email === "sathiya@deviindustries.com");
-  w.rawPut("leads", { id: "mine", name: "From WhatsApp", phone: "+919876511111", phoneKey: "919876511111", countryCode: "91", mobileNumber: "9876511111", owner: sathiya.id, stage: "New", deal: "", disposition: "" });
+  const sathiya = w.all("users").find((u) => u.email === "sathiya@example.com");
+  w.rawPut("leads", { id: "mine", name: "From WhatsApp", phone: "+919876500021", phoneKey: "919876500021", countryCode: "91", mobileNumber: "9876500021", owner: sathiya.id, stage: "New", deal: "", disposition: "" });
   w.tick(120000);
-  w.tele.leads = [lead("aaa", {}, { phone: "919876511111", modified_on: 2 })];
+  w.tele.leads = [lead("aaa", {}, { phone: "919876500021", modified_on: 2 })];
   w.tele.touched = new Set(["aaa"]);
   await w.mirror.sync();
   assert.equal(w.get("leads", "mine").owner, sathiya.id, "the workflow's owner stays");
   assert.equal(w.mirror.settings().outbox.waiting, 1);
   await w.mirror.push();
-  assert.deepEqual(w.tele.writes.at(-1).body.fields, { assignee: "sathiya@deviindustries.com" });
+  assert.deepEqual(w.tele.writes.at(-1).body.fields, { assignee: "sathiya@example.com" });
   w.tick(120000);
-  w.tele.leads = [lead("aaa", {}, { phone: "919876511111", modified_on: 3 })];
+  w.tele.leads = [lead("aaa", {}, { phone: "919876500021", modified_on: 3 })];
   w.tele.touched = new Set(["aaa"]);
   await w.mirror.sync();
   assert.equal(w.get("leads", "mine").owner, sathiya.id, "TeleCRM still showing the old assignee does not move it back");
@@ -222,8 +222,8 @@ test("the old Excel next_followup column is not a follow-up; a late task it left
 test("a lead already in this CRM with the same mobile number is adopted, not duplicated", async (t) => {
   const w = world(t);
   connect(w);
-  w.rawPut("leads", { id: "mine", name: "Hand typed", phone: "+919876511111", phoneKey: "919876511111", countryCode: "91", mobileNumber: "9876511111", owner: "", stage: "New", deal: "", disposition: "" });
-  w.tele.leads = [lead("aaa", {}, { phone: "919876511111" })];
+  w.rawPut("leads", { id: "mine", name: "Hand typed", phone: "+919876500021", phoneKey: "919876500021", countryCode: "91", mobileNumber: "9876500021", owner: "", stage: "New", deal: "", disposition: "" });
+  w.tele.leads = [lead("aaa", {}, { phone: "919876500021" })];
   await w.mirror.sync();
   const leads = w.all("leads");
   assert.equal(leads.length, 1);
@@ -256,14 +256,14 @@ test("leads without a usable phone are kept, and two runs at once share one", as
 test("the phone app's id is learned from Call IQ, so its calls belong to the right person", async (t) => {
   const w = world(t);
   connect(w);
-  w.tele.leads = [lead("aaa", { employeeid: "sathiya@deviindustries.com" })];
+  w.tele.leads = [lead("aaa", { employeeid: "sathiya@example.com" })];
   w.tele.actions.aaa = [
     { id: "c1", type: "OUTGOING_CALL", creationTimestamp: 1799500000000, employeeid: "Lf7vwxnDDANa976FtCg30NiQmVL2", duration: 60, feedback: "CONNECTED", callRecording: null },
-    { id: "iq1", type: "ACTION_1002", creationTimestamp: 1799500100000, employeeid: "", automationInfo: { triggerActionid: "c1" }, fields: { telecrm_lead_caller: "bala@deviindustries.com", summary: "Customer wants a 2 hp press", "next_action_and_follow-up": "Send quotation" } },
+    { id: "iq1", type: "ACTION_1002", creationTimestamp: 1799500100000, employeeid: "", automationInfo: { triggerActionid: "c1" }, fields: { telecrm_lead_caller: "bala@example.com", summary: "Customer wants a 2 hp press", "next_action_and_follow-up": "Send quotation" } },
   ];
   const first = await w.mirror.sync();
   assert.equal(first.ok, true, first.message);
-  const bala = w.all("users").find((u) => u.email === "bala@deviindustries.com");
+  const bala = w.all("users").find((u) => u.email === "bala@example.com");
   assert.equal(w.all("mobileCalls")[0].owner, bala.id, "the app id maps to Balaji through the Call IQ note");
   assert.match(w.all("activities").find((x) => x.telecrmType === "ACTION_1002").text, /^Call IQ: Customer wants a 2 hp press\nNext: Send quotation/);
 });
@@ -272,7 +272,7 @@ test("a recording that cannot be fetched is tried again on the next run, and giv
   const w = world(t);
   connect(w);
   w.tele.leads = [lead("aaa")];
-  w.tele.actions.aaa = [{ id: "c1", type: "INCOMING_CALL", creationTimestamp: 1799500000000, employeeid: "bala@deviindustries.com", duration: 40, feedback: "CONNECTED", callRecording: { name: "r.m4a", filePath: "x/y.mp3" } }];
+  w.tele.actions.aaa = [{ id: "c1", type: "INCOMING_CALL", creationTimestamp: 1799500000000, employeeid: "bala@example.com", duration: 40, feedback: "CONNECTED", callRecording: { name: "r.m4a", filePath: "x/y.mp3" } }];
   w.tele.failFiles = 1;
   const one = await w.mirror.sync();
   assert.equal(one.ok, true);
@@ -285,7 +285,7 @@ test("a recording that cannot be fetched is tried again on the next run, and giv
   assert.equal(w.audio.length, 1);
   assert.equal(w.get("mobileCalls", "tcc-c1").recordingId, "rec-0");
   // too many failures: it stops asking
-  w.tele.actions.aaa = [{ id: "c2", type: "INCOMING_CALL", creationTimestamp: 1799600000000, employeeid: "bala@deviindustries.com", duration: 40, feedback: "CONNECTED", callRecording: { name: "r2.m4a", filePath: "x/z.mp3" } }];
+  w.tele.actions.aaa = [{ id: "c2", type: "INCOMING_CALL", creationTimestamp: 1799600000000, employeeid: "bala@example.com", duration: 40, feedback: "CONNECTED", callRecording: { name: "r2.m4a", filePath: "x/z.mp3" } }];
   w.tele.leads = [lead("aaa", {}, { modified_on: 5, last_activity_on: 5 })];
   w.tele.touched = new Set(["aaa"]);
   w.tele.failFiles = 99;
@@ -298,7 +298,7 @@ test("the newest recordings are copied first, and the waiting count is the whole
   const w = world(t);
   connect(w);
   w.tele.leads = [lead("aaa")];
-  w.tele.actions.aaa = Array.from({ length: 160 }, (_, i) => ({ id: "c" + i, type: "INCOMING_CALL", creationTimestamp: 1799500000000 + i * 1000, employeeid: "bala@deviindustries.com", duration: 40, feedback: "CONNECTED", callRecording: { name: `r${i}.m4a`, filePath: `x/${i}.mp3` } }));
+  w.tele.actions.aaa = Array.from({ length: 160 }, (_, i) => ({ id: "c" + i, type: "INCOMING_CALL", creationTimestamp: 1799500000000 + i * 1000, employeeid: "bala@example.com", duration: 40, feedback: "CONNECTED", callRecording: { name: `r${i}.m4a`, filePath: `x/${i}.mp3` } }));
   const one = await w.mirror.sync();
   assert.equal(one.recordings, 150);
   assert.equal(one.recordingsWaiting, 10);
@@ -310,7 +310,7 @@ test("a recording TeleCRM will not share (403) is given up at once and does not 
   const w = world(t);
   connect(w);
   w.tele.leads = [lead("aaa")];
-  w.tele.actions.aaa = [{ id: "c1", type: "INCOMING_CALL", creationTimestamp: 1799500000000, employeeid: "bala@deviindustries.com", duration: 40, feedback: "CONNECTED", callRecording: { name: "r.m4a", filePath: "x/y.mp3" } }];
+  w.tele.actions.aaa = [{ id: "c1", type: "INCOMING_CALL", creationTimestamp: 1799500000000, employeeid: "bala@example.com", duration: 40, feedback: "CONNECTED", callRecording: { name: "r.m4a", filePath: "x/y.mp3" } }];
   w.tele.denyFiles = true;
   const r = await w.mirror.sync();
   assert.equal(r.ok, true, r.message);
@@ -324,7 +324,7 @@ test("recordings can be copied on their own, without reading the leads again", a
   const w = world(t);
   connect(w);
   w.tele.leads = [lead("aaa")];
-  w.tele.actions.aaa = [{ id: "c1", type: "INCOMING_CALL", creationTimestamp: 1799500000000, employeeid: "bala@deviindustries.com", duration: 40, feedback: "CONNECTED", callRecording: { name: "r.m4a", filePath: "x/y.mp3" } }];
+  w.tele.actions.aaa = [{ id: "c1", type: "INCOMING_CALL", creationTimestamp: 1799500000000, employeeid: "bala@example.com", duration: 40, feedback: "CONNECTED", callRecording: { name: "r.m4a", filePath: "x/y.mp3" } }];
   w.tele.failFiles = 1;
   await w.mirror.sync();
   assert.equal(w.audio.length, 0);
@@ -336,11 +336,11 @@ test("recordings can be copied on their own, without reading the leads again", a
 test("a copy made by an older version is read again once, so old notes become messages", async (t) => {
   const w = world(t);
   // what the first version left behind: the lead looks up to date, and the WhatsApp line sits in the history as a note
-  w.rawPut("leads", { id: "tc-aaa", name: "Customer aaa", phone: "", phoneKey: "", stage: "New", deal: "", disposition: "", telecrm: { id: "aaa", status: "New Lead", assignee: "bala@deviindustries.com", nextFollowup: null, modifiedOn: 1, lastActivityOn: 1, fields: {} } });
-  w.rawPut("activities", { id: "tca-aaa-m1", leadId: "tc-aaa", type: "Note", text: "ACTION_1013: {\"notes\":\"Customer | Sales 82828 27732\\nHello\"}" });
+  w.rawPut("leads", { id: "tc-aaa", name: "Customer aaa", phone: "", phoneKey: "", stage: "New", deal: "", disposition: "", telecrm: { id: "aaa", status: "New Lead", assignee: "bala@example.com", nextFollowup: null, modifiedOn: 1, lastActivityOn: 1, fields: {} } });
+  w.rawPut("activities", { id: "tca-aaa-m1", leadId: "tc-aaa", type: "Note", text: "ACTION_1013: {\"notes\":\"Customer | Sales 82828 00059\\nHello\"}" });
   connect(w);
   w.tele.leads = [lead("aaa", {}, { modified_on: 1, last_activity_on: 1 })];
-  w.tele.actions.aaa = [{ id: "m1", type: "ACTION_1013", creationTimestamp: 1799700000000, employeeid: "bala@deviindustries.com", fields: { notes: "Customer | Sales 82828 27732\nHello" } }];
+  w.tele.actions.aaa = [{ id: "m1", type: "ACTION_1013", creationTimestamp: 1799700000000, employeeid: "bala@example.com", fields: { notes: "Customer | Sales 82828 00059\nHello" } }];
   const first = await w.mirror.sync();
   assert.equal(first.mode, "full");
   assert.equal(w.get("activities", "tca-aaa-m1").type, "Message");
@@ -353,9 +353,9 @@ test("a copy made by an older version is read again once, so old notes become me
 test("a real source found here is not overwritten by TeleCRM's \"Excel\"; a real TeleCRM source still wins", async (t) => {
   const w = world(t);
   connect(w);
-  w.rawPut("leads", { id: "smx", name: "From Salesmax", phone: "+919876511111", phoneKey: "919876511111", countryCode: "91", mobileNumber: "9876511111", owner: "", stage: "New", deal: "", disposition: "", source: "IndiaMART", createdAt: "2025-08-01T05:00:00.000Z" });
-  w.rawPut("leads", { id: "two", name: "Other", phone: "+919876522222", phoneKey: "919876522222", countryCode: "91", mobileNumber: "9876522222", owner: "", stage: "New", deal: "", disposition: "", source: "IndiaMART" });
-  w.tele.leads = [lead("aaa", {}, { phone: "919876511111", lead_source: "Excel" }), lead("bbbb", {}, { phone: "919876522222", lead_source: "TradeIndia" })];
+  w.rawPut("leads", { id: "smx", name: "From Salesmax", phone: "+919876500021", phoneKey: "919876500021", countryCode: "91", mobileNumber: "9876500021", owner: "", stage: "New", deal: "", disposition: "", source: "IndiaMART", createdAt: "2025-08-01T05:00:00.000Z" });
+  w.rawPut("leads", { id: "two", name: "Other", phone: "+919876500061", phoneKey: "919876500061", countryCode: "91", mobileNumber: "9876500061", owner: "", stage: "New", deal: "", disposition: "", source: "IndiaMART" });
+  w.tele.leads = [lead("aaa", {}, { phone: "919876500021", lead_source: "Excel" }), lead("bbbb", {}, { phone: "919876500061", lead_source: "TradeIndia" })];
   await w.mirror.sync();
   assert.equal(w.get("leads", "smx").source, "IndiaMART");
   assert.equal(w.get("leads", "smx").createdAt, "2025-08-01T05:00:00.000Z", "the earlier real date stays");
@@ -393,7 +393,7 @@ test("changes made here go back to TeleCRM: fields, status, assignee, follow-up 
   connect(w);
   w.tele.leads = [lead("aaa", {}, { "next_follow-up_on": 1801000000000 })];
   await w.mirror.sync();
-  const before = w.get("leads", "tc-aaa"), sathiya = w.all("users").find((u) => u.email === "sathiya@deviindustries.com");
+  const before = w.get("leads", "tc-aaa"), sathiya = w.all("users").find((u) => u.email === "sathiya@example.com");
   // a person moves the lead on, gives it to Sathiya and fixes the city
   const after = { ...before, owner: sathiya.id, deal: "Quotation Shared", stage: "Quotation given", city: "Salem" };
   w.rawPut("leads", after);
@@ -417,16 +417,16 @@ test("changes made here go back to TeleCRM: fields, status, assignee, follow-up 
   assert.equal(out.sent, 2);
   const [fields, note] = w.tele.writes;
   assert.equal(fields.path, "/lead/aaa");
-  assert.deepEqual(fields.body.fields, { city: "Salem", assignee: "sathiya@deviindustries.com", status: "Quotation Shared", "next_follow-up_on": "" });
+  assert.deepEqual(fields.body.fields, { city: "Salem", assignee: "sathiya@example.com", status: "Quotation Shared", "next_follow-up_on": "" });
   assert.equal(note.path, "/lead/aaa/action");
   assert.equal(note.body.actions[0].type, "1014");
-  assert.equal(note.body.actions[0].employeeid, "sathiya@deviindustries.com");
+  assert.equal(note.body.actions[0].employeeid, "sathiya@example.com");
   assert.equal(note.body.actions[0].fields.notes, "Wants 2 machines\n— Sathiya, Salesdesk");
   assert.equal(note.body.actions[0].created_on, "15/01/2027 10:00:00");
   assert.equal(w.mirror.settings().outbox.waiting, 0);
   // the note coming back from TeleCRM is not added a second time
   w.tele.actions.aaa = [{ id: "x1", type: "ACTION_1014", creationTimestamp: 1800000300000, fields: { note: "Wants 2 machines\n— Sathiya, Salesdesk" } }];
-  w.tele.leads = [lead("aaa", { status: "Quotation Shared", employeeid: "sathiya@deviindustries.com" }, { modified_on: 3 })];
+  w.tele.leads = [lead("aaa", { status: "Quotation Shared", employeeid: "sathiya@example.com" }, { modified_on: 3 })];
   w.tick(120000);
   await w.mirror.sync();
   assert.equal(w.all("activities").filter((a) => a.leadId === "tc-aaa" && /Wants 2 machines/.test(a.text || "")).length, 0);
@@ -449,12 +449,12 @@ test("someone removed in the CRM is not copied back from TeleCRM's team", async 
   const w = world(t);
   connect(w);
   await w.mirror.sync();
-  const sathiya = w.all("users").find((u) => u.email === "sathiya@deviindustries.com");
+  const sathiya = w.all("users").find((u) => u.email === "sathiya@example.com");
   assert.ok(sathiya, "copied at first");
   w.db.exec("CREATE TABLE IF NOT EXISTS removed_users(id TEXT PRIMARY KEY,email TEXT,name TEXT,at TEXT)");
   w.db.prepare("INSERT INTO removed_users VALUES(?,?,?,?)").run(sathiya.id, sathiya.email, sathiya.name, new Date().toISOString());
   w.db.prepare("DELETE FROM records WHERE kind='users' AND id=?").run(sathiya.id);
   w.tick(120000);
   await w.mirror.sync();
-  assert.equal(w.all("users").some((u) => u.email === "sathiya@deviindustries.com"), false);
+  assert.equal(w.all("users").some((u) => u.email === "sathiya@example.com"), false);
 });

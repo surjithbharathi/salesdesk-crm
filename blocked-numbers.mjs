@@ -1,6 +1,6 @@
 // Numbers the team never wants in the CRM (family, staff, spam). Phone call sync, the TeleCRM copy and the
 // WhatsApp gateway all skip a blocked number, so a lead deleted with "block" does not come back.
-// A number is kept as its last 10 digits, so 919787333953, +91 97873 33953 and 9787333953 are the same number.
+// A number is kept as its last 10 digits, so 919787300010, +91 97873 00010 and 9787300010 are the same number.
 export const numberKey = (phone) => String(phone || "").replace(/[^0-9]/g, "").slice(-10);
 
 export function ensureBlockedTable(db) {

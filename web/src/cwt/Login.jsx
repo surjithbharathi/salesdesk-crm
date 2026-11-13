@@ -157,7 +157,7 @@ function OtpForm({ onDone, onBack }) {
         <button type="button" className="r-back" onClick={onBack}>‹ Back</button>
         <div><h1>Sign in with OTP</h1><p className="r-login-sub">Enter the mobile number your admin saved for you. We will send a 6-digit code on WhatsApp.</p></div>
         <label className="r-fld"><span>Mobile number</span>
-          <span className="r-inp"><span className="r-cc">+91</span><input inputMode="numeric" autoComplete="tel-national" value={mobile} onChange={(e) => setMobile(e.target.value)} placeholder="98765 43210" required autoFocus /></span>
+          <span className="r-inp"><span className="r-cc">+91</span><input inputMode="numeric" autoComplete="tel-national" value={mobile} onChange={(e) => setMobile(e.target.value)} placeholder="98765 00008" required autoFocus /></span>
         </label>
         {error && <p className="r-login-error" role="alert">{error}</p>}
         <button className="r-login-primary" disabled={busy}>{busy ? "Sending…" : "Send code on WhatsApp"}</button>

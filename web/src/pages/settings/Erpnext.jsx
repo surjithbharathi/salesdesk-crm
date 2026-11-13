@@ -34,7 +34,7 @@ export default function Erpnext() {
           <>Save, use Test connection, then turn ERPNext on. The first read only takes stock of what is already there.</>
         </Steps>
         <div className="sec-grid">
-          <label>ERPNext address<input className="field-input" placeholder="https://erp.deviindustries.com" value={form.baseUrl} onChange={(e) => set({ baseUrl: e.target.value })} /></label>
+          <label>ERPNext address<input className="field-input" placeholder="https://erp.example.com" value={form.baseUrl} onChange={(e) => set({ baseUrl: e.target.value })} /></label>
           <label>API key<input className="field-input" placeholder={d.hasKey ? "Saved; type a new one to replace it" : ""} value={form.apiKey} onChange={(e) => set({ apiKey: e.target.value })} autoComplete="off" /></label>
           <label>API secret<input className="field-input" type="password" placeholder={d.hasKey ? "Saved; type a new one to replace it" : ""} value={form.apiSecret} onChange={(e) => set({ apiSecret: e.target.value })} autoComplete="new-password" /></label>
         </div>

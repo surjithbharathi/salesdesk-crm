@@ -5,11 +5,11 @@ The user authorized studying their USB-connected phone's Salesmax and TeleCRM ap
 ## Observed
 
 - REA CLI 6.7.0, `inspect_adb_package`: Salesmax `ai.salesmax`, version 0.95/code 154. Evidence `ev_dcc024f60a89c0978538d77460937e001d8a4fd2bf1ae1281e0bd42a5d6b8d6f`.
-- REA CLI 6.7.0, `inspect_adb_package`: TeleCRM `app.telecrm.enterprise3.in`, version 111.0/code 111. Evidence `ev_2bbc09c0aa9738848017bbee51f107a64b37305a7997c7205d5a96f35b1172cb`.
+- REA CLI 6.7.0, `inspect_adb_package`: TeleCRM `app.telecrm.enterprise3.in`, version 111.0/code 111. Evidence `ev_2bbc09c0aa9738800001bbee51f107a64b37305a7997c7205d5a96f35b1172cb`.
 - These REA observations are fixed dumpsys projections, not APK identity or method/runtime evidence. Complete records are kept locally, not committed because they include device identifiers and installation times.
 - Separate ADB permission inspection: both declare call-log, phone-state, recording/audio and foreground-service-related permissions. In the inspected primary-user section, call-log access is granted; microphone access is not. This does NOT prove recording sync works or that microphone permission is never used. Other user/profile sections have different grants.
 - Android SDK `aapt2 dump xmltree` of the copied base manifests declares Salesmax `ai.salesmax.ui.service.JobService`, `ai.salesmax.ui.service.CallStateManagerService`, `ai.salesmax.call.screening.SalesmaxScreeningService` and a boot receiver. TeleCRM declares `nativeplugin.app.telecrm.callsync.service.CallSyncService`, call receivers and WorkManager's SystemJobService. Class names/declarations are static observations, not proof of their algorithms or scheduled execution.
-- Base APK SHA-256: Salesmax `3e1e9c7c9248292714f40a544d126a627424c161b65c0e3d6557b95be1b86474`; TeleCRM `80653ab683f57b28e56bed2ac455ad314cb685ba655581b3b538ebcf5d6c64db`.
+- Base APK SHA-256: Salesmax `3e1e9c7c9248200002f40a544d126a627424c161b65c0e3d6557b95be1b86474`; TeleCRM `80653ab683f57b28e56bed2ac455ad314cb685ba655581b3b538ebcf5d6c64db`.
 
 ## Partial / unknown
 

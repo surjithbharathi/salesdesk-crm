@@ -40,7 +40,7 @@ test("the WhatsApp gateway link: settings are write-only for secrets, and the si
   };
   const SECRET = "whsec_http_test_value";
   const signed = (payload) => { const raw = JSON.stringify(payload); return [raw, { "X-Devi-Signature": "sha256=" + createHmac("sha256", SECRET).update(raw).digest("hex") }]; };
-  const message = { event: "message.received", delivery_id: "d1", sent_at: 1, data: { wa_id: "919876500123", name: "Test Customer", phone_id: "222", number_label: "Sales 2", kind: "text", text: "Hello from WhatsApp", message_id: "wamid.HTTP1", at: 1794000000 } };
+  const message = { event: "message.received", delivery_id: "d1", sent_at: 1, data: { wa_id: "919876500065", name: "Test Customer", phone_id: "222", number_label: "Sales 2", kind: "text", text: "Hello from WhatsApp", message_id: "wamid.HTTP1", at: 1794000000 } };
 
   // nothing is open until the link is set up and turned on
   const [raw0, head0] = signed(message);
