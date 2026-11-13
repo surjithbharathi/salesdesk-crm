@@ -101,6 +101,9 @@ test("call sync lands on the lead with the number, whoever owns it, and is idemp
   assert.equal(f.all("mobileCalls").length, 1);
   assert.equal(f.all("activities").length, 1);
   assert.throws(() => f.api.call(f.device, { ...p, duration: 31 }), status(409));
+  // the same call written twice in the phone's call log lands once
+  assert.equal(f.api.call(f.device, { ...p, localId: "call-1-twin", startedAt: p.startedAt + 1000 }).id, c.id);
+  assert.equal(f.all("mobileCalls").length, 1);
   // an archived lead or a number that is no lead is not synced
   for (const phone of ["918888888888", "917777777777"])
     assert.throws(() => f.api.call(f.device, { ...p, phone }), status(403));
@@ -247,7 +250,7 @@ test("devices cannot attach other devices' calls or reuse recording hashes withi
 test("ambiguous automatic time matches require explicit manual review", (t) => {
   const f = fixture(t),
     a = f.api.call(f.device, f.payload());
-  f.api.call(f.device, f.payload({ localId: "nearby-call", startedAt: a.startedAt + 1000 }));
+  f.api.call(f.device, f.payload({ localId: "nearby-call", startedAt: a.startedAt + 1000, duration: 31 }));
   assert.throws(() => f.api.recording(f.device, a.id, f.audio, f.meta(a)), status(409));
   assert.equal(
     f.api.recording(f.device, a.id, f.audio, { ...f.meta(a), mode: "manual" }).duplicate,

@@ -155,7 +155,13 @@ export function createMobileSync({ db, all, get, put, stamp, tx, log, keyPath, o
     // a lead can be marked so that phone calls with it are never synced
     if (all("leads").some((l) => l.noCallSync && phoneKeyOf(l) === p.phone)) fail("Call sync is turned off for this number", 403);
     if (isBlocked(db, p.phone)) fail("This number is blocked in the CRM", 403);
-    const existing = all("mobileCalls").find((c) => c.deviceId === d.id && c.localId === p.localId);
+    const calls = all("mobileCalls");
+    const existing = calls.find((c) => c.deviceId === d.id && c.localId === p.localId);
+    // some phones write one call twice in their call log (two ids, same number, time and length): the second is the same call
+    if (!existing) {
+      const twin = calls.find((c) => c.deviceId === d.id && c.phone === p.phone && c.direction === p.direction && c.duration === p.duration && Math.abs(c.startedAt - p.startedAt) <= 3000);
+      if (twin) return twin;
+    }
     const policy = preferences(d);
     const configured = Object.keys(policy.sims).length > 0;
     const mode = configured ? policy.sims[p.accountId] || "off" : "leads";
