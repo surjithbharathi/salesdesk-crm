@@ -101,4 +101,8 @@ test("a member's screen gets only what changed, and only their own leads", async
   assert.equal(dismissed.status, 200, JSON.stringify(dismissed.json));
   assert.ok(!(await req("/api/ai-tasks", "GET", undefined, member)).json.items.some((x) => x.id === sig));
   assert.equal((await req("/api/ai-tasks/sig%ZZ/dismiss", "POST", {}, member)).status, 404, "a broken id is no match");
+  // done: already handled, it leaves the list the same way
+  const sig2 = `sig:new:${mine.id}`;
+  assert.equal((await req(`/api/ai-tasks/${encodeURIComponent(sig2)}/done`, "POST", {}, admin)).status, 200);
+  assert.ok(!(await req("/api/ai-tasks", "GET", undefined, admin)).json.items.some((x) => x.id === sig2));
 });

@@ -36,7 +36,7 @@ export default function AiTasks({ assignee = "", onOpenLead, onCount }) {
     try {
       await crmSend("POST", `ai-tasks/${encodeURIComponent(x.id)}/${what}`, body);
       if (what === "accept") await crm.reload();
-      notify(what === "accept" ? "Follow-up planned" : "Dismissed");
+      notify(what === "accept" ? "Follow-up planned" : what === "done" ? "Marked done" : "Dismissed");
       setPlanning(null);
       await load();
     } catch (e) { notify(e.message); } finally { setBusy(""); }
@@ -80,7 +80,8 @@ export default function AiTasks({ assignee = "", onOpenLead, onCount }) {
                   {x.leadId && <button type="button" className="r-btn ghost ait-btn" disabled={busy === x.id} onClick={() => setPlanning({ id: x.id, due: toLocalValue(new Date(Date.parse(x.due || "") > Date.now() ? Date.parse(x.due) : Date.now() + 3600000)) })}><TIcon name={ICON[x.action] || "calendar"} />Add as follow-up</button>}
                   <span className="fu-gap" />
                   {crm.me.lead && owner && <span className={`av fu-av ${avClass(owner)}`} title={owner} aria-label={`For ${owner}`}>{initials(owner)}</span>}
-                  <button type="button" className="r-link ait-dismiss" disabled={busy === x.id} onClick={() => act(x, "dismiss")}>Dismiss</button>
+                  <button type="button" className="r-btn ghost ait-btn ait-done" disabled={busy === x.id} onClick={() => act(x, "done")} title="Already done: called or sent"><TIcon name="check" />Done</button>
+                  <button type="button" className="r-link ait-dismiss" disabled={busy === x.id} onClick={() => act(x, "dismiss")} title="Not needed">Dismiss</button>
                 </div>
               )}
             </article>

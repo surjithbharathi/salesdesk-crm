@@ -222,9 +222,10 @@ export function createAiTasks({ db, get, put, stamp, tx, iqConfig = () => null, 
     signalCache.at = 0;
     return made;
   }
-  function dismiss(id, userId) {
+  // dismiss: not needed; done: already handled (called, sent). Either way it leaves the list.
+  function dismiss(id, userId, { done = false } = {}) {
     const { task } = own(id, userId);
-    if (task) db.prepare("UPDATE ai_tasks SET status='dismissed', body=? WHERE id=?").run(JSON.stringify({ ...task, dismissedBy: userId, closedAt: new Date(now()).toISOString() }), id);
+    if (task) db.prepare(`UPDATE ai_tasks SET status='${done ? "done" : "dismissed"}', body=? WHERE id=?`).run(JSON.stringify({ ...task, [done ? "doneBy" : "dismissedBy"]: userId, closedAt: new Date(now()).toISOString() }), id);
     else db.prepare("INSERT OR REPLACE INTO ai_task_dismissed VALUES(?,?)").run(String(id), now());
     signalCache.at = 0;
     return { ok: true };
@@ -232,5 +233,6 @@ export function createAiTasks({ db, get, put, stamp, tx, iqConfig = () => null, 
 
   let timer = null;
   if (timers) { timer = setInterval(() => void tick(), MIN); timer.unref?.(); }
-  return { list, accept, dismiss, tick, close: () => clearInterval(timer) };
+  const done = (id, userId) => dismiss(id, userId, { done: true });
+  return { list, accept, dismiss, done, tick, close: () => clearInterval(timer) };
 }

@@ -771,11 +771,11 @@ const mobileServer = http.createServer(async (req, res) => {
       reply(200, deleteLead(leadId, { block: action === "delete-and-block", by: userId }));
       return;
     }
-    const phoneAiTask = aiTaskPath(/^\/v1\/ai-tasks\/([^/]{1,360})\/(accept|dismiss)$/.exec(url.pathname));
+    const phoneAiTask = aiTaskPath(/^\/v1\/ai-tasks\/([^/]{1,360})\/(accept|dismiss|done)$/.exec(url.pathname));
     if (phoneAiTask && req.method === "POST") {
       if (!identity) bad("Shared user login required", 401);
       const p = await body(req);
-      reply(200, phoneAiTask[2] === "accept" ? aiTasks.accept(phoneAiTask[1], p, identity.user.id) : aiTasks.dismiss(phoneAiTask[1], identity.user.id));
+      reply(200, phoneAiTask[2] === "accept" ? aiTasks.accept(phoneAiTask[1], p, identity.user.id) : aiTasks[phoneAiTask[2]](phoneAiTask[1], identity.user.id));
       return;
     }
     if (url.pathname === "/v1/workspace" && req.method === "GET") {
@@ -1418,9 +1418,9 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === "/api/ai-tasks" || url.pathname.startsWith("/api/ai-tasks/")) {
       if (!identity && userAuth.configured()) bad("Login required", 401);
       const uid = identity?.user.id || "";
-      const one = aiTaskPath(/^\/api\/ai-tasks\/([^/]{1,360})\/(accept|dismiss)$/.exec(url.pathname));
+      const one = aiTaskPath(/^\/api\/ai-tasks\/([^/]{1,360})\/(accept|dismiss|done)$/.exec(url.pathname));
       if (url.pathname === "/api/ai-tasks" && req.method === "GET") send(200, aiTasks.list(uid));
-      else if (one && req.method === "POST") { sameOrigin(); const p = await body(req); send(200, one[2] === "accept" ? aiTasks.accept(one[1], p, uid) : aiTasks.dismiss(one[1], uid)); }
+      else if (one && req.method === "POST") { sameOrigin(); const p = await body(req); send(200, one[2] === "accept" ? aiTasks.accept(one[1], p, uid) : aiTasks[one[2]](one[1], uid)); }
       else bad("Not found", 404);
       return;
     }

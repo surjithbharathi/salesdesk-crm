@@ -215,6 +215,7 @@ export default function CwtFollowups() {
   const chipLabel = filter.key === "custom" ? (filter.to - filter.from <= DAY ? dayText(filter.from) : `${dayText(filter.from)} – ${dayText(addDays(filter.to, -1))}`) : "Pick dates";
 
   async function mark(t, status) {
+    if (status === "Done" && !window.confirm(`Mark "${t.title}" as done?`)) return;
     setBusy(t.id);
     try { await crmSend("PATCH", `tasks/${t.id}`, { status }); await crm.reload(); notify(status === "Done" ? "Follow up marked done" : "Follow up reopened"); } catch (e) { notify(e.message); } finally { setBusy(""); }
   }
