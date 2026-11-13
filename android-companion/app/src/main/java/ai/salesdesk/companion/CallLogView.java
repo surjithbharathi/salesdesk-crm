@@ -36,6 +36,32 @@ final class CallLogView {
     private CallLogView(MainActivity a) { this.a = a; }
 
     static int limit = 80;
+    // every call in the phone's own call log for the last 30 days that the sync queue does not hold (personal calls and
+    // numbers that are no lead): shown on this phone only, never sent anywhere
+    static List<Entry> deviceLog(MainActivity a, Set<String> queued) {
+        List<Entry> out = new ArrayList<>();
+        if (a.checkSelfPermission(android.Manifest.permission.READ_CALL_LOG) != android.content.pm.PackageManager.PERMISSION_GRANTED) return out;
+        String country = SecureConfig.prefs(a).getString("country", "91");
+        try (android.database.Cursor c = a.getContentResolver().query(android.provider.CallLog.Calls.CONTENT_URI,
+                new String[]{android.provider.CallLog.Calls._ID, android.provider.CallLog.Calls.NUMBER, android.provider.CallLog.Calls.DATE, android.provider.CallLog.Calls.DURATION, android.provider.CallLog.Calls.TYPE, android.provider.CallLog.Calls.CACHED_NAME},
+                android.provider.CallLog.Calls.DATE + ">=?", new String[]{String.valueOf(System.currentTimeMillis() - 30L * 86400000)}, android.provider.CallLog.Calls.DATE + " DESC")) {
+            int n = 0;
+            while (c != null && c.moveToNext() && n++ < 400) {
+                long start = c.getLong(2);
+                if (queued.contains(c.getString(0) + "-" + start)) continue;
+                int type = c.getInt(4);
+                String dir = type == android.provider.CallLog.Calls.INCOMING_TYPE ? "Incoming" : type == android.provider.CallLog.Calls.OUTGOING_TYPE ? "Outgoing" : type == android.provider.CallLog.Calls.MISSED_TYPE ? "Missed" : type == android.provider.CallLog.Calls.REJECTED_TYPE ? "Rejected" : "";
+                if (dir.isEmpty()) continue;
+                String raw = c.getString(1) == null ? "" : c.getString(1), phone = SyncEngine.normalize(raw, country);
+                JSONObject r = new JSONObject();
+                r.put("local_id", c.getString(0) + "-" + start); r.put("phone", phone.isEmpty() ? raw : phone); r.put("direction", dir);
+                r.put("duration", c.getLong(3)); r.put("started", start); r.put("device", true);
+                if (c.getString(5) != null) r.put("contact", c.getString(5).trim());
+                out.add(new Entry(r, true, start));
+            }
+        } catch (Exception ignored) { }
+        return out;
+    }
     static void draw(MainActivity a, LinearLayout content, List<Entry> calls) {
         CallLogView v = new CallLogView(a);
         calls.sort((x, y) -> Long.compare(y.time, x.time));
@@ -68,6 +94,7 @@ final class CallLogView {
     private void row(LinearLayout group, Entry e) {
         JSONObject r = e.r;
         String phone = r.optString("phone"), who = a.callName(r), dir = r.optString("direction");
+        if (who.equals(MainActivity.prettyNumber(phone)) && !r.optString("contact").isEmpty()) who = r.optString("contact");
         long secs = r.optLong("duration", 0);
         boolean known = !who.equals(MainActivity.prettyNumber(phone));
         boolean missed = dir.equals("Missed") || dir.equals("Rejected") || (dir.equals("Incoming") && secs == 0);
@@ -90,13 +117,15 @@ final class CallLogView {
         name.setTextColor(missed ? MainActivity.RED : MainActivity.INK);
         name.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
         middle.addView(name);
+        if (known) { TextView num = new TextView(a); num.setText(MainActivity.prettyNumber(phone)); num.setTextSize(13); num.setTextColor(MainActivity.MUTED); num.setSingleLine(true); middle.addView(num); }
         LinearLayout sub = a.horizontal(); sub.setGravity(Gravity.CENTER_VERTICAL);
         TextView arrow = new TextView(a); arrow.setTextSize(14); arrow.setTypeface(Typeface.DEFAULT_BOLD);
         arrow.setText(dir.equals("Outgoing") ? "↗" : dir.equals("Rejected") ? "⊘" : "↙");
         arrow.setTextColor(missed ? MainActivity.RED : dir.equals("Outgoing") ? 0xFF2980B9 : CALLBACK);
         sub.addView(arrow);
         String detail = dir.equals("Outgoing") && secs == 0 ? "Not answered" : missed ? (dir.equals("Rejected") ? "Rejected" : "Missed") : talk(secs);
-        if (!known && leadIdFor(phone).isEmpty()) detail += "  ·  Not a lead";
+        String owner = a.ownerOf(phone);
+        detail += !leadIdFor(phone).isEmpty() || !owner.isEmpty() ? "  ·  Lead: " + (owner.isEmpty() ? "…" : owner) : "  ·  Not a lead";
         if (hasRecording(e)) detail += "  ·  🎙";
         TextView info = new TextView(a); info.setText("  " + detail); info.setTextSize(13); info.setTextColor(MainActivity.MUTED); info.setSingleLine(true); info.setEllipsize(TextUtils.TruncateAt.END);
         sub.addView(info);
@@ -128,7 +157,7 @@ final class CallLogView {
         String recording = recordingOf(e);
         String phone = r.optString("phone");
         TextView status = new TextView(a); status.setTextSize(12); status.setTextColor(MainActivity.MUTED);
-        status.setText(MainActivity.prettyNumber(phone) + "\n" + (remote.isEmpty() ? "Waiting to sync" : "Synced to CRM") + " · "
+        status.setText(MainActivity.prettyNumber(phone) + "\n" + (r.optBoolean("device") ? "On this phone only" : remote.isEmpty() ? "Waiting to sync" : "Synced to CRM") + " · "
             + (!recording.isEmpty() || e.local && r.optInt("uploaded") == 1 ? "Recording uploaded" : !r.optString("uri").isEmpty() ? "Recording on this phone" : "No recording"));
         box.addView(status);
         LinearLayout actions = new LinearLayout(a); actions.setPadding(0, a.dp(8), 0, 0);
@@ -164,7 +193,7 @@ final class CallLogView {
     private boolean hasRecording(Entry e) { return !recordingOf(e).isEmpty() || (e.local && (!e.r.optString("uri").isEmpty() || e.r.optInt("uploaded") == 1)); }
 
     // the lead with this number (last ten digits), from the index built once per workspace
-    private String leadIdFor(String phone) { JSONObject l = a.index().lead(phone); return l == null ? "" : l.optString("id"); }
+    private String leadIdFor(String phone) { JSONObject l = a.index().lead(phone); return l == null ? a.cardLeadId(phone) : l.optString("id"); }
 
     private void dial(String phone) {
         String d = phone.replaceAll("[^0-9+]", ""); if (d.isEmpty()) return;
