@@ -145,8 +145,14 @@ export function createMobileSync({ db, all, get, put, stamp, tx, log, keyPath, o
     const configured = Object.keys(policy.sims).length > 0;
     const mode = configured ? policy.sims[p.accountId] || "off" : "leads";
     if (mode === "off") fail("SIM tracking disabled", 403);
-    const matches = targets(d).filter((l) => l.phone === p.phone);
-    if(mode === "all")matches.push(...all("leads").filter(l=>l.owner === "" && l.createdBy === d.owner && !l.archived && phoneKeyOf(l) === p.phone).map(l=>({id:l.id,phone:digits(l.phone)})));
+    // A call from a company phone belongs on the lead with that number, whoever owns the lead now: leads move from the
+    // office phone to the callers after assignment, and their calls must still land. The phone owner's own lead comes
+    // first, then the most recently updated one when two leads share a number.
+    const matches = all("leads")
+      .filter((l) => !l.archived && !l.mergedInto && !l.noCallSync && phoneKeyOf(l) === p.phone)
+      .sort((a, b) => Number(b.owner === d.owner) - Number(a.owner === d.owner) || String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")))
+      .slice(0, 1)
+      .map((l) => ({ id: l.id, phone: p.phone }));
     const ownUnassigned = existing && get("leads", existing.leadId)?.owner === "" && existing.owner === d.owner;
     if (matches.length !== 1 && !(mode === "all" && ownUnassigned)) {
       if (mode !== "all" || all("leads").some((l) => phoneKeyOf(l) === p.phone))
