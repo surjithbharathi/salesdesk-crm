@@ -72,6 +72,14 @@ export function LeadDetail({ id, nav = null, compose: startWith = "" }) {
   const [moveWhen, setMoveWhen] = useState("Tomorrow 10 AM");
   const [movePick, setMovePick] = useState(() => localInput(new Date(Date.now() + 86400000)));
   const [busy, setBusy] = useState(false);
+  // refresh just this lead: new calls, WhatsApp and notes since the screen opened, and its ERPNext card, without reloading the page
+  const [refreshing, setRefreshing] = useState(false);
+  const [erpKey, setErpKey] = useState(0);
+  const refreshLead = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try { await crm.reload(); setErpKey((k) => k + 1); } finally { setRefreshing(false); }
+  };
   const scroller = useRef(null);
   const waInput = useRef(null);
   const raw = crm.leadById?.get(id);
@@ -233,6 +241,7 @@ export function LeadDetail({ id, nav = null, compose: startWith = "" }) {
           <div className="ld-acts">
             <a className="ld-call" href={telHref(raw)}><TIcon name="phone" />Call</a>
             {gatewayOn ? <button type="button" className="ld-wa" onClick={openWa}><TIcon name="whatsapp" />WhatsApp</button> : <a className="ld-wa" href={waHref(raw)} target="_blank" rel="noopener noreferrer"><TIcon name="whatsapp" />WhatsApp</a>}
+            <button type="button" className={`ld-more ld-refresh ${refreshing ? "spin" : ""}`} aria-label="Refresh this lead" title="Refresh this lead" disabled={refreshing} onClick={refreshLead}><TIcon name="refresh" /></button>
             <div className="drop">
               <button type="button" className="ld-more" aria-label="More: email, log a call, archive, delete, block number" aria-expanded={menu === "more"} onClick={() => setMenu(menu === "more" ? "" : "more")}><TIcon name="kebab" /></button>
               {menu === "more" && (
@@ -442,7 +451,7 @@ export function LeadDetail({ id, nav = null, compose: startWith = "" }) {
               {enquiry.note && <p className="ld-enq-intro">"{enquiry.note}"</p>}
             </section>
           )}
-          <ErpPanel leadId={raw.id} canEdit /* everyone who may open this lead; the server checks leads.write */ />
+          <ErpPanel key={erpKey} leadId={raw.id} canEdit /* everyone who may open this lead; the server checks leads.write */ />
         </aside>
       </div>
     </div>
