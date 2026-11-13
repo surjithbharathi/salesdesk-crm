@@ -166,7 +166,9 @@ export default function CwtFollowups() {
   const notify = useToast();
   const [filter, setFilter] = useState({ key: "all" });
   const [pop, setPop] = useState(false);
-  const [assignee, setAssignee] = useState("");
+  // whose follow-ups: the person signed in by default; "" is all staff, picked from the staff menu
+  const [staff, setAssignee] = useState(null);
+  const assignee = staff ?? (crm.me?.lead ? crm.me.id || "" : ""); // callers have no staff menu and see what they may see
   const [showDone, setShowDone] = useState(false);
   const [creating, setCreating] = useState(false);
   const [openId, setOpenId] = useState("");
@@ -275,7 +277,8 @@ export default function CwtFollowups() {
             <span className={`av fu-av ${picked ? avClass(picked.name) : "all"}`} aria-hidden="true">{picked ? initials(picked.name) : <TIcon name="user" />}</span>
             <select value={assignee} onChange={(e) => setAssignee(e.target.value)} aria-label="Staff">
               <option value="">All staff</option>
-              {team.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+              {!team.some((u) => u.id === crm.me.id) && <option value={crm.me.id}>{crm.me.name || "Me"}</option>}
+              {team.map((u) => <option key={u.id} value={u.id}>{u.id === crm.me.id ? `${u.name} (me)` : u.name}</option>)}
             </select>
             <TIcon name="chevronDown" />
           </label>
@@ -306,7 +309,8 @@ export default function CwtFollowups() {
             <span className={`av fu-av ${picked ? avClass(picked.name) : "all"}`} aria-hidden="true">{picked ? initials(picked.name) : <TIcon name="user" />}</span>
             <select value={assignee} onChange={(e) => setAssignee(e.target.value)} aria-label="Staff">
               <option value="">All staff</option>
-              {team.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+              {!team.some((u) => u.id === crm.me.id) && <option value={crm.me.id}>{crm.me.name || "Me"}</option>}
+              {team.map((u) => <option key={u.id} value={u.id}>{u.id === crm.me.id ? `${u.name} (me)` : u.name}</option>)}
             </select>
             <TIcon name="chevronDown" />
           </label>
