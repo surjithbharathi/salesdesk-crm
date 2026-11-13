@@ -86,11 +86,14 @@ export function createMobileSync({ db, all, get, put, stamp, tx, log, keyPath, o
       fail("Device token revoked or invalid", 401);
     return d;
   }
+  // The numbers a phone syncs calls for: every active lead, whoever owns it (the office phone's leads move to the callers
+  // after assignment, and their calls must still be picked up). Names are asked for only on the phone owner's own leads.
   const targets = (d) =>
     all("leads")
-      .filter((l) => !l.archived && !l.noCallSync && l.owner === d.owner)
-      .map((l) => ({ id: l.id, phone: phoneKeyOf(l), ...(hasName(l) ? {} : { needsName: true }) }))
+      .filter((l) => !l.archived && !l.mergedInto && !l.noCallSync)
+      .map((l) => ({ id: l.id, phone: phoneKeyOf(l), ...(hasName(l) || l.owner !== d.owner ? {} : { needsName: true }) }))
       .filter((l) => /^[1-9]\d{7,14}$/.test(l.phone));
+  const ownTargets = (d) => targets(d).filter((t) => get("leads", t.id)?.owner === d.owner);
   // Fills in the name the phone shows for this number. A name somebody already gave the lead is never replaced.
   function fillName(lead, value) {
     const name = cleanName(value);
@@ -101,7 +104,7 @@ export function createMobileSync({ db, all, get, put, stamp, tx, log, keyPath, o
     return named;
   }
   function nameLead(d, id, value) {
-    if (!targets(d).some((l) => l.id === id)) fail("Lead not accessible", 403);
+    if (!ownTargets(d).some((l) => l.id === id)) fail("Lead not accessible", 403);
     const before = get("leads", id);
     const after = tx(() => fillName(before, value));
     return { id, name: after.name, named: after !== before };

@@ -79,7 +79,8 @@ test("device credentials are hashed, redacted, owner scoped, and revocable", (t)
   const row = db.prepare("SELECT * FROM mobile_devices").get();
   assert.equal(row.token_hash, createHash("sha256").update(device.token).digest("hex"));
   assert.ok(!row.body.includes(device.token));
-  assert.deepEqual(api.targets(device), [{ id: "lead", phone: "919876543210" }]);
+  // every active lead's number, so the office phone still picks up calls with leads assigned to colleagues
+  assert.deepEqual(api.targets(device).map((t) => t.id).sort(), ["lead", "other-lead"]);
   for (const header of [undefined, "", `Basic ${device.token}`, "Bearer invalid"])
     assert.throws(() => api.authenticate(header), status(401));
   assert.throws(() => api.issue({ name: "Phone", owner: "absent" }), status(400));
@@ -235,7 +236,8 @@ test("devices cannot attach other devices' calls or reuse recording hashes withi
   const other = f.api.call(second, { ...f.payload(), startedAt: a.startedAt });
   assert.notEqual(other.id, a.id);
   assert.equal(f.api.recording(second, other.id, f.audio, f.meta(other)).duplicate, false);
-  f.put("leads", { ...f.get("leads", "lead"), owner: "other" });
+  // a lead moved to a colleague still takes the recording; an archived one does not
+  f.put("leads", { ...f.get("leads", "lead"), archived: true });
   assert.throws(
     () => f.api.recording(f.device, b.id, Buffer.from("OggS new"), f.meta(b)),
     status(409),
@@ -256,7 +258,7 @@ test("ambiguous automatic time matches require explicit manual review", (t) => {
 test("a refused recording is 409, so the phone skips that file and keeps syncing instead of signing out", (t) => {
   const f = fixture(t),
     a = f.api.call(f.device, f.payload());
-  f.put("leads", { id: "lead", name: "Saved lead", owner: "other", phone: "+91 98765 43210" });
+  f.put("leads", { id: "lead", name: "Saved lead", owner: "other", phone: "+91 98765 43210", archived: true });
   assert.throws(() => f.api.recording(f.device, a.id, f.audio, f.meta(a)), status(409));
   assert.throws(() => f.api.recording(f.device, "no-such-call", f.audio, {}), status(409));
 });
