@@ -1186,8 +1186,8 @@ const server = http.createServer(async (req, res) => {
       if(req.headers.origin&&!allowedOrigins.includes(req.headers.origin))bad('Origin refused',403);
       try{mcpAccess.authorize(req.headers.authorization);}catch(error){res.setHeader('WWW-Authenticate',`Bearer realm="salesdesk-mcp", resource_metadata="${publicOrigin}/.well-known/oauth-protected-resource/mcp"`);throw error;}
       if(req.method!=='POST'){res.setHeader('Allow','POST');bad('MCP uses POST JSON-RPC; SSE is not offered',405);}
-      const result=await crmMcp.rpc(req.headers.authorization,await body(req));
-      if(result===null){res.writeHead(202);res.end();}else send(200,result);return;
+      const result=await crmMcp.rpc(req.headers.authorization,await body(req),req.headers);
+      if(result===null){res.writeHead(202);res.end();}else send(result.httpStatus||200,result);return;
     }
     // the WhatsApp gateway posts customer messages here, signed with a secret both sides know; no browser session
     // one-click connect: the gateway hands over its key and secret here, with the one-time token our Connect button made
