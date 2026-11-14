@@ -43,7 +43,7 @@ export function createCrmMcp({ db, authorize, all, get, put, validate, tx, log, 
     if (!args.expectedUpdatedAt || args.expectedUpdatedAt !== current.updatedAt) fail('Lead changed; fetch and review the latest version', 409);
     if (name === 'lead_assign') { if (!get('users', args.owner)?.active) fail('Select an active workspace user'); }
     else {
-      const fields = ['name', 'company', 'phone', 'email', 'city', 'source', 'stage', 'disposition', 'value'];
+      const fields = ['name', 'company', 'phone', 'email', 'city', 'source', 'stage', 'disposition', 'value', 'lostReason'];
       if (!Object.keys(args.changes).length || Object.keys(args.changes).some(key => !fields.includes(key))) fail('Unsupported lead changes');
       validate('leads', args.changes, current);
     }

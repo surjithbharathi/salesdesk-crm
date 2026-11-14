@@ -334,6 +334,12 @@ function validate(kind, p, old = {}) {
         v.disposition = step.disposition;
       }
     } else if (old.stage !== undefined && v.stage !== old.stage) v.deal = "";
+    // closing a lead as Lost needs the reason, given with that same change (imports of new leads are left alone)
+    s("lostReason", 200);
+    const lostNow = v.disposition === "Lost" || v.deal === "Lost";
+    if (old.id && lostNow && old.disposition !== "Lost" && old.deal !== "Lost" && !String(p.lostReason ?? "").trim())
+      bad("Choose why this lead was lost");
+    if (!lostNow) v.lostReason = "";
   }
   if (kind === "tasks") {
     s("title", 300);
@@ -847,7 +853,7 @@ const mobileServer = http.createServer(async (req, res) => {
         }
         if (kind === "leads") {
           if (old) ownLead(userId, id);
-          const allowed = ["name", "phone", "countryCode", "mobileNumber", "company", "email", "city", "state", "language", "stage", "deal", "value"];
+          const allowed = ["name", "phone", "countryCode", "mobileNumber", "company", "email", "city", "state", "language", "stage", "deal", "value", "lostReason"];
           if (Object.keys(p).some((k) => !allowed.includes(k))) bad("Unsupported lead field");
           // the pipeline step, as on the web; back to New also clears the step and a Won / Lost result
           if (p.stage === "New" && !("deal" in p)) Object.assign(p, { deal: "", disposition: "" });
@@ -857,6 +863,7 @@ const mobileServer = http.createServer(async (req, res) => {
           log(record.id, "System", old ? "Lead updated from mobile" : "Lead created from mobile", {
             userId,
           });
+          if (old && record.lostReason && !old.lostReason) log(record.id, "System", `Lost reason: ${record.lostReason}`, { userId });
           return record;
         }
         if (old && old.owner !== userId) bad("Task not accessible", 403);
@@ -1923,6 +1930,7 @@ const server = http.createServer(async (req, res) => {
                   : "Lead created",
           );
           if (stepChanged && old.stage !== record.stage) log(record.id, "System", `Pipeline step changed: ${old.deal || "none"} → ${record.deal}`);
+          if (old && record.lostReason && !old.lostReason) log(record.id, "System", `Lost reason: ${record.lostReason}`);
           // a new owner is always written down with who made the change, so a lead that moved can be traced
           if (old && (old.owner || "") !== (record.owner || "")) {
             const who = (uid) => (uid && get("users", uid)?.name) || "nobody";

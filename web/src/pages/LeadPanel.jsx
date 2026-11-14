@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { crmSend } from "../api.js";
 import { useCrm, useLeadHistory, userName, phoneLabel, telHref, waHref, stageText } from "../crm.jsx";
-import { PIPELINE, pipelineStep } from "../pipeline.js";
+import { PIPELINE, pipelineStep, askLostReason } from "../pipeline.js";
 import { useToast } from "../toast.jsx";
 import { when, day, rupees, dueText, timeOnly, dayLabel, minutes } from "../format.js";
 import Icon from "../icons.jsx";
@@ -133,7 +133,9 @@ export function Update({ lead, crm }) {
       <h3>Stage</h3>
       <form className="work-form" onSubmit={(e) => {
         e.preventDefault();
-        change(`Moved to ${step}`, () => crmSend("PATCH", `leads/${lead.id}`, step === "New" ? { stage: "New", disposition: "", deal: "" } : { deal: step }));
+        const lostReason = step === "Lost" ? askLostReason(lead.name) : "";
+        if (step === "Lost" && !lostReason) return;
+        change(`Moved to ${step}`, () => crmSend("PATCH", `leads/${lead.id}`, step === "New" ? { stage: "New", disposition: "", deal: "" } : step === "Lost" ? { deal: step, lostReason } : { deal: step }));
       }}>
         <select className="field-input" value={step} onChange={(e) => setStep(e.target.value)} aria-label="Stage">
           <option value="New">New</option>

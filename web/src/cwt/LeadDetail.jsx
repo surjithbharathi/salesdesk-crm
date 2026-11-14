@@ -11,6 +11,7 @@ import { STATES, LANGUAGES } from "../regions.js";
 import { SourceTag, quickTimes, localInput } from "./LeadBits.jsx";
 import DateTimePicker from "../DateTimePicker.jsx";
 import ErpPanel from "./ErpPanel.jsx";
+import LostReason from "./LostReason.jsx";
 
 // One lead: a header (who, status, owner, call and WhatsApp), the stage bar, the conversation with a composer under it,
 // and on the right the next follow-up, the lead's fields and the enquiry it came with. Styles: cwt/r-leads.css (ld-*).
@@ -22,7 +23,7 @@ const FIELDS = [
   ["primary", "email", "Email"], ["primary", "phone", "Phone"], ["primary", "company", "Business"], ["primary", "city", "City"],
   ["primary", "state", "State"], ["primary", "language", "Language"],
   ["basic", "name", "Name"], ["basic", "source", "Source"],
-  ["others", "value", "Deal Value"], ["others", "id", "Lead ID"],
+  ["others", "lostReason", "Lost reason"], ["others", "value", "Deal Value"], ["others", "id", "Lead ID"],
 ];
 // The stage bar: the main steps of the pipeline. Steps in between light up the step they belong to.
 const STAGE_BAR = [["New", "New"], ["Discussion", "Requirement Discussion"], ["Interested", "Interested Customer"], ["Quotation", "Quotation Shared"], ["Advance", "Advance Received"], ["Won", "Won"]];
@@ -54,6 +55,7 @@ export function LeadDetail({ id, nav = null, compose: startWith = "" }) {
   const [tab, setTab] = useState("history");
   const [filter, setFilter] = useState("all");
   const [menu, setMenu] = useState("");
+  const [askLost, setAskLost] = useState(false); // closing as Lost waits for the reason
   const [compose, setCompose] = useState(startWith || "note");
   const [draft, setDraft] = useState("");
   const [waText, setWaText] = useState("");
@@ -153,7 +155,7 @@ export function LeadDetail({ id, nav = null, compose: startWith = "" }) {
   }
   const patch = (done, body) => run(done, () => crmSend("PATCH", `leads/${id}`, body));
   const setField = (key, val) => { if (value(key) === val) return; patch("Saved", { [key]: key === "value" ? Math.max(0, Number(val) || 0) : val.trim() }); };
-  const setStatus = (s) => { setMenu(""); if (s === status) return; patch(`Status updated to ${s}`, s === "New" ? { stage: "New", disposition: "", deal: "" } : { deal: s }); };
+  const setStatus = (s) => { setMenu(""); if (s === status) return; if (s === "Lost") return setAskLost(true); patch(`Status updated to ${s}`, s === "New" ? { stage: "New", disposition: "", deal: "" } : { deal: s }); };
   const doneTask = (t, done) => run(done ? "Follow-up done" : "", () => crmSend("PATCH", `tasks/${t.id}`, { status: done ? "Done" : "Open" }));
   const addTask = (title, due, owner) => crmSend("POST", "tasks", { leadId: id, title, due: due.toISOString(), status: "Open", owner: owner || raw.owner || crm.me.id || "" });
   const openWa = () => { setCompose("wa"); setTimeout(() => waInput.current?.focus(), 0); };
@@ -467,6 +469,7 @@ export function LeadDetail({ id, nav = null, compose: startWith = "" }) {
           <ErpPanel key={erpKey} leadId={raw.id} canEdit /* everyone who may open this lead; the server checks leads.write */ />
         </aside>
       </div>
+      {askLost && <LostReason name={raw.name} onClose={() => setAskLost(false)} onPick={(reason) => { setAskLost(false); patch("Closed as Lost", { deal: "Lost", lostReason: reason }); }} />}
     </div>
   );
 }
