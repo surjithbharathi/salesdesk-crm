@@ -9,8 +9,8 @@ import java.util.*;
 import org.json.*;
 
 /**
- * My day: today's numbers, then the one call to make next in a large card (who, why, what they said last, a big Call
- * button), then the next few follow-ups with their own call buttons. Goals, badges and the leaderboard follow below.
+ * My day: today's numbers, then the open follow-ups with their own call buttons, then the one call to make next in a
+ * large card (who, why, what they said last, a big Call button). Goals, badges and the leaderboard follow below.
  */
 final class MyDayView {
     private MyDayView() {}
@@ -32,41 +32,52 @@ final class MyDayView {
         LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-1, -2); sp.setMargins(0, a.dp(4), 0, a.dp(14));
         a.content.addView(stats, sp);
 
-        // the next call: the CRM's pick (late follow-up, uncalled new lead, follow-up due today), else the earliest follow-up here
+        // follow-ups first: every open one, soonest first, each with its own call button
+        followups(a, open, leads);
+
+        // then the next call: the CRM's pick (late follow-up, uncalled new lead, follow-up due today), else the earliest follow-up here
         JSONObject next = d.optJSONObject("next");
         String reason = next == null ? "" : next.optString("reason");
+        if (next != null && next.optString("name").trim().isEmpty() && next.optString("phone").trim().isEmpty()) {
+            // the pick came without a name or number; use the lead saved here, or leave the card out rather than show "?"
+            JSONObject l = leads.get(next.optString("id"));
+            next = l != null && !(l.optString("name").trim().isEmpty() && l.optString("phone").trim().isEmpty()) ? l : null;
+        }
         if (next == null && !open.isEmpty()) {
             JSONObject t = open.get(0), l = leads.get(t.optString("leadId"));
             if (l != null) { next = l; reason = Ui.ms(t.optString("due")) < System.currentTimeMillis() ? "Follow-up is late" : "Follow-up " + Ui.dayLabel(Ui.ms(t.optString("due"))).toLowerCase(Locale.ROOT) + " at " + Ui.clock(Ui.ms(t.optString("due"))); }
         }
-        if (next != null) nextCard(a, next, reason, leads.get(next.optString("id")));
-        else {
+        if (next != null) {
+            LinearLayout.LayoutParams gap = new LinearLayout.LayoutParams(-1, a.dp(14)); a.content.addView(new android.view.View(a), gap);
+            nextCard(a, next, reason, leads.get(next.optString("id")));
+        } else if (open.isEmpty()) {
             LinearLayout calm = a.column(); calm.setPadding(a.dp(18), a.dp(18), a.dp(18), a.dp(18)); calm.setBackground(a.surface(MainActivity.SOFT, 20));
             calm.addView(Ui.text(a, "You are all caught up", 18, true, MainActivity.INK));
             TextView s = Ui.text(a, "No late follow-ups and no uncalled leads. New enquiries will show here.", 14, false, MainActivity.MUTED); s.setPadding(0, a.dp(4), 0, 0); calm.addView(s);
             a.content.addView(calm, new LinearLayout.LayoutParams(-1, -2));
         }
 
-        // up next: the following follow-ups, each with a call button
-        String nextId = next == null ? "" : next.optString("id");
-        List<JSONObject> rest = new ArrayList<>();
-        for (JSONObject t : open) if (!t.optString("leadId").equals(nextId) && leads.containsKey(t.optString("leadId"))) rest.add(t);
-        if (!rest.isEmpty()) {
-            TextView all = Ui.heading(a, a.content, "Up next", "See all " + open.size(), MainActivity.MUTED);
-            all.setTextColor(MainActivity.ACCENT); all.setFocusable(true); all.setOnClickListener(v -> { a.screen = "To-do"; TodoView.tab = "followups"; a.render(); });
-            LinearLayout g = Ui.group(a, a.content);
-            for (int i = 0; i < Math.min(3, rest.size()); i++) {
-                JSONObject t = rest.get(i), l = leads.get(t.optString("leadId"));
-                if (i > 0) Ui.hairline(a, g, 70);
-                long when = Ui.ms(t.optString("due")); boolean late = when > 0 && when < System.currentTimeMillis();
-                String sub = (late ? "Late since " + (Ui.dayLabel(when).equals("Today") ? Ui.clock(when) : Ui.dayLabel(when).toLowerCase(Locale.ROOT)) : Ui.dayLabel(when).equals("Today") ? Ui.clock(when) : Ui.dayLabel(when)) + " · " + t.optString("title");
-                LinearLayout row = Ui.row(a, g, Ui.avatar(a, l.optString("name"), true, 40), l.optString("name"), sub, MainActivity.INK, late ? MainActivity.RED : MainActivity.MUTED);
-                row.addView(Ui.callButton(a, l.optString("phone"), l.optString("name")));
-                row.setFocusable(true); row.setOnClickListener(v -> LeadScreen.open(a, l.optString("id"), l));
-            }
-        }
-
         a.progress(d);
+    }
+
+    /** The open follow-ups (late ones in red), up to five, with "See all" opening the To-do list. */
+    private static void followups(MainActivity a, List<JSONObject> open, Map<String, JSONObject> leads) {
+        List<JSONObject> shown = new ArrayList<>();
+        for (JSONObject t : open) if (leads.containsKey(t.optString("leadId"))) shown.add(t);
+        if (shown.isEmpty()) return;
+        TextView all = Ui.heading(a, a.content, "Follow-ups", shown.size() > 5 ? "See all " + shown.size() : "", MainActivity.MUTED);
+        if (shown.size() > 5) { all.setTextColor(MainActivity.ACCENT); all.setFocusable(true); all.setOnClickListener(v -> { a.screen = "To-do"; TodoView.tab = "followups"; a.render(); }); }
+        LinearLayout g = Ui.group(a, a.content);
+        for (int i = 0; i < Math.min(5, shown.size()); i++) {
+            JSONObject t = shown.get(i), l = leads.get(t.optString("leadId"));
+            if (i > 0) Ui.hairline(a, g, 70);
+            long when = Ui.ms(t.optString("due")); boolean late = when > 0 && when < System.currentTimeMillis();
+            String time = when == 0 ? "No date" : late ? "Late since " + (Ui.dayLabel(when).equals("Today") ? Ui.clock(when) : Ui.dayLabel(when).toLowerCase(Locale.ROOT)) : Ui.dayLabel(when).equals("Today") ? "Today " + Ui.clock(when) : Ui.dayLabel(when) + " " + Ui.clock(when);
+            String title = t.optString("title").trim(), name = l.optString("name").trim().isEmpty() ? l.optString("phone") : l.optString("name");
+            LinearLayout row = Ui.row(a, g, Ui.avatar(a, name, true, 40), name, title.isEmpty() ? time : time + " · " + title, MainActivity.INK, late ? MainActivity.RED : MainActivity.MUTED);
+            row.addView(Ui.callButton(a, l.optString("phone"), name));
+            row.setFocusable(true); row.setOnClickListener(v -> LeadScreen.open(a, l.optString("id"), l));
+        }
     }
 
     private static void stat(MainActivity a, LinearLayout row, String value, String label, int color) {
