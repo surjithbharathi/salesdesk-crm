@@ -36,6 +36,7 @@ import "./cwt/r-leads.css";
 import "./cwt/r-dash.css";
 import "./cwt/r-pages.css";
 import "./cwt/r-msg.css";
+import "./cwt/dark.css";
 
 createRoot(document.getElementById("root")).render(
   <ToastProvider>
