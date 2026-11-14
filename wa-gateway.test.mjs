@@ -234,3 +234,20 @@ test("a reply sent from the WhatsApp app on the phone is shown on the lead as ou
   assert.equal(f.gw.receive(replied, sign(replied)).duplicate, true);
   assert.equal(f.all("messages").filter((m) => m.providerId === "echo-2").length, 1);
 });
+
+test("a WhatsApp message a person sends moves a New lead to Prospecting; an automation's message does not", async (t) => {
+  const f = fixture(t);
+  await ready(f);
+  const body = event();
+  const { leadId } = f.gw.receive(body, sign(body));
+  assert.equal(f.get("leads", leadId).stage, "New", "the customer writing in is not our contact yet");
+  await f.gw.send(leadId, { template: "devi_welcome_v2", params: ["Ravi"] }, "");
+  assert.equal(f.get("leads", leadId).stage, "New", "an automatic welcome does not count");
+  await f.gw.send(leadId, { text: "Vanakkam" }, "sales");
+  assert.equal(f.get("leads", leadId).stage, "Prospecting");
+  // a reply typed in the WhatsApp app on the gateway number counts too
+  f.put("leads", { id: "fresh", name: "Fresh", phone: "+91 98765 00077", owner: "owner", stage: "New" });
+  const typed = event({ wa_id: "919876500077", message_id: "wamid.TYPED" }, "message.sent");
+  f.gw.receive(typed, sign(typed));
+  assert.equal(f.get("leads", "fresh").stage, "Prospecting");
+});
