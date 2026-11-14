@@ -1,4 +1,5 @@
 import { isBlocked } from "./blocked-numbers.mjs";
+import { markContacted } from "./first-contact.mjs";
 import { createHash, randomBytes, randomUUID, createCipheriv, createDecipheriv } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync, chmodSync } from "node:fs";
 import { dirname } from "node:path";
@@ -223,6 +224,8 @@ export function createMobileSync({ db, all, get, put, stamp, tx, log, keyPath, o
         activityId: activity.id,
       });
       put("mobileCalls", record);
+      // a call that was answered is the first real contact: a New lead moves on by itself
+      if (!["Missed", "Rejected"].includes(p.direction) && p.duration > 0) markContacted({ get, put, log }, lead.id, "an answered call", new Date(p.startedAt).toISOString());
       return record;
     });
   }

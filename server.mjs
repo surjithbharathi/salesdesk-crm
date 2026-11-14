@@ -39,6 +39,7 @@ import { scopedState, visibleTo } from "./user-scope.mjs";
 import { createClickToCall } from "./click-to-call.mjs";
 import { bridgeConfig, createAutomationBridge } from "./automation-bridge.mjs";
 import { createWorkflows } from "./workflows.mjs";
+import { markContacted } from "./first-contact.mjs";
 import { createSalesmaxImport } from "./salesmax-import.mjs";
 import { createAppUpdate } from "./app-update.mjs";
 import { pipeline as streamPipeline } from "node:stream/promises";
@@ -1054,6 +1055,8 @@ const whatsapp = createWhatsApp({
         occurredAt: message.occurredAt,
         ...from,
       });
+      // a message sent from the linked personal WhatsApp is the first real contact: a New lead moves on by itself
+      if (message.direction === "Outgoing") markContacted({ get, put, log }, lead.id, "a WhatsApp message", message.occurredAt || new Date().toISOString());
     });
     return true;
   },

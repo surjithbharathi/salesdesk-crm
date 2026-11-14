@@ -99,7 +99,7 @@ test("call sync lands on the lead with the number, whoever owns it, and is idemp
   const c = f.api.call(f.device, p);
   assert.equal(f.api.call(f.device, p).id, c.id);
   assert.equal(f.all("mobileCalls").length, 1);
-  assert.equal(f.all("activities").length, 1);
+  assert.equal(f.all("activities").filter((a) => a.type === "Call").length, 1);
   assert.throws(() => f.api.call(f.device, { ...p, duration: 31 }), status(409));
   // the same call written twice in the phone's call log lands once
   assert.equal(f.api.call(f.device, { ...p, localId: "call-1-twin", startedAt: p.startedAt + 1000 }).id, c.id);
@@ -278,4 +278,21 @@ test("the phone's number list stays under the 1 MB the app accepts, own leads al
   const others = list.filter((x) => !x.id);
   assert.ok(others.length > 0);
   assert.equal(others[0].phone, "918100029999", "the most recently active other number comes first");
+});
+
+test("an answered call moves a New lead to Prospecting; a missed or unanswered one does not", (t) => {
+  const f = fixture(t);
+  f.put("leads", { ...f.get("leads", "lead"), stage: "New" });
+  f.api.call(f.device, f.payload({ localId: "missed", direction: "Missed", duration: 0 }));
+  f.api.call(f.device, f.payload({ localId: "no-answer", direction: "Outgoing", duration: 0, startedAt: Date.now() - 90000 }));
+  assert.equal(f.get("leads", "lead").stage, "New", "nobody was reached yet");
+  f.api.call(f.device, f.payload({ localId: "talked", duration: 45, startedAt: Date.now() - 120000 }));
+  const lead = f.get("leads", "lead");
+  assert.equal(lead.stage, "Prospecting");
+  assert.ok(lead.firstTouchAt);
+  assert.ok(f.all("activities").some((a) => a.leadId === "lead" && a.type === "System" && /New to Prospecting/.test(a.description)));
+  // a lead already further on stays where it is
+  f.put("leads", { ...f.get("leads", "lead"), stage: "Opportunity", deal: "Interested Customer" });
+  f.api.call(f.device, f.payload({ localId: "again", duration: 20, startedAt: Date.now() - 150000 }));
+  assert.equal(f.get("leads", "lead").stage, "Opportunity");
 });

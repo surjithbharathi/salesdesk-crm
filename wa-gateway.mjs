@@ -1,4 +1,5 @@
 import { isBlocked } from "./blocked-numbers.mjs";
+import { markContacted } from "./first-contact.mjs";
 // Connects this CRM to the Devi WhatsApp gateway (Meta Cloud API, several Devi numbers).
 //   The gateway tells us about every customer message with a signed POST (header X-Devi-Signature: "sha256=" + HMAC-SHA256 of the body),
 //   and we send messages and read history through its REST API (header X-Api-Key). Nothing here stores a customer's WhatsApp login.
@@ -184,6 +185,8 @@ export function createWaGateway({ db, all, get, put, stamp, tx, log, keyPath, sy
         log(lead.id, "System", `Lead created from WhatsApp${d.number_label ? ` on ${d.number_label}` : ""}`);
       }
       const result = record(lead, { providerId: d.message_id, jid: phone, direction: outgoing ? "Outgoing" : "Incoming", kind: String(d.kind || "text").slice(0, 30), text, occurredAt: at, status: outgoing ? "Sent" : "Received", phoneId: String(d.phone_id || ""), numberLabel: String(d.number_label || ""), hasFile: Boolean(d.has_file) }, { phoneId: String(d.phone_id || ""), label: String(d.number_label || "") });
+      // a reply somebody typed in the WhatsApp app is the first real contact
+      if (outgoing && !result.duplicate) markContacted({ get, put, log }, lead.id, "a WhatsApp message", at);
       return { ...result, leadId: lead.id, created };
     });
   }
@@ -231,7 +234,11 @@ export function createWaGateway({ db, all, get, put, stamp, tx, log, keyPath, sy
     const id = randomUUID();
     const sent = await call("/api/send", { method: "POST", body: JSON.stringify({ to: key2, ...(template ? { template, params, language: input.language || "en" } : { text }), from_phone_id: fromNumber(lead, input.fromPhoneId) || undefined, idempotency_key: `salesdesk:${id}` }) });
     const when = new Date(now()).toISOString();
-    tx(() => record(lead, { providerId: sent.message_id || `salesdesk:${id}`, jid: key2, direction: "Outgoing", kind: template ? "template" : "text", text: template ? `Template ${template}${params.length ? `: ${params.join(", ")}` : ""}` : text, occurredAt: when, status: "Sent", userId: actor, phoneId: fromNumber(lead, input.fromPhoneId) }));
+    tx(() => {
+      record(lead, { providerId: sent.message_id || `salesdesk:${id}`, jid: key2, direction: "Outgoing", kind: template ? "template" : "text", text: template ? `Template ${template}${params.length ? `: ${params.join(", ")}` : ""}` : text, occurredAt: when, status: "Sent", userId: actor, phoneId: fromNumber(lead, input.fromPhoneId) });
+      // a message a person sent from the CRM is the first real contact (automations send with no person, and do not count)
+      if (actor) markContacted({ get, put, log }, lead.id, "a WhatsApp message", when);
+    });
     return { id, messageId: sent.message_id || "" };
   }
   // A message from Salesdesk itself to a staff number (sign-in codes). Not tied to a lead and not saved in any chat.
