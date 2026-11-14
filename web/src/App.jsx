@@ -8,7 +8,7 @@ import TeleDashboard from "./pages/TeleDashboard.jsx";
 import CwShell from "./cw/Shell.jsx";
 import CwDashboard from "./cw/Dashboard.jsx";
 import CwtShell from "./cwt/Shell.jsx";
-import Login from "./cwt/Login.jsx";
+import Login, { McpConsent } from "./cwt/Login.jsx";
 import CwtDashboard from "./cwt/Dashboard.jsx";
 import CwtViews from "./cwt/Views.jsx";
 import { CwtCalls, CwtSearch, CwtFollowups, CwtReports } from "./cwt/Pages.jsx";
@@ -118,6 +118,8 @@ export default function App() {
   if (session.state === "error") return <main className="screen"><p className="error">{session.message}</p></main>;
 
   const { path, params } = parseHash();
+  // an AI app asking to connect over MCP: the admin approves it here before anything else
+  if (path === "mcp" && /^[a-f0-9-]{36}$/.test(params.oauth_request || "")) return <McpConsent id={params.oauth_request} admin={session.user?.role === "admin"} />;
   const owner = meta.lead; // owners, admins and managers see the whole team; callers see only their own day
   const baseNav = owner ? NAV_LEAD : NAV_CALLER;
   // that look has a search page of its own, right after Leads
