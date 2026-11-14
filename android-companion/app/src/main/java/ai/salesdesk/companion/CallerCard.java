@@ -89,7 +89,7 @@ final class CallerCard {
         if (d.optBoolean("blocked")) return;
         FrameLayout outer = new FrameLayout(c); outer.setPadding(dp(c, 12), 0, dp(c, 12), 0);
         LinearLayout box = new LinearLayout(c); box.setOrientation(LinearLayout.VERTICAL); box.setPadding(dp(c, 16), dp(c, 14), dp(c, 16), dp(c, 12));
-        GradientDrawable bg = new GradientDrawable(); bg.setColor(Color.WHITE); bg.setCornerRadius(dp(c, 18)); bg.setStroke(dp(c, 1), MainActivity.LINE);
+        GradientDrawable bg = new GradientDrawable(); bg.setColor(MainActivity.CARD); bg.setCornerRadius(dp(c, 18)); bg.setStroke(dp(c, 1), MainActivity.LINE);
         box.setBackground(bg); box.setElevation(dp(c, 10));
         outer.addView(box, new FrameLayout.LayoutParams(-1, -2));
         LinearLayout head = new LinearLayout(c); head.setGravity(Gravity.CENTER_VERTICAL);
@@ -142,7 +142,7 @@ final class CallerCard {
     private static String talk(long s) { return s < 60 ? s + " s" : (s / 60) + " min " + (s % 60) + " s"; }
     private static Button plain(Context c, String text, Runnable run) {
         Button b = new Button(c); b.setText(text); b.setAllCaps(false); b.setTextColor(MainActivity.ACCENT); b.setTextSize(14);
-        GradientDrawable g = new GradientDrawable(); g.setColor(Color.WHITE); g.setStroke(dp(c, 1), MainActivity.ACCENT); g.setCornerRadius(dp(c, 10)); b.setBackground(g);
+        GradientDrawable g = new GradientDrawable(); g.setColor(MainActivity.CARD); g.setStroke(dp(c, 1), MainActivity.ACCENT); g.setCornerRadius(dp(c, 10)); b.setBackground(g);
         b.setPadding(dp(c, 14), 0, dp(c, 14), 0); b.setMinHeight(dp(c, 40)); b.setMinimumHeight(dp(c, 40));
         b.setOnClickListener(v -> run.run());
         return b;
@@ -156,7 +156,7 @@ final class CallerCard {
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(c, 16), dp(c, 14), dp(c, 16), dp(c, 12));
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(Color.WHITE); bg.setCornerRadius(dp(c, 18)); bg.setStroke(dp(c, 1), MainActivity.LINE);
+        bg.setColor(MainActivity.CARD); bg.setCornerRadius(dp(c, 18)); bg.setStroke(dp(c, 1), MainActivity.LINE);
         box.setBackground(bg);
         box.setElevation(dp(c, 10));
         outer.addView(box, new FrameLayout.LayoutParams(-1, -2));

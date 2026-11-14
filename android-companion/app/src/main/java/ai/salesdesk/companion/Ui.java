@@ -21,7 +21,7 @@ import org.json.JSONObject;
  * rounded pill buttons. Green always means calling and red always means missed or late; the brand colour means neither.
  */
 final class Ui {
-    static final int CALL = 0xff22a052, CALL_SOFT = 0xffe6f4ea, CALL_INK = 0xff17803d;
+    static final int CALL = 0xff22a052; static int CALL_SOFT = 0xffe6f4ea, CALL_INK = 0xff17803d;
     private static final int[] AVATARS = {0xff1f4fd1, 0xff8e5bb5, 0xff2f7fb8, 0xff16805f, 0xffd35400, 0xff7a2e73, 0xff0f6e6e, 0xffb7472a};
 
     private Ui() {}
@@ -40,7 +40,7 @@ final class Ui {
         t.setGravity(Gravity.CENTER); t.setTextColor(Color.WHITE); t.setTypeface(Typeface.DEFAULT_BOLD);
         t.setText(known ? initials(name) : "👤"); t.setTextSize(known ? Math.max(12, size / 3f) : size / 2.6f);
         t.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        GradientDrawable c = new GradientDrawable(); c.setShape(GradientDrawable.OVAL); c.setColor(known ? avatarColor(name) : 0xffb0b8c4);
+        GradientDrawable c = new GradientDrawable(); c.setShape(GradientDrawable.OVAL); c.setColor(known ? avatarColor(name) : MainActivity.DARK ? 0xff4a4f68 : 0xffb0b8c4);
         t.setBackground(c);
         t.setLayoutParams(new LinearLayout.LayoutParams(a.dp(size), a.dp(size)));
         return t;
@@ -87,9 +87,9 @@ final class Ui {
         String l = label.toLowerCase(Locale.ROOT);
         if (l.equals("new")) return new int[]{MainActivity.SOFT, MainActivity.ACCENT};
         if (l.contains("interest") || l.contains("won") || l.contains("order")) return new int[]{CALL_SOFT, CALL_INK};
-        if (l.contains("quot")) return new int[]{0xfffff3dc, 0xff8a5200};
-        if (l.contains("lost") || l.contains("not interested")) return new int[]{0xfffde8e7, 0xffa52a24};
-        return new int[]{0xffeef2f4, 0xff45525c};
+        if (l.contains("quot")) return MainActivity.DARK ? new int[]{0xff35290f, 0xfff2b75a} : new int[]{0xfffff3dc, 0xff8a5200};
+        if (l.contains("lost") || l.contains("not interested")) return MainActivity.DARK ? new int[]{0xff3b1d20, 0xffff8a82} : new int[]{0xfffde8e7, 0xffa52a24};
+        return MainActivity.DARK ? new int[]{0xff1f2438, 0xffc3c6d6} : new int[]{0xffeef2f4, 0xff45525c};
     }
 
     static TextView chip(MainActivity a, String label, int bg, int fg) {
@@ -108,7 +108,7 @@ final class Ui {
     /** A white rounded card that holds rows separated by hairlines (call rows add their own). */
     static LinearLayout group(MainActivity a, LinearLayout parent) {
         LinearLayout g = a.column();
-        GradientDrawable bg = a.surface(Color.WHITE, 16); bg.setStroke(a.dp(1), MainActivity.LINE); g.setBackground(bg);
+        GradientDrawable bg = a.surface(MainActivity.CARD, 16); bg.setStroke(a.dp(1), MainActivity.LINE); g.setBackground(bg);
         g.setClipToOutline(true);
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, -2); p.setMargins(0, 0, 0, a.dp(8));
         parent.addView(g, p);
@@ -164,7 +164,7 @@ final class Ui {
         TextView t = new TextView(a); t.setText(label); t.setTextSize(13); t.setGravity(Gravity.CENTER); t.setSingleLine(true);
         t.setTypeface(Typeface.create(on ? "sans-serif-medium" : "sans-serif", Typeface.NORMAL));
         t.setTextColor(on ? Color.WHITE : MainActivity.INK); t.setPadding(a.dp(14), 0, a.dp(14), 0); t.setMinHeight(a.dp(38)); t.setMinimumHeight(a.dp(38));
-        GradientDrawable g = a.surface(on ? MainActivity.ACCENT : Color.WHITE, 19); if (!on) g.setStroke(a.dp(1), MainActivity.LINE); t.setBackground(g);
+        GradientDrawable g = a.surface(on ? MainActivity.ACCENT : MainActivity.CARD, 19); if (!on) g.setStroke(a.dp(1), MainActivity.LINE); t.setBackground(g);
         t.setSelected(on); t.setFocusable(true); t.setClickable(true);
         t.setOnClickListener(v -> run.run());
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-2, a.dp(38)); p.setMargins(0, 0, a.dp(8), a.dp(8)); t.setLayoutParams(p);

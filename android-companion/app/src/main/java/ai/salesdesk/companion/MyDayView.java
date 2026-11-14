@@ -82,7 +82,7 @@ final class MyDayView {
 
     private static void stat(MainActivity a, LinearLayout row, String value, String label, int color) {
         LinearLayout tile = a.column(); tile.setPadding(a.dp(12), a.dp(10), a.dp(10), a.dp(10));
-        android.graphics.drawable.GradientDrawable bg = a.surface(Color.WHITE, 14); bg.setStroke(a.dp(1), MainActivity.LINE); tile.setBackground(bg);
+        android.graphics.drawable.GradientDrawable bg = a.surface(MainActivity.CARD, 14); bg.setStroke(a.dp(1), MainActivity.LINE); tile.setBackground(bg);
         TextView v = Ui.text(a, value, 24, true, color); v.setTypeface(Typeface.DEFAULT_BOLD); v.setFontFeatureSettings("tnum"); tile.addView(v);
         tile.addView(Ui.text(a, label, 12, false, MainActivity.MUTED));
         tile.setContentDescription(label + ", " + value);
@@ -92,7 +92,7 @@ final class MyDayView {
 
     private static void nextCard(MainActivity a, JSONObject next, String reason, JSONObject lead) {
         String name = next.optString("name"), phone = next.optString("phone");
-        LinearLayout card = a.column(); card.setPadding(a.dp(18), a.dp(16), a.dp(18), a.dp(18)); card.setBackground(a.surface(MainActivity.ACCENT, 20));
+        LinearLayout card = a.column(); card.setPadding(a.dp(18), a.dp(16), a.dp(18), a.dp(18)); card.setBackground(a.surface(MainActivity.DARK ? 0xff2a49c2 : MainActivity.ACCENT, 20));
         int soft = 0xffd3defa;
         LinearLayout top = a.horizontal();
         TextView label = Ui.text(a, "Next call", 13, true, soft); top.addView(label, new LinearLayout.LayoutParams(0, -2, 1));
@@ -102,7 +102,7 @@ final class MyDayView {
 
         LinearLayout who = a.horizontal(); who.setPadding(0, a.dp(12), 0, a.dp(12));
         TextView av = Ui.avatar(a, name, true, 52);
-        android.graphics.drawable.GradientDrawable white = new android.graphics.drawable.GradientDrawable(); white.setShape(android.graphics.drawable.GradientDrawable.OVAL); white.setColor(Color.WHITE);
+        android.graphics.drawable.GradientDrawable white = new android.graphics.drawable.GradientDrawable(); white.setShape(android.graphics.drawable.GradientDrawable.OVAL); white.setColor(MainActivity.CARD);
         av.setBackground(white); av.setTextColor(MainActivity.ACCENT); who.addView(av);
         LinearLayout names = a.column(); names.setPadding(a.dp(12), 0, 0, 0);
         TextView n = Ui.text(a, name, 20, true, Color.WHITE); n.setTypeface(Typeface.DEFAULT_BOLD); names.addView(n);

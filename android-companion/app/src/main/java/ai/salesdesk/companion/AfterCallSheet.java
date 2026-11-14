@@ -43,7 +43,7 @@ final class AfterCallSheet {
         s.label("What was said");
         said = new EditText(a); said.setHint("Wants 5 HP with installation, checking with partner"); said.setMinLines(2); said.setTextSize(15); said.setTextColor(MainActivity.INK);
         said.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
-        android.graphics.drawable.GradientDrawable g = a.surface(android.graphics.Color.WHITE, 14); g.setStroke(a.dp(1), MainActivity.LINE); said.setBackground(g); said.setPadding(a.dp(12), a.dp(10), a.dp(12), a.dp(10));
+        android.graphics.drawable.GradientDrawable g = a.surface(MainActivity.CARD, 14); g.setStroke(a.dp(1), MainActivity.LINE); said.setBackground(g); said.setPadding(a.dp(12), a.dp(10), a.dp(12), a.dp(10));
         said.setContentDescription("What was said");
         s.body.addView(said, new LinearLayout.LayoutParams(-1, -2));
         pickOutcome(outcome);

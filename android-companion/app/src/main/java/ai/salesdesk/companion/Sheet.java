@@ -23,10 +23,10 @@ final class Sheet {
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
         LinearLayout root = a.column();
         float r = a.dp(24);
-        GradientDrawable bg = new GradientDrawable(); bg.setColor(Color.WHITE); bg.setCornerRadii(new float[]{r, r, r, r, 0, 0, 0, 0});
+        GradientDrawable bg = new GradientDrawable(); bg.setColor(MainActivity.CARD); bg.setCornerRadii(new float[]{r, r, r, r, 0, 0, 0, 0});
         root.setBackground(bg);
         root.setPadding(a.dp(16), a.dp(10), a.dp(16), a.dp(16));
-        View handle = new View(a); handle.setBackground(a.surface(0xffd6d5df, 2));
+        View handle = new View(a); handle.setBackground(a.surface(MainActivity.DARK ? 0xff4a4f68 : 0xffd6d5df, 2));
         LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(a.dp(40), a.dp(4)); hp.gravity = Gravity.CENTER_HORIZONTAL; hp.setMargins(0, 0, 0, a.dp(14));
         root.addView(handle, hp);
         TextView t = Ui.text(a, title, 18, true, MainActivity.INK); t.setTypeface(android.graphics.Typeface.DEFAULT_BOLD); root.addView(t);
@@ -64,7 +64,7 @@ final class Sheet {
     /** A big grid button (outcomes): outlined, or blue-edged when chosen. */
     TextView option(String s, boolean on, Runnable run) {
         TextView t = Ui.text(a, s, 14, true, on ? MainActivity.ACCENT : MainActivity.INK); t.setGravity(Gravity.CENTER); t.setMinHeight(a.dp(48));
-        GradientDrawable g = a.surface(on ? MainActivity.SOFT : Color.WHITE, 14); g.setStroke(a.dp(on ? 2 : 1), on ? MainActivity.ACCENT : MainActivity.LINE); t.setBackground(g);
+        GradientDrawable g = a.surface(on ? MainActivity.SOFT : MainActivity.CARD, 14); g.setStroke(a.dp(on ? 2 : 1), on ? MainActivity.ACCENT : MainActivity.LINE); t.setBackground(g);
         t.setSelected(on); t.setFocusable(true); t.setClickable(true); t.setOnClickListener(v -> run.run());
         return t;
     }
@@ -73,7 +73,7 @@ final class Sheet {
         foot.removeAllViews();
         if (skip != null) {
             TextView s = Ui.pill(a, skip, false, MainActivity.MUTED, () -> { if (onSkip != null) onSkip.run(); dialog.dismiss(); });
-            GradientDrawable g = a.surface(Color.WHITE, 26); g.setStroke(a.dp(1), MainActivity.LINE); s.setBackground(g); s.setMinHeight(a.dp(52));
+            GradientDrawable g = a.surface(MainActivity.CARD, 26); g.setStroke(a.dp(1), MainActivity.LINE); s.setBackground(g); s.setMinHeight(a.dp(52));
             LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-2, a.dp(52)); p.setMarginEnd(a.dp(8)); foot.addView(s, p);
         }
         TextView m = Ui.pill(a, main, true, MainActivity.ACCENT, onMain); m.setTextSize(16);

@@ -60,10 +60,10 @@ final class LeadScreen {
     private void show() {
         dialog = new Dialog(a, android.R.style.Theme_Material_Light_NoActionBar);
         LinearLayout root = a.column();
-        root.setBackgroundColor(android.graphics.Color.WHITE);
+        root.setBackgroundColor(MainActivity.CARD);
         Ui.clearBars(root, true, true);
         header = a.column();
-        header.setBackgroundColor(android.graphics.Color.WHITE);
+        header.setBackgroundColor(MainActivity.CARD);
         header.setPadding(dp(4), dp(4), dp(4), 0);
         root.addView(header, new LinearLayout.LayoutParams(-1, -2));
         View edge = new View(a); edge.setBackgroundColor(MainActivity.LINE);
@@ -78,8 +78,8 @@ final class LeadScreen {
         Window w = dialog.getWindow();
         if (w != null) {
             w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
-            w.setStatusBarColor(android.graphics.Color.WHITE);
-            w.setNavigationBarColor(android.graphics.Color.WHITE);
+            w.setStatusBarColor(MainActivity.CARD);
+            w.setNavigationBarColor(MainActivity.CARD);
             if (MainActivity.LIGHTBARS) w.getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
         }
         dialog.show();
@@ -173,7 +173,7 @@ final class LeadScreen {
         if (canEdit()) { stage.setOnClickListener(v -> chooseStage()); stage.setContentDescription("Stage " + stageLabel() + ". Change stage"); }
         chips.addView(stage);
         String owner = lead.optString("ownerName");
-        TextView ow = Ui.chip(a, owner.isEmpty() ? (lead.optString("owner").isEmpty() ? "Unassigned" : "Owner") : owner, MainActivity.NEUTRAL, 0xff45525c); ow.setPadding(dp(10), dp(5), dp(10), dp(5)); chips.addView(ow);
+        TextView ow = Ui.chip(a, owner.isEmpty() ? (lead.optString("owner").isEmpty() ? "Unassigned" : "Owner") : owner, MainActivity.NEUTRAL, MainActivity.DARK ? 0xffc3c6d6 : 0xff45525c); ow.setPadding(dp(10), dp(5), dp(10), dp(5)); chips.addView(ow);
         // the owner, as on the web: the lead's owner, an admin, or anyone for a lead nobody owns can give it to someone else
         if (data != null && data.optBoolean("canAssign") && data.optJSONArray("team") != null) { ow.setText(ow.getText() + "  \u25BE"); ow.setOnClickListener(v -> chooseOwner()); ow.setContentDescription("Owner " + (owner.isEmpty() ? "none" : owner) + ". Change owner"); }
         names.addView(chips);
@@ -220,7 +220,7 @@ final class LeadScreen {
     private LinearLayout box() {
         LinearLayout c = a.column();
         c.setPadding(dp(16), dp(12), dp(16), dp(12));
-        GradientDrawable bg = a.surface(Color.WHITE, MainActivity.RADIUS);
+        GradientDrawable bg = a.surface(MainActivity.CARD, MainActivity.RADIUS);
         bg.setStroke(dp(1), MainActivity.LINE);
         c.setBackground(bg);
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, -2);
@@ -282,7 +282,7 @@ final class LeadScreen {
                 b.setTextSize(13);
                 b.setTextColor(MainActivity.PURPLE);
                 b.setPadding(dp(12), dp(8), dp(12), dp(8));
-                GradientDrawable bg = a.surface(Color.WHITE, 8);
+                GradientDrawable bg = a.surface(MainActivity.CARD, 8);
                 bg.setStroke(dp(1), MainActivity.LINE);
                 b.setBackground(bg);
                 LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-2, -2);
@@ -299,7 +299,7 @@ final class LeadScreen {
         JSONArray acts = data.optJSONArray("activities");
         if (acts == null || acts.length() == 0) { TextView t = text(body, "Nothing has been recorded for this lead yet. Call, add a note or plan a follow-up.", 13, false); t.setTextColor(MainActivity.MUTED); return; }
         // the conversation fills the area under the header on a soft chat background, like the web lead page
-        body.setBackgroundColor(0xFFF0EEE9);
+        body.setBackgroundColor(MainActivity.DARK ? 0xff0b0e1a : 0xFFF0EEE9);
         HistoryView.draw(a, body, acts, lead.optString("name"));
     }
 

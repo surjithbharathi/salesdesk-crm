@@ -40,7 +40,7 @@ final class FollowUpSheet {
         s.label("What to do");
         what = new EditText(a); what.setText(title == null || title.isEmpty() ? "Call back" : title); what.setSingleLine(); what.setTextSize(15); what.setTextColor(MainActivity.INK);
         what.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
-        android.graphics.drawable.GradientDrawable g = a.surface(android.graphics.Color.WHITE, 14); g.setStroke(a.dp(1), MainActivity.LINE); what.setBackground(g); what.setPadding(a.dp(12), 0, a.dp(12), 0);
+        android.graphics.drawable.GradientDrawable g = a.surface(MainActivity.CARD, 14); g.setStroke(a.dp(1), MainActivity.LINE); what.setBackground(g); what.setPadding(a.dp(12), 0, a.dp(12), 0);
         what.setContentDescription("What to do");
         s.body.addView(what, new LinearLayout.LayoutParams(-1, a.dp(48)));
         LinearLayout quick = Ui.chipRow(a, s.body); quick.setPadding(0, a.dp(8), 0, 0);

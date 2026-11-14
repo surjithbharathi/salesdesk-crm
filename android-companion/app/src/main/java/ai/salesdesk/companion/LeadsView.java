@@ -117,7 +117,7 @@ final class LeadsView {
             LinearLayout row = a.horizontal(); row.setPadding(a.dp(16), 0, a.dp(14), 0); row.setMinimumHeight(a.dp(48));
             if (on) row.setBackgroundColor(MainActivity.SOFT);
             TextView t = Ui.text(a, labelOf(id), 15, on, on ? MainActivity.ACCENT : MainActivity.INK); row.addView(t, new LinearLayout.LayoutParams(0, -2, 1));
-            TextView c = Ui.text(a, num(counts.getOrDefault(id, 0)), 12, true, MainActivity.MUTED); c.setPadding(a.dp(8), a.dp(2), a.dp(8), a.dp(2)); c.setBackground(a.surface(on ? Color.WHITE : MainActivity.NEUTRAL, 10)); row.addView(c);
+            TextView c = Ui.text(a, num(counts.getOrDefault(id, 0)), 12, true, MainActivity.MUTED); c.setPadding(a.dp(8), a.dp(2), a.dp(8), a.dp(2)); c.setBackground(a.surface(on ? MainActivity.CARD : MainActivity.NEUTRAL, 10)); row.addView(c);
             row.setFocusable(true); row.setSelected(on); row.setContentDescription(labelOf(id) + ", " + counts.getOrDefault(id, 0) + " leads");
             row.setOnClickListener(v -> { view = id; limit = PAGE; s.close(); a.render(); });
             g.addView(row);
@@ -134,7 +134,7 @@ final class LeadsView {
 
         // search, filtering as you type
         LinearLayout box = a.horizontal(); box.setPadding(a.dp(14), 0, a.dp(8), 0);
-        GradientDrawable bg = a.surface(Color.WHITE, 24); bg.setStroke(a.dp(1), MainActivity.LINE); box.setBackground(bg);
+        GradientDrawable bg = a.surface(MainActivity.CARD, 24); bg.setStroke(a.dp(1), MainActivity.LINE); box.setBackground(bg);
         ImageView glass = a.glyph(R.drawable.ic_search, MainActivity.MUTED); box.addView(glass, new LinearLayout.LayoutParams(a.dp(20), a.dp(20)));
         EditText q = new EditText(a); q.setHint("Name, number, company or city"); q.setText(a.search); q.setSingleLine(); q.setTextSize(15); q.setTextColor(MainActivity.INK); q.setHintTextColor(MainActivity.MUTED);
         q.setBackground(null); q.setPadding(a.dp(10), 0, a.dp(4), 0); q.setContentDescription("Search leads"); q.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH);
@@ -143,7 +143,7 @@ final class LeadsView {
 
         // the view picker, like the web's: the view's name and its count, tap to change
         LinearLayout picker = a.horizontal(); picker.setPadding(a.dp(16), 0, a.dp(12), 0);
-        GradientDrawable pb = a.surface(Color.WHITE, 14); pb.setStroke(a.dp(2), MainActivity.ACCENT); picker.setBackground(pb);
+        GradientDrawable pb = a.surface(MainActivity.CARD, 14); pb.setStroke(a.dp(2), MainActivity.ACCENT); picker.setBackground(pb);
         TextView name = Ui.text(a, labelOf(view), 16, true, MainActivity.INK); name.setTypeface(android.graphics.Typeface.DEFAULT_BOLD); picker.addView(name);
         TextView n = Ui.text(a, num(inView), 12, true, MainActivity.MUTED); n.setPadding(a.dp(8), a.dp(2), a.dp(8), a.dp(2)); n.setBackground(a.surface(MainActivity.NEUTRAL, 10));
         LinearLayout.LayoutParams np = new LinearLayout.LayoutParams(-2, -2); np.setMarginStart(a.dp(10)); picker.addView(n, np);

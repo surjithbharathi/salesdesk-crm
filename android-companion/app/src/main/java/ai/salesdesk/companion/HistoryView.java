@@ -18,8 +18,8 @@ import org.json.*;
  * record) are a small label in the middle.
  */
 final class HistoryView {
-    private static final int IN = Color.WHITE, OUT = 0xFFD9FDD3, NOTE = 0xFFFFF6CC, SYS = 0xFFEEF2F4, EDGE = 0x14111B21;
-    private static final int TEXT = 0xFF111B21, SUB = 0xFF667781, OUT_SUB = 0xFF4F7A5A, NOTE_SUB = 0xFF8A6D00, US = 0xFF1FA855, THEM = 0xFF8696A0, MISSED = 0xFFC0392B;
+    static int IN = Color.WHITE, OUT = 0xFFD9FDD3, NOTE = 0xFFFFF6CC, SYS = 0xFFEEF2F4; private static final int EDGE = 0x14111B21;
+    static int TEXT = 0xFF111B21, SUB = 0xFF667781, OUT_SUB = 0xFF4F7A5A, NOTE_SUB = 0xFF8A6D00; private static final int US = 0xFF1FA855, THEM = 0xFF8696A0, MISSED = 0xFFC0392B;
 
     private final MainActivity a;
     private final LinearLayout parent;

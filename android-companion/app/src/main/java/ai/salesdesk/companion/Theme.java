@@ -19,12 +19,42 @@ final class Theme {
     static boolean available(String id) { return DEFAULT.equals(id); }
     static String current = DEFAULT;
 
-    static void load(Context c) { String id = SecureConfig.prefs(c).getString("theme", DEFAULT); apply(available(id) ? id : DEFAULT); }
+    static void load(Context c) {
+        String id = SecureConfig.prefs(c).getString("theme", DEFAULT); apply(available(id) ? id : DEFAULT);
+        mode = mode(c); palette(mode.equals("dark") || (mode.equals("system") && phoneIsDark(c)));
+    }
+    /** Light, dark, or "system" (follows the phone's dark theme). Kept on this phone. */
+    static final String[][] MODES = {{"system", "Same as the phone"}, {"light", "Light"}, {"dark", "Dark"}};
+    static String mode = "system";
+
+    static String mode(Context c) { String m = SecureConfig.prefs(c).getString("darkMode", "system"); return m.equals("light") || m.equals("dark") ? m : "system"; }
+    static void saveMode(Context c, String m) { SecureConfig.prefs(c).edit().putString("darkMode", m).commit(); load(c); }
+    static boolean phoneIsDark(Context c) {
+        return (c.getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES;
+    }
+
+    /** The colours every screen shares that are not part of a skin: cards, call buttons, the chat bubbles. */
+    static void palette(boolean dark) {
+        MainActivity.DARK = dark;
+        MainActivity.CARD = dark ? 0xff181c2e : 0xffffffff;
+        Ui.CALL_SOFT = dark ? 0xff173322 : 0xffe6f4ea; Ui.CALL_INK = dark ? 0xff5fd08c : 0xff17803d;
+        HistoryView.IN = dark ? 0xff202c33 : 0xffffffff; HistoryView.SYS = dark ? 0xff1f2438 : 0xffeef2f4; HistoryView.OUT = dark ? 0xff0f4a3c : 0xffd9fdd3; HistoryView.NOTE = dark ? 0xff3a3214 : 0xfffff6cc;
+        HistoryView.TEXT = dark ? 0xffe9edef : 0xff111b21; HistoryView.SUB = dark ? 0xff9aa6ae : 0xff667781;
+        HistoryView.OUT_SUB = dark ? 0xff9fd8b7 : 0xff4f7a5a; HistoryView.NOTE_SUB = dark ? 0xfff2b75a : 0xff8a6d00;
+        if (!dark) return;
+        // dark: deep navy ground, lighter cards, and colours bright enough to read on them (text 4.5:1 and up)
+        MainActivity.PURPLE = 0xff6584f7; MainActivity.ACCENT = 0xff6584f7; MainActivity.ONACCENT = 0xffffffff;
+        MainActivity.BAR = 0xff181c2e; MainActivity.ONBAR = 0xffeceef7; MainActivity.BARMUTED = 0xff9a9db3; MainActivity.BARACCENT = 0xff7b97ff; MainActivity.BARCHIP = 0xff22305e;
+        MainActivity.PANELTRACK = 0xff22305e; MainActivity.PANELGOOD = 0xff5fd08c; MainActivity.PANELBAD = 0xffff8a82;
+        MainActivity.INK = 0xffeceef7; MainActivity.MUTED = 0xff9a9db3; MainActivity.BG = 0xff0f1220; MainActivity.LINE = 0xff2a3049;
+        MainActivity.SOFT = 0xff22305e; MainActivity.NEUTRAL = 0xff1f2438; MainActivity.GOODSOFT = 0xff173322; MainActivity.LEAF = 0xff5fd08c; MainActivity.RED = 0xffff8a82;
+        MainActivity.LIGHTBARS = false;
+    }
 
     static void save(Context c, String id) {
         if (!available(id)) return;
         SecureConfig.prefs(c).edit().putString("theme", id).commit();
-        apply(id);
+        load(c);
     }
 
     static void apply(String id) {

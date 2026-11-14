@@ -79,7 +79,7 @@ final class CallLogView {
                 h.setPadding(a.dp(6), a.dp(12), 0, a.dp(6));
                 content.addView(h);
                 group = a.column();
-                GradientDrawable bg = a.surface(Color.WHITE, MainActivity.RADIUS + 4); bg.setStroke(a.dp(1), MainActivity.LINE);
+                GradientDrawable bg = a.surface(MainActivity.CARD, MainActivity.RADIUS + 4); bg.setStroke(a.dp(1), MainActivity.LINE);
                 group.setBackground(bg);
                 content.addView(group, new LinearLayout.LayoutParams(-1, -2));
             } else {

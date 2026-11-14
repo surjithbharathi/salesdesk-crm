@@ -31,7 +31,7 @@ final class TodoView {
         if (tab.isEmpty()) tab = ai.isEmpty() ? "followups" : "ai";
 
         // the switch between the two lists
-        LinearLayout seg = a.horizontal(); seg.setPadding(a.dp(4), a.dp(4), a.dp(4), a.dp(4)); seg.setBackground(a.surface(0xffe9e8ef, 22));
+        LinearLayout seg = a.horizontal(); seg.setPadding(a.dp(4), a.dp(4), a.dp(4), a.dp(4)); seg.setBackground(a.surface(MainActivity.DARK ? 0xff1f2438 : 0xffe9e8ef, 22));
         segment(a, seg, "AI to-dos", ai.size() > 0 ? String.valueOf(ai.size()) : "", false, "ai");
         segment(a, seg, "Follow-ups", late > 0 ? late + " late" : open.isEmpty() ? "" : String.valueOf(open.size()), late > 0, "followups");
         LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-1, a.dp(44)); sp.setMargins(0, a.dp(4), 0, a.dp(6)); a.content.addView(seg, sp);
@@ -42,7 +42,7 @@ final class TodoView {
     private static void segment(MainActivity a, LinearLayout seg, String label, String count, boolean red, String key) {
         boolean on = tab.equals(key);
         LinearLayout cell = a.horizontal(); cell.setGravity(Gravity.CENTER);
-        if (on) { cell.setBackground(a.surface(Color.WHITE, 18)); cell.setElevation(a.dp(1)); }
+        if (on) { cell.setBackground(a.surface(MainActivity.CARD, 18)); cell.setElevation(a.dp(1)); }
         TextView t = Ui.text(a, label, 14, true, on ? MainActivity.INK : MainActivity.MUTED); cell.addView(t);
         if (!count.isEmpty()) {
             TextView c = Ui.text(a, count, 11, true, red ? MainActivity.RED : Color.WHITE);
@@ -65,14 +65,14 @@ final class TodoView {
         if (items.isEmpty()) { empty(a, "Nothing to pick up right now", "Missed calls you have not returned, new leads nobody has called and customers gone quiet will show here."); return; }
         for (Item it : items) {
             LinearLayout card = a.column(); card.setPadding(a.dp(14), a.dp(12), a.dp(14), a.dp(10));
-            GradientDrawable bg = a.surface(Color.WHITE, 16); bg.setStroke(a.dp(1), MainActivity.LINE); card.setBackground(bg);
+            GradientDrawable bg = a.surface(MainActivity.CARD, 16); bg.setStroke(a.dp(1), MainActivity.LINE); card.setBackground(bg);
             LinearLayout why = a.horizontal();
             ImageView ic = a.glyph(it.icon, it.whyColor); why.addView(ic, new LinearLayout.LayoutParams(a.dp(15), a.dp(15)));
             TextView w = Ui.text(a, it.why, 12, true, it.whyColor); w.setPadding(a.dp(6), 0, 0, 0); why.addView(w);
             card.addView(why);
             TextView title = Ui.text(a, it.title, 16, true, MainActivity.INK); title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD); title.setPadding(0, a.dp(6), 0, 0); card.addView(title);
             if (it.sub != null && !it.sub.isEmpty()) { TextView s = Ui.text(a, it.sub, 13, false, MainActivity.MUTED); s.setPadding(0, a.dp(3), 0, 0); card.addView(s); }
-            if (it.quote != null && !it.quote.isEmpty()) { TextView q = Ui.text(a, "\u201C" + it.quote + "\u201D", 13, false, MainActivity.INK); q.setPadding(a.dp(10), a.dp(6), 0, a.dp(2)); GradientDrawable bar = new GradientDrawable(); bar.setColor(0xfff3f0ff); bar.setCornerRadius(a.dp(8)); q.setBackground(bar); LinearLayout.LayoutParams qp = new LinearLayout.LayoutParams(-1, -2); qp.setMargins(0, a.dp(8), 0, 0); card.addView(q, qp); }
+            if (it.quote != null && !it.quote.isEmpty()) { TextView q = Ui.text(a, "\u201C" + it.quote + "\u201D", 13, false, MainActivity.INK); q.setPadding(a.dp(10), a.dp(6), 0, a.dp(2)); GradientDrawable bar = new GradientDrawable(); bar.setColor(MainActivity.DARK ? 0xff2c2350 : 0xfff3f0ff); bar.setCornerRadius(a.dp(8)); q.setBackground(bar); LinearLayout.LayoutParams qp = new LinearLayout.LayoutParams(-1, -2); qp.setMargins(0, a.dp(8), 0, 0); card.addView(q, qp); }
             LinearLayout acts = a.horizontal(); acts.setPadding(0, a.dp(10), 0, 0);
             TextView main;
             if ("call".equals(it.action)) {
@@ -109,7 +109,7 @@ final class TodoView {
                 String kind = x.optString("kind"), act = x.optString("action");
                 boolean fromCall = kind.equals("call");
                 it.icon = fromCall ? R.drawable.ic_sparkle : kind.equals("missed") ? R.drawable.ic_phone : R.drawable.ic_clock;
-                it.whyColor = fromCall ? 0xff5b3fc4 : kind.equals("missed") ? MainActivity.RED : 0xff8a5200;
+                it.whyColor = fromCall ? (MainActivity.DARK ? 0xffc7a4ff : 0xff5b3fc4) : kind.equals("missed") ? MainActivity.RED : (MainActivity.DARK ? 0xfff2b75a : 0xff8a5200);
                 long due = Ui.ms(x.optString("due")), at = Ui.ms(x.optString("at"));
                 it.why = fromCall ? "From the call" + (due > 0 ? " · due " + Ui.dayLabel(due) + " " + Ui.clock(due) : "")
                     : x.optString("why") + (at > 0 ? " · " + (Ui.dayLabel(at).equals("Today") ? Ui.clock(at) : Ui.dayLabel(at)) : "");
@@ -165,7 +165,7 @@ final class TodoView {
         for (JSONObject l : fresh) {
             long made = Ui.ms(l.optString("createdAt")), h = (now - made) / HOUR;
             Item it = new Item(); it.key = "new:" + l.optString("id");
-            it.icon = R.drawable.ic_clock; it.whyColor = 0xff8a5200; it.action = "call";
+            it.icon = R.drawable.ic_clock; it.whyColor = MainActivity.DARK ? 0xfff2b75a : 0xff8a5200; it.action = "call";
             it.why = "New lead waiting " + (h < 1 ? "under an hour" : h < 24 ? h + (h == 1 ? " hour" : " hours") : (h / 24) + (h / 24 == 1 ? " day" : " days"));
             it.title = "First call to " + l.optString("name"); it.sub = a.joined(l.optString("source"), a.joined(l.optString("product"), l.optString("city")));
             it.phone = l.optString("phone"); it.leadId = l.optString("id"); it.leadName = l.optString("name");
@@ -183,7 +183,7 @@ final class TodoView {
             long quiet = (now - last) / DAY;
             if (last == 0 || quiet < (quote ? 3 : 14)) continue;
             Item it = new Item(); it.key = "quiet:" + l.optString("id") + ":" + last;
-            it.icon = R.drawable.ic_sparkle; it.whyColor = 0xff45525c; it.action = "plan";
+            it.icon = R.drawable.ic_sparkle; it.whyColor = MainActivity.DARK ? 0xffc3c6d6 : 0xff45525c; it.action = "plan";
             it.why = (quote ? "Quotation given" : "Interested") + ", no contact in " + quiet + " days";
             it.title = (quote ? "Follow up on the quotation to " : "Check in with ") + l.optString("name");
             it.sub = a.joined(l.optString("company"), l.optString("city"));
@@ -275,7 +275,7 @@ final class TodoView {
             boolean red = g == 0;
             Ui.heading(a, a.content, names[g], String.valueOf(list.size()), red ? MainActivity.RED : MainActivity.MUTED);
             LinearLayout box = Ui.group(a, a.content);
-            if (red) { GradientDrawable bg = a.surface(Color.WHITE, 16); bg.setStroke(a.dp(1), 0xfff1c9c6); box.setBackground(bg); }
+            if (red) { GradientDrawable bg = a.surface(MainActivity.CARD, 16); bg.setStroke(a.dp(1), MainActivity.DARK ? 0xff5a2a2c : 0xfff1c9c6); box.setBackground(bg); }
             for (int i = 0; i < list.size(); i++) {
                 JSONObject t = list.get(i), l = leads.get(t.optString("leadId"));
                 if (i > 0) Ui.hairline(a, box, 64);
@@ -283,7 +283,7 @@ final class TodoView {
                 String when = d == 0 ? "" : g == 0 ? (Ui.dayLabel(d).equals("Today") ? "since " + Ui.clock(d) : Ui.dayLabel(d).toLowerCase(Locale.ROOT)) : g >= 3 ? Ui.dayLabel(d) + ", " + Ui.clock(d) : Ui.clock(d);
                 // the circle that ticks it off
                 ImageView tick = new ImageView(a); tick.setContentDescription("Mark " + t.optString("title") + " as done");
-                GradientDrawable ring = new GradientDrawable(); ring.setShape(GradientDrawable.OVAL); ring.setStroke(a.dp(2), 0xffb6b4c6); ring.setSize(a.dp(22), a.dp(22));
+                GradientDrawable ring = new GradientDrawable(); ring.setShape(GradientDrawable.OVAL); ring.setStroke(a.dp(2), MainActivity.DARK ? 0xff4a4f68 : 0xffb6b4c6); ring.setSize(a.dp(22), a.dp(22));
                 tick.setImageDrawable(ring); tick.setScaleType(ImageView.ScaleType.CENTER); tick.setLayoutParams(new LinearLayout.LayoutParams(a.dp(36), a.dp(44)));
                 LinearLayout row = Ui.row(a, box, tick, t.optString("title"), a.joined(l == null ? "" : l.optString("name"), when), MainActivity.INK, red ? MainActivity.RED : MainActivity.MUTED);
                 row.setPadding(a.dp(6), a.dp(10), a.dp(10), a.dp(10));

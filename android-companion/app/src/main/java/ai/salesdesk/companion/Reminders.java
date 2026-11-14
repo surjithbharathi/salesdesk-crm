@@ -227,7 +227,7 @@ final class Reminders {
         if (lead != null) {
             JSONObject said = MyDayView.lastSaid(a, lead.optString("id"));
             if (said != null) {
-                android.widget.TextView q = Ui.text(a, "Last said: " + said.optString("text").replaceAll("(?i)<br\\s*/?>", " ").trim(), 13, false, 0xff45444f);
+                android.widget.TextView q = Ui.text(a, "Last said: " + said.optString("text").replaceAll("(?i)<br\\s*/?>", " ").trim(), 13, false, MainActivity.DARK ? 0xffc3c6d6 : 0xff45444f);
                 q.setPadding(a.dp(12), a.dp(10), a.dp(12), a.dp(10)); q.setBackground(a.surface(MainActivity.BG, 12)); q.setMaxLines(4);
                 android.widget.LinearLayout.LayoutParams qp = new android.widget.LinearLayout.LayoutParams(-1, -2); qp.setMargins(0, a.dp(10), 0, 0); s.body.addView(q, qp);
             }

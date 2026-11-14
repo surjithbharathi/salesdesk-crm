@@ -15,7 +15,7 @@ final class CallPrompts {
     static void popup(Context c,String title,String detail,Intent open){
         if(!SecureConfig.loggedIn(c)||!android.provider.Settings.canDrawOverlays(c)||((KeyguardManager)c.getSystemService(Context.KEYGUARD_SERVICE)).isKeyguardLocked())return;
         new Handler(Looper.getMainLooper()).post(()->{
-            dismiss();LinearLayout box=new LinearLayout(c);box.setOrientation(LinearLayout.VERTICAL);box.setPadding(32,24,32,24);box.setBackgroundColor(Color.WHITE);
+            dismiss();LinearLayout box=new LinearLayout(c);box.setOrientation(LinearLayout.VERTICAL);box.setPadding(32,24,32,24);box.setBackgroundColor(MainActivity.CARD);
             TextView heading=new TextView(c);heading.setText(title);heading.setTextSize(19);heading.setTextColor(Color.BLACK);box.addView(heading);
             TextView body=new TextView(c);body.setText(detail);body.setTextColor(Color.DKGRAY);box.addView(body);
             if(open!=null){Button action=new Button(c);action.setText(open.getComponent()!=null&&open.getComponent().getClassName().endsWith("FeedbackActivity")?"Add feedback":"View lead");box.addView(action);action.setOnClickListener(v->{dismiss();c.startActivity(open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));});}
