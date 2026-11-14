@@ -133,7 +133,7 @@ export function createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecor
   const userEmail = (id) => { const u = id && get("users", id); return u?.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(u.email) ? u.email.toLowerCase() : ""; };
   // this CRM's pipeline step (or a basic stage) as the TeleCRM status label it came from
   const STATUS_OUT = { "Interested Customer": "Intrested Customer", "Loan in Process": "Loan In Process", "Machine Delivered - Need to Start": "Machine Delivered - Need To Start" };
-  const statusOut = (l) => (l.deal ? STATUS_OUT[l.deal] || l.deal : l.stage === "New" ? "New Lead" : "");
+  const statusOut = (l) => (l.deal ? STATUS_OUT[l.deal] || l.deal : l.stage === "New" ? "New Lead" : l.stage === "Prospecting" ? "Contact Attempted" : "");
   // called after a record is saved here (never for what the TeleCRM read itself writes)
   function queueChange(kind, old, next) {
     try {
@@ -399,7 +399,8 @@ export function createTelecrmMirror({ db, all, get, put, rawPut, tx, attachRecor
       // "Excel" only says the lead was uploaded from a sheet; a real source found here earlier (e.g. by the Salesmax import) stays
       source: (/^excel$/i.test(text(lead_source, 200)) && cur?.source && !/^(excel|telecrm)$/i.test(cur.source) ? cur.source : text(lead_source, 200)) || cur?.source || "TeleCRM",
       value: Number(String(expected_revenue ?? "").replace(/[^\d.]/g, "")) || cur?.value || 0, owner, ...parts,
-      stage: map.stage, deal: map.deal, disposition: map.disposition, archived: false, repeat: norm(status) === "regular customer" || Boolean(cur?.repeat), list: cur?.list || "",
+      // TeleCRM still saying "New Lead" never takes a lead back to New once it was reached here (a call, a WhatsApp)
+      ...(cur && map.stage === "New" && !map.deal && (cur.stage || "New") !== "New" ? { stage: cur.stage, deal: cur.deal || "", disposition: cur.disposition || "" } : { stage: map.stage, deal: map.deal, disposition: map.disposition }), archived: false, repeat: norm(status) === "regular customer" || Boolean(cur?.repeat), list: cur?.list || "",
       firstTouchAt: cur?.firstTouchAt ?? (msOf(f.first_attempted_call || f.first_call) ? new Date(msOf(f.first_attempted_call || f.first_call)).toISOString() : null),
       createdAt: cur?.createdAt || (created ? new Date(created).toISOString() : new Date(now()).toISOString()), updatedAt: new Date(now()).toISOString(),
       telecrm: { id: tid, status, rating: item.rating ?? 0, score: item.score ?? 0, assignee: tcAssignee, lostReason: text(lost_reason, 200), nextFollowup: msOf(next_followup) || null, modifiedOn: Number(f.modified_on) || 0, lastActivityOn: Number(f.last_activity_on) || 0, syncedAt: now(), fields: rest, phoneRaw: f.phone ? text(f.phone, 40) : "" },
