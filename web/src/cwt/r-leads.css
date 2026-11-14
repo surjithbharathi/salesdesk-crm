@@ -115,10 +115,16 @@
 .cwt .lv-num:hover { background: var(--r-blue-tint); color: var(--r-blue); }
 .cwt .lv-report { min-width: 0; }
 .cwt .lv-report th { white-space: normal; min-width: 70px; }
-.cwt .lv-chart { display: flex; flex-direction: column; gap: 12px; max-width: 900px; padding: 8px 20px 24px; }
-.cwt .lv-bar-row { display: grid; grid-template-columns: 200px 1fr 60px; align-items: center; gap: 12px; font-size: 13.5px; font-weight: 600; }
+.cwt .lv-chart { display: flex; flex-direction: column; gap: 4px; padding: 8px 12px 20px; }
+.cwt .lv-bar-row { display: grid; grid-template-columns: minmax(150px, 260px) 1fr 64px 48px; align-items: center; gap: 14px; width: 100%; min-height: 40px; padding: 6px 10px; border: 0; border-radius: 10px; background: none; font: inherit; font-size: 13.5px; font-weight: 600; color: var(--r-ink); text-align: left; cursor: pointer; }
+.cwt .lv-bar-row:hover:not(:disabled) { background: var(--r-blue-tint); }
+.cwt .lv-bar-row:focus-visible { outline: 2px solid var(--r-blue); outline-offset: 1px; }
+.cwt .lv-bar-row:disabled { cursor: default; }
+.cwt .lv-bar-row.zero { color: var(--r-faint); }
+.cwt .lv-bar-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cwt .lv-bar-row b { font-weight: 800; text-align: right; }
-.cwt .lv-bar { height: 22px; border-radius: 8px; background: var(--k-bg-f0f1f6, #f0f1f6); overflow: hidden; }
+.cwt .lv-bar-row em { font-style: normal; font-size: 12.5px; color: var(--r-muted); text-align: right; }
+.cwt .lv-bar { display: block; height: 22px; border-radius: 8px; background: var(--k-bg-f0f1f6, #f0f1f6); overflow: hidden; }
 .cwt .lv-bar i { display: block; height: 100%; border-radius: 8px; background: #8a889a; }
 .cwt .lv-bar i.st-new { background: var(--r-blue-fill, var(--r-blue)); }
 .cwt .lv-bar i.st-interested-customer, .cwt .lv-bar i.st-advance-received, .cwt .lv-bar i.st-won, .cwt .lv-bar i.st-machine-delivered-need-to-start { background: var(--r-green-fill, var(--r-green)); }
@@ -133,7 +139,7 @@
   .cwt .lv-kpi-ic { width: 36px; height: 36px; border-radius: 11px; }
   .cwt .lv-kpi-n { font-size: 20px; }
   .cwt .lv-search { flex-basis: 100%; }
-  .cwt .lv-bar-row { grid-template-columns: 120px 1fr 44px; }
+  .cwt .lv-bar-row { grid-template-columns: 110px 1fr 44px; gap: 8px; } .cwt .lv-bar-row em { display: none; }
 }
 
 /* ---------- lead panel: the drawer ---------- */
