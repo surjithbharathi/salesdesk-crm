@@ -60,7 +60,8 @@ export default function Views({ params }) {
   const [mode, setMode] = useState("table");
   const [spin, setSpin] = useState(false);
   const [busy, setBusy] = useState(false);
-  useEffect(() => setPage(0), [viewId, conds, query, sort]);
+  const [staff, setStaff] = useState(""); // one person's leads only, as on Follow Ups
+  useEffect(() => setPage(0), [viewId, conds, query, sort, staff]);
 
   const me = crm.me?.id;
   const nameOf = (id) => crm.users.get(id)?.name || "";
@@ -142,11 +143,11 @@ export default function Views({ params }) {
     if (!crm.state) return [];
     const needle = query.trim().toLowerCase(), digits = needle.replace(/\D/g, "");
     const test = testOf(viewId);
-    const list = crm.leads.filter((l) => !l.archived && test(l) && passAll(conds, l)
+    const list = crm.leads.filter((l) => !l.archived && test(l) && passAll(conds, l) && (!staff || l.owner === staff)
       && (!needle || (by === "name" ? `${l.name} ${l.company || ""}`.toLowerCase().includes(needle) : by === "email" ? String(l.email || "").toLowerCase().includes(needle) : digits.length > 1 && String(l.phone || "").replace(/\D/g, "").includes(digits))));
     const dir = sort.dir === "asc" ? 1 : -1;
     return list.sort((a, b) => { const x = sortValue(a, sort.key), y = sortValue(b, sort.key); return dir * (x < y ? -1 : x > y ? 1 : 0); });
-  }, [crm.state, crm.leads, crm.users, viewId, conds, query, by, sort, me, facts, defByKey]);
+  }, [crm.state, crm.leads, crm.users, viewId, conds, query, by, sort, me, facts, defByKey, staff]);
   const report = useMemo(() => {
     const map = new Map();
     for (const l of crm.leads || []) { if (l.archived) continue; const name = nameOf(l.owner) || "No owner"; const r = map.get(name) || { name, c: Object.fromEntries([...STATUSES.map((s) => [s, 0]), ["total", 0]]) }; r.c[statusOf(l)]++; r.c.total++; map.set(name, r); }
@@ -245,6 +246,16 @@ export default function Views({ params }) {
           </div>
           {conds.map((c, i) => defByKey.get(c.key) && <span key={i} className="vp-chip"><button type="button" onClick={() => setFiltersOpen(true)}><TIcon name={defByKey.get(c.key).icon} /><b>{defByKey.get(c.key).label}</b> {conditionText(defByKey.get(c.key), c)}</button><button type="button" className="vp-chip-x" aria-label={`Remove ${defByKey.get(c.key).label} filter`} onClick={() => setConds(conds.filter((_, j) => j !== i))}><TIcon name="x" /></button></span>)}
           <span className="grow" />
+          {crm.me?.lead && team.length > 0 && (
+            <label className="r-chip r-select fu-staff lv-staff">
+              <span className={`av fu-av ${staff ? avClass(nameOf(staff)) : "all"}`} aria-hidden="true">{staff ? initials(nameOf(staff)) : <TIcon name="user" />}</span>
+              <select value={staff} onChange={(e) => setStaff(e.target.value)} aria-label="Staff">
+                <option value="">All staff</option>
+                {team.map((u) => <option key={u.id} value={u.id}>{u.id === me ? `${u.name} (me)` : u.name}</option>)}
+              </select>
+              <TIcon name="chevronDown" />
+            </label>
+          )}
           <div className="lv-mode" role="group" aria-label="Show as">
             <button type="button" className={mode === "table" ? "on" : ""} aria-pressed={mode === "table"} onClick={() => setMode("table")} aria-label="Table"><TIcon name="table" /></button>
             <button type="button" className={mode === "chart" ? "on" : ""} aria-pressed={mode === "chart"} onClick={() => setMode("chart")} aria-label="Chart"><TIcon name="barChart" /></button>
