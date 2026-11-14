@@ -212,6 +212,7 @@ export function McpConsent({ id, admin }) {
   const [request, setRequest] = useState(null);
   const [error, setError] = useState(admin ? "" : "Only an admin can connect an app to this CRM. Sign in with an admin account.");
   const [busy, setBusy] = useState(false);
+  const [back, setBack] = useState("");
   useEffect(() => {
     if (!admin) return;
     crmGet("mcp/oauth/" + id).then(setRequest, (e) => setError(e.message === "Authorization request expired or already used" ? "This request has expired or was already answered. Start the connection again from the app." : e.message));
@@ -221,7 +222,9 @@ export function McpConsent({ id, admin }) {
     setError("");
     try {
       const result = await crmSend("POST", "mcp/oauth/" + id, { approved });
-      location.assign(result.redirect);
+      // straight back to the app that asked; replace() so Back does not reopen this used request
+      setBack(result.redirect);
+      location.replace(result.redirect);
     } catch (e) {
       setError(e.message);
       setBusy(false);
@@ -246,6 +249,7 @@ export function McpConsent({ id, admin }) {
               <p className="r-login-help">The app stays connected for up to 7 days unless you remove it.</p>
             </>
           )}
+          {back && <p className="r-login-help" role="status">Approved. Going back to {host}… <a className="r-link" href={back}>Go now</a></p>}
           {error && <p className="r-login-error" role="alert">{error}</p>}
           {request && (
             <div className="r-login-alt">
