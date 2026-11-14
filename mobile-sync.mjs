@@ -100,8 +100,17 @@ export function createMobileSync({ db, all, get, put, stamp, tx, log, keyPath, o
       else { const at = String(l.updatedAt || l.createdAt || ""); if (!(others.get(phone) > at)) others.set(phone, at); }
     }
     for (const t of own) others.delete(t.phone);
-    // at most 30,000 other numbers (about 750 KB), the most recently active first
-    return [...own, ...[...others].sort((a, b) => b[1].localeCompare(a[1])).slice(0, 30000).map(([phone]) => ({ phone }))];
+    // The app refuses a reply over 1 MB and then syncs nothing at all ("Offline"), so the whole list is kept under
+    // 900 KB: the owner's own leads always, then other numbers, the most recently active first, while they fit.
+    const BUDGET = 900000;
+    let size = Buffer.byteLength(JSON.stringify(own));
+    const rest = [];
+    for (const [phone] of [...others].sort((a, b) => b[1].localeCompare(a[1]))) {
+      size += phone.length + 13; // {"phone":"…"} and its comma
+      if (size > BUDGET || rest.length >= 30000) break;
+      rest.push({ phone });
+    }
+    return [...own, ...rest];
   }
   const ownTargets = (d) => targets(d).filter((t) => t.id);
   // a call of this phone may take its recording while its lead is still active, whoever owns the lead now
