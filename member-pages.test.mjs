@@ -95,6 +95,15 @@ test("a member's screen gets only what changed, and only their own leads", async
   const took = await req(`/api/leads/${free.id}`, "PATCH", { owner: me }, member);
   assert.equal(took.status, 200);
   assert.equal(took.json.owner, me);
+  // closing a lead as Lost needs the reason with that change; leaving Lost clears it
+  const noReason = await req(`/api/leads/${free.id}`, "PATCH", { deal: "Lost" }, member);
+  assert.equal(noReason.status, 400);
+  assert.match(JSON.stringify(noReason.json), /why this lead was lost/);
+  const lost = await req(`/api/leads/${free.id}`, "PATCH", { deal: "Lost", lostReason: "Price / Budget Issue" }, member);
+  assert.equal(lost.status, 200);
+  assert.deepEqual([lost.json.stage, lost.json.disposition, lost.json.lostReason], ["Closed", "Lost", "Price / Budget Issue"]);
+  const reopened = await req(`/api/leads/${free.id}`, "PATCH", { deal: "Interested Customer" }, member);
+  assert.equal(reopened.json.lostReason, "");
   // an AI task id arrives URL-encoded from the screen (sig:new:… as sig%3Anew%3A…): dismissing it works and it is gone from the list
   const sig = `sig:new:${free.id}`;
   const dismissed = await req(`/api/ai-tasks/${encodeURIComponent(sig)}/dismiss`, "POST", {}, member);

@@ -21,3 +21,12 @@ export function pipelineStep(lead) {
   if (lead.stage === "Closed") return lead.disposition === "Won" ? "Won" : lead.disposition === "Lost" ? "Lost" : "";
   return FALLBACK[lead.stage] || "";
 }
+
+// Why a lead was lost: one of these is asked for every time a lead is closed as Lost (the phone app has the same list).
+export const LOST_REASONS = ["No Need", "Price / Budget Issue", "Lost to competitor", "Product Not Suitable", "Finance Not Approved", "Purchase Postponed", "No Response After Multiple Attempts", "Duplicate Lead"];
+
+// The older screens ask with a plain prompt; returns the reason, or "" when the person cancels.
+export function askLostReason(name) {
+  const answer = window.prompt(`Why was ${name || "this lead"} lost?\n\n${LOST_REASONS.join("\n")}\n\nType one of these, or your own reason:`, "");
+  return (answer || "").trim().slice(0, 200);
+}

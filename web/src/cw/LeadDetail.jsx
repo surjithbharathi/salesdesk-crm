@@ -7,7 +7,7 @@ import Icon from "../icons.jsx";
 import Recording from "../Recording.jsx";
 import GatewayChat from "../GatewayChat.jsx";
 import ChatEntry, { buyLeadOf, leadArrivedOf } from "../ChatEntry.jsx";
-import { PIPELINE, pipelineStep } from "../pipeline.js";
+import { PIPELINE, pipelineStep, askLostReason } from "../pipeline.js";
 import { buildModel, hms, initials, money, startOfDay } from "./model.js";
 import DateTimePicker from "../DateTimePicker.jsx";
 
@@ -101,7 +101,7 @@ export default function CwLeadDetail({ id, onClose }) {
   const doneTask = (t) => run("Follow-up marked done", () => crmSend("PATCH", `tasks/${t.id}`, { status: "Done" }));
   const saveEdit = (e) => { e.preventDefault(); patch("Contact saved", { name: edit.name.trim(), phone: edit.phone.trim(), company: edit.company.trim() }).then(() => setEditing(false)); };
   const startEdit = () => { setEdit({ name: raw.name, phone: raw.phone || "", company: raw.company || "" }); setEditing(true); };
-  const moveTo = (s) => { setMenu(false); patch(`Moved to ${s}`, s === "New" ? { stage: "New", disposition: "", deal: "" } : { deal: s }); };
+  const moveTo = (s) => { setMenu(false); const lostReason = s === "Lost" ? askLostReason(raw?.name) : ""; if (s === "Lost" && !lostReason) return; patch(`Moved to ${s}`, s === "New" ? { stage: "New", disposition: "", deal: "" } : s === "Lost" ? { deal: s, lostReason } : { deal: s }); };
   const ownerName = l.owner || "Unassigned";
   const dueLabel = (iso) => { const d = dueText(iso); return `${new Date(iso).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}${d?.tone === "late" ? " · overdue" : ""}`; };
 

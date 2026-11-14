@@ -6,7 +6,7 @@ import { dueText, hashFor } from "../format.js";
 import Icon from "../icons.jsx";
 import LeadPanel from "./LeadDetail.jsx";
 import Recording from "../Recording.jsx";
-import { PIPELINE, pipelineStep } from "../pipeline.js";
+import { PIPELINE, pipelineStep, askLostReason } from "../pipeline.js";
 import { DAY, buildModel, initials, money, startOfDay } from "./model.js";
 import DateTimePicker from "../DateTimePicker.jsx";
 
@@ -90,7 +90,9 @@ export function CwDeals({ params }) {
     if (columnOf(lead) === target) return;
     setBusy(true);
     try {
-      await crmSend("PATCH", `leads/${lead.id}`, { deal: target });
+      const lostReason = target === "Lost" ? askLostReason(lead.name) : "";
+      if (target === "Lost" && !lostReason) return;
+      await crmSend("PATCH", `leads/${lead.id}`, target === "Lost" ? { deal: target, lostReason } : { deal: target });
       await crm.reload();
       notify(`${lead.name} moved to ${target}`);
     } catch (e) {

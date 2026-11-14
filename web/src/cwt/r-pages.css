@@ -284,3 +284,7 @@
 .cwt .ait-wa { background: #25a35e; }
 .cwt .ait-dismiss { font-size: 12.5px; color: var(--r-muted); }
 .cwt .ait-plan { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px; }
+.cwt .lost-reasons { display: flex; flex-direction: column; gap: 6px; }
+.cwt .lost-reason { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border: 1px solid var(--r-line-2); border-radius: 10px; font-size: 14px; font-weight: 600; color: var(--r-ink); cursor: pointer; }
+.cwt .lost-reason.on { border-color: var(--r-blue); background: var(--r-blue-tint); }
+.cwt .lost-reason input { accent-color: var(--r-blue); margin: 0; }
