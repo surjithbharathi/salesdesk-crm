@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { login, otpStart, otpVerify } from "../api.js";
+import { login, otpStart, otpVerify, crmGet, crmSend } from "../api.js";
 
 // The sign-in screen: brand side on the left, the form on the right.
 // Username + password always; a WhatsApp code and Devi ERP only when an admin has turned them on.
@@ -192,6 +192,69 @@ export default function Login({ methods = {}, onDone }) {
       <Brand />
       <main className="r-login-main">
         {mode === "otp" ? <OtpForm onDone={onDone} onBack={() => setMode("password")} /> : <PasswordForm methods={methods} onDone={onDone} onOtp={() => setMode("otp")} initialError={linkError} />}
+      </main>
+    </div>
+  );
+}
+
+// When an AI app (Claude and others) asks to connect to this CRM over MCP, the CRM sends the admin here
+// (#mcp?oauth_request=…) to approve or deny it; the answer then goes back to that app.
+const SCOPE_WORDS = {
+  "leads:read": "Read leads, calls and messages",
+  "reports:read": "Read daily reports",
+  "insights:read": "Read call AI results and lead insights",
+  "leads:edit": "Propose lead changes (each one waits for your approval)",
+  "leads:assign": "Propose lead assignments (each one waits for your approval)",
+  "transcription:run": "Ask for call transcriptions (each one waits for your approval)",
+  "tasks:write": "Add follow-up tasks",
+};
+export function McpConsent({ id, admin }) {
+  const [request, setRequest] = useState(null);
+  const [error, setError] = useState(admin ? "" : "Only an admin can connect an app to this CRM. Sign in with an admin account.");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (!admin) return;
+    crmGet("mcp/oauth/" + id).then(setRequest, (e) => setError(e.message === "Authorization request expired or already used" ? "This request has expired or was already answered. Start the connection again from the app." : e.message));
+  }, [id, admin]);
+  async function answer(approved) {
+    setBusy(true);
+    setError("");
+    try {
+      const result = await crmSend("POST", "mcp/oauth/" + id, { approved });
+      location.assign(result.redirect);
+    } catch (e) {
+      setError(e.message);
+      setBusy(false);
+    }
+  }
+  let host = "";
+  try {
+    host = request ? new URL(request.redirectUri).host : "";
+  } catch {
+    host = request?.redirectUri || "";
+  }
+  return (
+    <div className="cwt r-login">
+      <Brand />
+      <main className="r-login-main">
+        <div className="r-login-form" role="region" aria-label="Connect an app">
+          <div><h1>Connect an app</h1><p className="r-login-sub">{request ? <><b>{request.clientName}</b> wants to use this CRM.</> : "Checking the request…"}</p></div>
+          {request && (
+            <>
+              <div className="r-login-note"><p>After you approve, you go back to <b>{host}</b>. The app's name is given by the app itself, so approve only if you started this connection.</p></div>
+              <ul className="r-login-sub">{request.scopes.map((s) => <li key={s}>{SCOPE_WORDS[s] || s}</li>)}</ul>
+              <p className="r-login-help">The app stays connected for up to 7 days unless you remove it.</p>
+            </>
+          )}
+          {error && <p className="r-login-error" role="alert">{error}</p>}
+          {request && (
+            <div className="r-login-alt">
+              <button type="button" className="r-login-other" disabled={busy} onClick={() => answer(false)}>Deny</button>
+              <button type="button" className="r-login-primary r-grow" disabled={busy} onClick={() => answer(true)}>{busy ? "Connecting…" : "Approve"}</button>
+            </div>
+          )}
+          {!request && error && <a className="r-login-other" href="#/">Go to the CRM</a>}
+        </div>
       </main>
     </div>
   );

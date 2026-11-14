@@ -137,3 +137,4 @@
 .cwt .side-foot .support { flex-direction: row; color: var(--r-muted); }
 .cwt .side-foot .support .ver { display: none; }
 .cwt .expanded .side-foot .support .ver { display: block; }
+.r-login .r-grow { flex: 1 1 160px; }
