@@ -265,3 +265,17 @@ test("a refused recording is 409, so the phone skips that file and keeps syncing
   assert.throws(() => f.api.recording(f.device, a.id, f.audio, f.meta(a)), status(409));
   assert.throws(() => f.api.recording(f.device, "no-such-call", f.audio, {}), status(409));
 });
+
+test("the phone's number list stays under the 1 MB the app accepts, own leads always included", (t) => {
+  const f = fixture(t),
+    { api, device } = f;
+  const stamp = (i) => new Date(Date.UTC(2026, 0, 1) + i * 1000).toISOString();
+  for (let i = 0; i < 12000; i++) f.put("leads", { id: "own-lead-id-" + String(i).padStart(14, "0"), name: "Own", phone: "+91" + (9100000000 + i), owner: device.owner, updatedAt: stamp(i) });
+  for (let i = 0; i < 30000; i++) f.put("leads", { id: "other-" + i, name: "x", phone: "+91" + (8100000000 + i), owner: "someone-else", updatedAt: stamp(i) });
+  const list = api.targets(device);
+  assert.ok(Buffer.byteLength(JSON.stringify(list)) < 1048576, "fits the app's limit");
+  assert.equal(list.filter((x) => x.id?.startsWith("own-lead-id-")).length, 12000, "every own lead is there");
+  const others = list.filter((x) => !x.id);
+  assert.ok(others.length > 0);
+  assert.equal(others[0].phone, "918100029999", "the most recently active other number comes first");
+});
