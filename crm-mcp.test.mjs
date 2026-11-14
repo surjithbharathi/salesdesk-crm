@@ -71,3 +71,32 @@ test('one workspace MCP key cannot authorize against another workspace database'
   await assert.rejects(() => b.mcp.call(a.header, 'lead_get', { leadId: 'lead' }), /expired/);
   a.db.close(); b.db.close();
 });
+
+test('MCP 2026-07-28 clients (no initialize) discover the server and list tools; older versions still negotiate', async () => {
+  const f = fixture(['leads:read']);
+  const meta = (v) => ({ _meta: { 'io.modelcontextprotocol/protocolVersion': v, 'io.modelcontextprotocol/clientInfo': { name: 'Claude', version: '1' }, 'io.modelcontextprotocol/clientCapabilities': {} } });
+  const h = (method, v = '2026-07-28') => ({ 'mcp-protocol-version': v, 'mcp-method': method });
+  const discover = await f.mcp.rpc(f.header, { jsonrpc: '2.0', id: 1, method: 'server/discover', params: meta('2026-07-28') }, h('server/discover'));
+  assert.equal(discover.result.resultType, 'complete');
+  assert.ok(discover.result.supportedVersions.includes('2026-07-28'));
+  assert.ok(discover.result.capabilities.tools);
+  assert.equal(discover.result._meta['io.modelcontextprotocol/serverInfo'].name, 'salesdesk-crm');
+  const tools = await f.mcp.rpc(f.header, { jsonrpc: '2.0', id: 2, method: 'tools/list', params: meta('2026-07-28') }, h('tools/list'));
+  assert.equal(tools.result.resultType, 'complete');
+  assert.deepEqual(tools.result.tools.map(t => t.name), ['leads_list', 'lead_get']);
+  assert.equal(typeof tools.result.ttlMs, 'number');
+  assert.equal(tools.result.cacheScope, 'private');
+  const unknown = await f.mcp.rpc(f.header, { jsonrpc: '2.0', id: 3, method: 'tools/list', params: meta('2099-01-01') }, h('tools/list', '2099-01-01'));
+  assert.equal(unknown.error.code, -32022);
+  assert.equal(unknown.httpStatus, 400);
+  assert.ok(unknown.error.data.supported.includes('2026-07-28'));
+  const mismatch = await f.mcp.rpc(f.header, { jsonrpc: '2.0', id: 4, method: 'tools/list', params: meta('2026-07-28') }, h('tools/call'));
+  assert.equal(mismatch.error.code, -32020);
+  const missing = await f.mcp.rpc(f.header, { jsonrpc: '2.0', id: 5, method: 'nope', params: meta('2026-07-28') }, h('nope'));
+  assert.equal(missing.httpStatus, 404);
+  // an older client asking for a version this server does not know is answered with one it does
+  const init = await f.mcp.rpc(f.header, { jsonrpc: '2.0', id: 6, method: 'initialize', params: { protocolVersion: '2024-11-05' } });
+  assert.equal(init.result.protocolVersion, '2025-11-25');
+  assert.equal(init.result.resultType, undefined);
+  f.db.close();
+});
