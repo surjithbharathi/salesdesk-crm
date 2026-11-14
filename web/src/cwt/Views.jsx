@@ -321,7 +321,10 @@ export default function Views({ params }) {
             </div>
 
             {mode === "chart" ? (
-              <div className="lv-chart">{chart.map((b) => <div key={b.s} className="lv-bar-row"><span className="lbl">{b.s}</span><div className="lv-bar"><i className={`st-${slug(b.s)} cwt-w-${Math.round((b.n / cmax) * 100)}`} /></div><b>{b.n.toLocaleString("en-IN")}</b></div>)}</div>
+              <div className="lv-chart" aria-label="Leads by stage">{chart.map((b) => {
+                const total = rows.length || 1, pct = Math.round((b.n / total) * 100);
+                return <button key={b.s} type="button" className={`lv-bar-row ${b.n ? "" : "zero"}`} disabled={!b.n} onClick={() => { pick(stageView(b.s)); setMode("table"); }} aria-label={`${b.s}: ${b.n} leads, open list`}><span className="lv-bar-name">{b.s}</span><span className="lv-bar"><i className={`st-${slug(b.s)} cwt-w-${Math.round((b.n / cmax) * 100)}`} /></span><b>{b.n.toLocaleString("en-IN")}</b><em>{pct}%</em></button>;
+              })}</div>
             ) : (
               <>
                 <div className="lv-scroll">
