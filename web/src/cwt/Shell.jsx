@@ -12,6 +12,38 @@ import GlobalSearch from "./GlobalSearch.jsx";
 const Mark = () => <svg viewBox="0 0 100 100" aria-hidden="true"><path d="M8 72h22v22H8z" /><path d="M26 40h34v34H44V57H26z" /><path d="M44 6h48v51H76V23H44z" /></svg>;
 const when = (iso) => new Date(iso).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
 
+// Light, Dark, or System (follows the computer or phone). Kept in this browser; App applies it to the page.
+const THEMES = [["", "System"], ["light", "Light"], ["dark", "Dark"]];
+const readTheme = () => { try { return localStorage.getItem("salesdesk-theme") || ""; } catch { return ""; } };
+const Sun = () => <svg viewBox="0 0 24 24" aria-hidden="true" className="theme-ic"><circle cx="12" cy="12" r="4.5" /><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8" /></svg>;
+const Moon = () => <svg viewBox="0 0 24 24" aria-hidden="true" className="theme-ic"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11z" /></svg>;
+function ThemeMenu({ open, onToggle, onClose }) {
+  const [theme, setTheme] = useState(readTheme);
+  useEffect(() => { const on = () => setTheme(readTheme()); window.addEventListener("salesdesk-theme", on); return () => window.removeEventListener("salesdesk-theme", on); }, []);
+  const pick = (value) => {
+    try { value ? localStorage.setItem("salesdesk-theme", value) : localStorage.removeItem("salesdesk-theme"); } catch { /* the choice then lasts for this visit only */ }
+    setTheme(value);
+    window.dispatchEvent(new Event("salesdesk-theme"));
+    onClose();
+  };
+  const dark = theme ? theme === "dark" : window.matchMedia?.("(prefers-color-scheme: dark)").matches;
+  return (
+    <div className="anchor">
+      <button type="button" className="round theme" onClick={onToggle} aria-haspopup="menu" aria-expanded={open} aria-label={`Theme: ${THEMES.find(([v]) => v === theme)[1]}`}>{dark ? <Moon /> : <Sun />}</button>
+      {open && (
+        <div className="pop theme-pop" role="menu" onMouseLeave={onClose}>
+          <div className="pop-title">Theme</div>
+          {THEMES.map(([value, label]) => (
+            <button key={label} type="button" role="menuitemradio" aria-checked={theme === value} className={`pop-row${theme === value ? " on" : ""}`} onClick={() => pick(value)}>
+              <span className="grow">{label}{value === "" && <small>Same as this computer or phone</small>}</span>{theme === value && <span className="tick">✓</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function navFor(owner) {
   return [
     { key: "dash", label: "Dashboard", icon: "dashboard", link: owner ? "/business" : "/my-day" },
@@ -122,6 +154,7 @@ export default function Shell({ path, owner, session, onLogout, children }) {
             </div>
             <GlobalSearch />
             <div className="top-right">
+              <ThemeMenu open={panel === "theme"} onToggle={() => setPanel(panel === "theme" ? "" : "theme")} onClose={() => setPanel("")} />
               <div className="anchor">
                 <button type="button" className="round alarm" onClick={() => openPanel("alarm")} aria-label="Follow-ups due"><TIcon name="alarm" />{due.length > 0 && <em className="count">{due.length > 99 ? "99+" : due.length}</em>}</button>
                 {panel === "alarm" && (

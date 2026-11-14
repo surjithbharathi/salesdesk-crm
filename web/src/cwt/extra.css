@@ -3,7 +3,7 @@
 /* .btn buttons (Settings and other shared screens) keep their own look */
 .cwt :where(button:not(.btn)) { background: none; border: 0; padding: 0; border-radius: 0; box-shadow: none; text-align: left; cursor: pointer; font: inherit; color: inherit; }
 .cwt button:disabled { cursor: default; opacity: 0.55; }
-.cwt input, .cwt select, .cwt textarea { font: inherit; color: inherit; background: #fff; }
+.cwt input, .cwt select, .cwt textarea { font: inherit; color: inherit; background: var(--k-bg-ffffff, #fff); }
 .cwt table { border-collapse: collapse; }
 .cwt ul, .cwt ol { list-style: none; margin: 0; padding: 0; }
 .cwt h1, .cwt h2, .cwt h3, .cwt p { margin: 0; }
@@ -12,14 +12,14 @@
 .cwt .navw { position: relative; }
 .cwt .navw .tip { position: fixed; top: auto; margin-top: -29px; }
 .cwt .navw .nav-pop { position: fixed; top: auto; margin-top: -50px; }
-.cwt .word-logo { font-weight: 700; font-size: 18px; color: #1f4fd1; transform: none; margin-left: 0; }
+.cwt .word-logo { font-weight: 700; font-size: 18px; color: var(--k-fg-1f4fd1, #1f4fd1); transform: none; margin-left: 0; }
 .cwt .top-right .avatar { display: inline-grid; place-items: center; }
 /* names the app also uses for its own classes */
 .cwt .tag::before { content: none; display: none; }
 .cwt .bar { margin-bottom: 0; }
 .cwt .scrim { z-index: 60; }
 .cwt .empty b { font-size: 15px; }
-.cwt .shell { background: #fff; }
+.cwt .shell { background: var(--k-bg-ffffff, #fff); }
 
 /* the status colours of this CRM pipeline, in the palette of the reference web app */
 .cwt .st-new { background: #466e6333; }
