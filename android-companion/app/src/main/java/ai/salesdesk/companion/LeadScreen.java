@@ -395,8 +395,21 @@ final class LeadScreen {
     private void chooseStage() {
         String now = stageLabel(); int current = -1;
         for (int i = 0; i < PIPELINE.length; i++) if (PIPELINE[i].equalsIgnoreCase(now)) current = i;
-        new AlertDialog.Builder(a).setTitle("Stage").setSingleChoiceItems(PIPELINE, current, (d, w) -> { d.dismiss(); if (w == 0) save("PATCH", "/v1/leads/" + id, put("stage", "New"), "Stage changed"); else save("PATCH", "/v1/leads/" + id, put("deal", PIPELINE[w]), "Stage changed to " + PIPELINE[w]); }).setNegativeButton("Cancel", null).show();
+        new AlertDialog.Builder(a).setTitle("Stage").setSingleChoiceItems(PIPELINE, current, (d, w) -> { d.dismiss(); if (w == 0) save("PATCH", "/v1/leads/" + id, put("stage", "New"), "Stage changed"); else if ("Lost".equals(PIPELINE[w])) chooseLostReason(); else save("PATCH", "/v1/leads/" + id, put("deal", PIPELINE[w]), "Stage changed to " + PIPELINE[w]); }).setNegativeButton("Cancel", null).show();
     }
+
+    // why a lead was lost: the CRM refuses Lost without it. The same list as the web CRM, plus "Other" to type one.
+    private static final String[] LOST_REASONS = {"No Need", "Price / Budget Issue", "Lost to competitor", "Product Not Suitable", "Finance Not Approved", "Purchase Postponed", "No Response After Multiple Attempts", "Duplicate Lead", "Other"};
+    private void chooseLostReason() {
+        new AlertDialog.Builder(a).setTitle("Why was this lead lost?").setItems(LOST_REASONS, (d, w) -> {
+            if (w < LOST_REASONS.length - 1) { saveLost(LOST_REASONS[w]); return; }
+            LinearLayout b = a.column(); b.setPadding(dp(20), dp(8), dp(20), 0);
+            EditText e = new EditText(a); e.setSingleLine(); e.setHint("Write the reason"); b.addView(e);
+            new AlertDialog.Builder(a).setTitle("Lost reason").setView(b).setNegativeButton("Cancel", null)
+                .setPositiveButton("Close as Lost", (d2, w2) -> { String r = e.getText().toString().trim(); if (r.isEmpty()) note("Write why the lead was lost."); else saveLost(r.length() > 200 ? r.substring(0, 200) : r); }).show();
+        }).setNegativeButton("Cancel", null).show();
+    }
+    private void saveLost(String reason) { save("PATCH", "/v1/leads/" + id, put("deal", "Lost", "lostReason", reason), "Closed as Lost: " + reason); }
 
     private void edit(String label, String key) {
         if (key.equals("state") || key.equals("language")) {
