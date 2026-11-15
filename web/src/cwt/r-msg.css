@@ -109,12 +109,17 @@
 .cwt .rmsg .rm-empty { display: grid; gap: 6px; margin: 24px; padding: 24px; border-radius: var(--r-radius); background: var(--r-card); box-shadow: var(--r-shadow); color: var(--r-muted); font-size: 13.5px; line-height: 1.5; }
 .cwt .rmsg .rm-empty b { color: var(--r-ink); font-size: 15px; }
 
+.cwt .rmsg .rm-back { display: none; place-items: center; flex: none; width: 36px; height: 36px; margin-left: -6px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--r-ink); font-size: 30px; line-height: 1; cursor: pointer; }
+.cwt .rmsg .rm-back:focus-visible { outline: 2px solid var(--r-blue); }
 @media (max-width: 1180px) { .cwt .rmsg .rm-side { display: none; } }
 @media (max-width: 760px) {
   .cwt .rmsg { flex-direction: column; height: auto; }
-  .cwt .rmsg .rm-list { flex: none; min-width: 0; border-right: 0; border-bottom: 1px solid var(--r-line); }
-  .cwt .rmsg .rm-convs { max-height: 38vh; }
-  .cwt .rmsg .rm-chat { flex: none; min-height: 70vh; }
+  .cwt .rmsg .rm-list { flex: none; min-width: 0; border-right: 0; }
+  /* a phone shows one thing at a time: the chat list, or the chat picked from it, with a back arrow */
+  .cwt .rmsg .rm-list.rm-picked { display: none; }
+  .cwt .rmsg .rm-list:not(.rm-picked) ~ .rm-chat { display: none; }
+  .cwt .rmsg .rm-chat { flex: none; height: calc(100dvh - 60px); }
+  .cwt .rmsg .rm-back { display: grid; }
   .cwt .rmsg .rm-thread { padding: 14px; }
   .cwt .rmsg .rm-chat-head { padding: 0 12px; gap: 8px; }
   .cwt .rmsg .rm-compose-row { flex-wrap: wrap; }

@@ -101,7 +101,7 @@ function LeadChats({ gatewayOn, tabs }) {
   const chip = (key, label) => <button type="button" className="rm-chip" aria-pressed={only === key} onClick={() => setOnly(key)}>{label}</button>;
   return (
     <>
-      <section className="rm-list" aria-label="Conversations">
+      <section className={`rm-list ${open && current?.id === open ? "rm-picked" : ""}`} aria-label="Conversations">
         <div className="rm-list-head">
           <div className="rm-title-row"><h1>Messages</h1>{tabs}</div>
           <label className="rm-search"><SearchMark /><input type="search" placeholder="Search chats" aria-label="Search chats" value={find} onChange={(e) => setFind(e.target.value)} /></label>
@@ -132,13 +132,13 @@ function LeadChats({ gatewayOn, tabs }) {
           {threads.length > 0 && !shown.length && <p className="rm-list-empty">Nobody matches.</p>}
         </div>
       </section>
-      {current ? <Chat key={current.id} t={current} gatewayOn={gatewayOn} /> : <section className="rm-chat rm-chat-empty"><p>Pick a chat on the left.</p></section>}
+      {current ? <Chat key={current.id} t={current} gatewayOn={gatewayOn} onBack={() => setOpen("")} /> : <section className="rm-chat rm-chat-empty"><p>Pick a chat on the left.</p></section>}
       {current?.lead ? <LeadSide lead={current.lead} /> : current ? <aside className="rm-side" aria-label="Lead details"><p className="rm-side-none">This chat is not linked to a lead.</p></aside> : null}
     </>
   );
 }
 
-function Chat({ t, gatewayOn }) {
+function Chat({ t, gatewayOn, onBack }) {
   const crm = useCrm();
   const body = useRef(null);
   const lead = t.lead;
@@ -150,6 +150,7 @@ function Chat({ t, gatewayOn }) {
   return (
     <section className="rm-chat" aria-label={`Chat with ${name}`}>
       <header className="rm-chat-head">
+        <button type="button" className="rm-back" onClick={onBack} aria-label="Back to chats">‹</button>
         <Av name={name} size="rm-av-md" />
         <div className="rm-chat-who">
           <b>{name}</b>

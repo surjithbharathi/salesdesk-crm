@@ -140,6 +140,28 @@
   .cwt .lv-kpi-n { font-size: 20px; }
   .cwt .lv-search { flex-basis: 100%; }
   .cwt .lv-bar-row { grid-template-columns: 110px 1fr 44px; gap: 8px; } .cwt .lv-bar-row em { display: none; }
+  /* the leads table becomes one card per lead: name with Call / WhatsApp, then stage, owner and follow-up */
+  .cwt .lv-table { display: block; min-width: 0; }
+  .cwt .lv-table thead { display: none; }
+  .cwt .lv-table tbody { display: block; }
+  .cwt .lv-table tbody tr { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 12px 12px 12px 14px; border-bottom: 1px solid var(--k-bd-f0f1f6, #f0f1f6); }
+  .cwt .lv-table tbody tr::after { content: ""; order: 3; flex-basis: 100%; height: 0; }
+  .cwt .lv-table tbody tr.picked { background: var(--k-bg-f0f4fe, #f0f4fe); }
+  .cwt .lv-table td, .cwt .lv-table tbody tr:hover td, .cwt .lv-table tr.picked td { order: 4; padding: 0; border: 0; background: none; font-size: 12.5px; white-space: normal; }
+  .cwt .lv-table td:empty, .cwt .lv-table td.lv-m-hide { display: none; }
+  .cwt .lv-table td.lv-cb { order: 0; width: auto; padding: 0 !important; }
+  .cwt .lv-table td.lv-name { order: 1; flex: 1 1 0; min-width: 0; }
+  .cwt .lv-table td.lv-qcol { order: 2; width: auto; }
+  .cwt .lv-table td.lv-none { flex: 1 1 100%; padding: 20px 0; text-align: center; }
+  .cwt .lv-table td[data-label]::before { content: attr(data-label) " "; color: var(--r-muted); }
+  .cwt .lv-who { gap: 10px; }
+  .cwt .lv-who-text { flex: 1; overflow: hidden; }
+  .cwt .lv-line { flex-wrap: wrap; row-gap: 2px; }
+  .cwt .lv-link { overflow-wrap: anywhere; }
+  .cwt .lv-qa { opacity: 1; }
+  .cwt .lv-q { width: 38px; height: 38px; }
+  .cwt .lv-table .st, .cwt .lv-due { height: 24px; }
+  .cwt .lv-person .av { width: 22px; height: 22px; font-size: 9px; }
 }
 
 /* ---------- lead panel: the drawer ---------- */
@@ -338,7 +360,7 @@
 .cwt .ld-move .ld-chip { height: 30px; padding: 0 10px; font-size: 12px; }
 
 .cwt .ld-fields { padding: 4px 16px 8px; }
-.cwt .ld-ftabs { display: flex; align-items: center; gap: 16px; border-bottom: 1px solid var(--k-bd-f0f1f6, #f0f1f6); }
+.cwt .ld-ftabs { display: flex; flex-wrap: wrap; align-items: center; column-gap: 16px; border-bottom: 1px solid var(--k-bd-f0f1f6, #f0f1f6); }
 .cwt .ld-ftabs > button { display: flex; align-items: center; gap: 5px; height: 38px; padding: 0 2px; border: 0; border-bottom: 2px solid transparent; background: none; font: inherit; font-size: 12.5px; font-weight: 700; color: var(--r-muted); white-space: nowrap; cursor: pointer; }
 .cwt .ld-ftabs > button.on { color: var(--r-blue); border-bottom-color: var(--r-blue); }
 .cwt .ld-ftabs em { padding: 0 6px; border-radius: 7px; background: var(--k-bg-f0f1f6, #f0f1f6); font-size: 10.5px; font-style: normal; }
