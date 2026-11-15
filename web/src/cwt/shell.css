@@ -163,6 +163,7 @@
 .cwt .ws-label { max-width: 110px; }
 .cwt .top-right { gap: 6px; }
 .cwt .pop { width: min(280px, calc(100vw - 24px)); }
+.cwt .top-right .pop { position: fixed; top: 58px; right: 12px; left: auto; max-height: calc(100dvh - 76px); overflow-y: auto; }
 }
 /* the search box in the top bar, on every page */
 .cwt .gsearch { position: relative; flex: 1 1 420px; max-width: 560px; min-width: 0; margin: 0 auto; display: flex; align-items: center; height: 36px; border: 1px solid var(--k-bd-dbe1e8, #dbe1e8); border-radius: 18px; background: var(--k-bg-f8fafc, #f8fafc); }
@@ -183,4 +184,14 @@
 .cwt .gs-none { margin: 0; padding: 12px 10px; font-size: 13px; color: var(--k-fg-64748b, #64748b); }
 .cwt .gs-pop > .gs-all { display: block; width: 100%; margin-top: 4px; padding: 9px 10px; border: 0; border-top: 1px solid var(--k-bd-eef2f6, #eef2f6); border-radius: 0 0 8px 8px; background: none; color: var(--k-fg-1f4fd1, #1f4fd1); font: inherit; font-size: 13px; font-weight: 600; text-align: left; cursor: pointer; }
 .cwt .gs-pop > .gs-all:hover { background: var(--k-bg-f8fafc, #f8fafc); }
+/* a phone: the search is a round button; tapped, it opens across the top bar */
+@media (max-width: 480px) {
+  .cwt .gsearch { flex: 0 0 40px !important; width: 40px; height: 40px; margin: 0; border-radius: 50%; }
+  .cwt .gsearch .gs-icon { margin: 0 auto; }
+  .cwt .gsearch input { position: absolute; inset: 0; padding-left: 40px; border-radius: inherit; }
+  .cwt .gsearch input::placeholder { color: transparent; }
+  .cwt .gsearch:focus-within { position: fixed; top: 10px; left: 8px; right: 8px; z-index: 45; width: auto; border-radius: 20px; }
+  .cwt .gsearch:focus-within .gs-icon { margin: 0 8px 0 13px; }
+  .cwt .gsearch:focus-within input::placeholder { color: var(--k-fg-64748b, #64748b); }
+}
 @media (max-width: 760px) { .cwt .gsearch { flex-basis: 160px; } .cwt .gs-kbd { display: none; } .cwt .ws-label { display: none; } .cwt .gs-pop { position: fixed; left: 8px; right: 8px; top: 54px; } }

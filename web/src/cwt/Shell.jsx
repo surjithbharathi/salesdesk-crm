@@ -96,6 +96,13 @@ export default function Shell({ path, owner, session, onLogout, children }) {
     if (notes.unread) crmSend("POST", "notifications/read").then(() => setNotes((n) => ({ ...n, unread: 0, notifications: n.notifications.map((x) => ({ ...x, read: true })) }))).catch(() => {});
   };
   const popItem = nav.find((n) => n.key === pop);
+  // a phone has no mouse to leave the menu with: a tap anywhere outside the top bar's menus closes them
+  useEffect(() => {
+    if (!panel) return undefined;
+    const away = (e) => { if (!e.target.closest?.(".anchor, .ws")) setPanel(""); };
+    document.addEventListener("pointerdown", away);
+    return () => document.removeEventListener("pointerdown", away);
+  }, [panel]);
 
   return (
     <div className="cwt cwt-root">

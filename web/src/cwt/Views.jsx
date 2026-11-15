@@ -362,15 +362,15 @@ export default function Views({ params }) {
                               </div>
                             </td>
                             {cols.has("status") && <td><span className={`st st-${slug(statusOf(l))}`}>{statusOf(l)}</span></td>}
-                            {cols.has("phone") && <td>{l.phone}</td>}
-                            {cols.has("state") && <td>{l.state || ""}</td>}
-                            {cols.has("probable") && <td>{l.state ? "" : l.probableState || ""}</td>}
-                            {cols.has("language") && <td>{l.language || ""}{l.languageGuess && l.language ? <small className="lv-muted"> (guess)</small> : l.languageFrom === "call" ? <small className="lv-muted"> (call)</small> : null}</td>}
-                            {cols.has("assignee") && <td>{l.owner ? <span className="lv-person"><span className={`av ${avClass(nameOf(l.owner))}`} aria-hidden="true">{initials(nameOf(l.owner))}</span>{nameOf(l.owner)}</span> : <span className="lv-muted">Unassigned</span>}</td>}
-                            {cols.has("source") && <td>{l.source}</td>}
-                            {cols.has("value") && <td>{money(l.value)}</td>}
-                            {cols.has("next") && <td>{due ? <span className={`lv-due ${due.tone}`} title={stamp(Date.parse(next))}>{due.text}</span> : <span className="lv-due none">Not planned</span>}</td>}
-                            {cols.has("created") && <td><span className="lv-created"><b>{ago(Date.parse(l.createdAt))}</b><small>{stamp(Date.parse(l.createdAt))}</small></span></td>}
+                            {cols.has("phone") && <td className="lv-m-hide">{l.phone}</td>}
+                            {cols.has("state") && <td data-label="State">{l.state || ""}</td>}
+                            {cols.has("probable") && <td data-label="Probable">{l.state ? "" : l.probableState || ""}</td>}
+                            {cols.has("language") && <td data-label="Language">{l.language || ""}{l.languageGuess && l.language ? <small className="lv-muted"> (guess)</small> : l.languageFrom === "call" ? <small className="lv-muted"> (call)</small> : null}</td>}
+                            {cols.has("assignee") && <td className="lv-m-owner">{l.owner ? <span className="lv-person"><span className={`av ${avClass(nameOf(l.owner))}`} aria-hidden="true">{initials(nameOf(l.owner))}</span>{nameOf(l.owner)}</span> : <span className="lv-muted">Unassigned</span>}</td>}
+                            {cols.has("source") && <td className="lv-m-hide">{l.source}</td>}
+                            {cols.has("value") && <td data-label="Value">{money(l.value)}</td>}
+                            {cols.has("next") && <td className="lv-m-due">{due ? <span className={`lv-due ${due.tone}`} title={stamp(Date.parse(next))}>{due.text}</span> : <span className="lv-due none">Not planned</span>}</td>}
+                            {cols.has("created") && <td className="lv-m-hide"><span className="lv-created"><b>{ago(Date.parse(l.createdAt))}</b><small>{stamp(Date.parse(l.createdAt))}</small></span></td>}
                             <td className="lv-qcol">
                               <div className="lv-qa">
                                 {l.phone && <a className="lv-q call" href={telHref(l)} aria-label={`Call ${l.name}`} title="Call"><TIcon name="phone" /></a>}
