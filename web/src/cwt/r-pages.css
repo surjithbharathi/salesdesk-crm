@@ -288,3 +288,21 @@
 .cwt .lost-reason { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border: 1px solid var(--r-line-2); border-radius: 10px; font-size: 14px; font-weight: 600; color: var(--r-ink); cursor: pointer; }
 .cwt .lost-reason.on { border-color: var(--r-blue); background: var(--r-blue-tint); }
 .cwt .lost-reason input { accent-color: var(--r-blue); margin: 0; }
+
+/* Leaderboard and call report on a phone: one card per person instead of a table scrolled sideways
+   (#rank  avatar Name / then each figure with its label) */
+@media (max-width: 640px) {
+  .cwt .rp-table table:has(.rp-m-who) { display: block; }
+  .cwt .rp-table table:has(.rp-m-who) thead { display: none; }
+  .cwt .rp-table table:has(.rp-m-who) tbody { display: block; }
+  .cwt .rp-table table:has(.rp-m-who) tbody tr { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 8px; padding: 14px 16px; border-bottom: 1px solid var(--k-bd-f0f1f6, #f0f1f6); }
+  .cwt .rp-table table:has(.rp-m-who) tbody tr:last-child { border-bottom: 0; }
+  .cwt .rp-table table:has(.rp-m-who) tbody tr > td { padding: 0; border: 0; }
+  .cwt .rp-table td.rp-m-rank { display: none; }
+  .cwt .rp-table td.rp-m-who { grid-column: 1 / -1; }
+  .cwt .rp-table td.rp-m-who .rp-user b::before { content: "#" counter(rp-rank) " "; }
+  .cwt .rp-table table:has(.rp-m-who) tbody { counter-reset: rp-rank; }
+  .cwt .rp-table table:has(.rp-m-who) tbody tr { counter-increment: rp-rank; }
+  .cwt .rp-table tbody tr > td[data-label]::before { content: attr(data-label); display: block; margin-bottom: 2px; font-size: 11px; font-weight: 600; color: var(--r-muted); }
+  .cwt .rp-table td.r-empty { grid-column: 1 / -1; }
+}

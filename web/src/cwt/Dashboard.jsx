@@ -226,14 +226,14 @@ function TeamRow({ x }) {
   const idle = state[0] === "amber" || state[0] === "grey";
   return (
     <tr>
-      <td><div className="rd-who"><span className={`av rd-av ${avClass(x.u.name)}`} aria-hidden="true">{initials(x.u.name)}<em className={state[0]} /></span><b>{x.u.name}</b></div></td>
-      <td><span className={`rd-state ${state[0]}`}>{state[1]}</span></td>
-      <td><b>{x.calls}</b></td>
-      <td>{x.conn} · {share(x.conn, x.calls)}%</td>
-      <td>{talk(x.talk)}</td>
-      <td className={x.late ? "rd-late" : "rd-ok"}>{x.late}</td>
-      <td>{goalShare === null ? <span className="rd-muted">No goal</span> : <div className="rd-gtrack" title={`${x.calls} of ${x.goal} calls`}><i className={barTone} style={width(x.calls, x.goal)} /></div>}</td>
-      <td>{idle && phone ? <a className="rd-mini" href={`tel:${String(phone).replace(/[^\d+]/g, "")}`}>Call {x.u.name.split(/\s+/)[0]}</a> : <a className="rd-mini" href={hashFor("/leads", { queue: "unassigned" })}>Assign leads</a>}</td>
+      <td className="rd-m-wide"><div className="rd-who"><span className={`av rd-av ${avClass(x.u.name)}`} aria-hidden="true">{initials(x.u.name)}<em className={state[0]} /></span><b>{x.u.name}</b></div></td>
+      <td className="rd-m-wide"><span className={`rd-state ${state[0]}`}>{state[1]}</span></td>
+      <td data-label="Calls"><b>{x.calls}</b></td>
+      <td data-label="Connected">{x.conn} · {share(x.conn, x.calls)}%</td>
+      <td data-label="Talk time">{talk(x.talk)}</td>
+      <td data-label="Late" className={x.late ? "rd-late" : "rd-ok"}>{x.late}</td>
+      <td className="rd-m-wide" data-label="Calls goal">{goalShare === null ? <span className="rd-muted">No goal</span> : <div className="rd-gtrack" title={`${x.calls} of ${x.goal} calls`}><i className={barTone} style={width(x.calls, x.goal)} /></div>}</td>
+      <td className="rd-m-wide">{idle && phone ? <a className="rd-mini" href={`tel:${String(phone).replace(/[^\d+]/g, "")}`}>Call {x.u.name.split(/\s+/)[0]}</a> : <a className="rd-mini" href={hashFor("/leads", { queue: "unassigned" })}>Assign leads</a>}</td>
     </tr>
   );
 }

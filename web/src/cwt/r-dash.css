@@ -211,4 +211,19 @@
   .cwt .rd-seg { width: 100%; }
   .cwt .rd-seg button { flex: 1; padding: 0 8px; }
   .cwt .viewing { padding: 14px 16px 0; }
+  /* Team now: one card per caller instead of a table scrolled sideways
+     (name · state / calls, connected, talk time, late / goal bar · action) */
+  .cwt .rd-table { display: block; min-width: 0; }
+  .cwt .rd-table thead { display: none; }
+  .cwt .rd-table tbody { display: block; }
+  .cwt .rd-table tbody tr { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: center; gap: 12px 8px; padding: 14px 16px; border-bottom: 1px solid var(--k-bd-f0f1f6, #f0f1f6); }
+  .cwt .rd-table tbody tr:last-child { border-bottom: 0; }
+  .cwt .rd-table tbody tr > td { padding: 0; border: 0; font-size: 13.5px; }
+  .cwt .rd-table tbody tr > td.rd-m-wide { grid-column: span 2; min-width: 0; }
+  .cwt .rd-table tbody tr > td.rd-m-wide:nth-child(2), .cwt .rd-table tbody tr > td.rd-m-wide:last-child { justify-self: end; }
+  .cwt .rd-table tbody tr > td[data-label]::before { content: attr(data-label); display: block; margin-bottom: 2px; font-size: 11px; font-weight: 600; color: var(--r-muted); }
+  .cwt .rd-table tbody tr > td.rd-empty { grid-column: 1 / -1; }
+  .cwt .rd-who b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cwt .rd-state { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  .cwt .rd-gtrack { width: 100%; }
 }

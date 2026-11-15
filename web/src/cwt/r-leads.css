@@ -138,28 +138,40 @@
   .cwt .lv-kpi { padding: 12px; gap: 10px; }
   .cwt .lv-kpi-ic { width: 36px; height: 36px; border-radius: 11px; }
   .cwt .lv-kpi-n { font-size: 20px; }
-  .cwt .lv-search { flex-basis: 100%; }
+  .cwt .lv-search { flex-basis: 100%; height: 42px; }
+  .cwt .lv-tools { gap: 8px; padding: 12px; }
+  .cwt .lv-tools .lv-btn { height: 36px; padding: 0 12px; border-radius: 10px; font-size: 12.5px; }
   .cwt .lv-bar-row { grid-template-columns: 110px 1fr 44px; gap: 8px; } .cwt .lv-bar-row em { display: none; }
-  /* the leads table becomes one card per lead: name with Call / WhatsApp, then stage, owner and follow-up */
+
+  /* the leads table becomes one card per lead:
+     [tick] (avatar) Name, number            [Call] [WhatsApp]
+                     Stage · owner · next follow-up                */
   .cwt .lv-table { display: block; min-width: 0; }
   .cwt .lv-table thead { display: none; }
   .cwt .lv-table tbody { display: block; }
-  .cwt .lv-table tbody tr { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 12px 12px 12px 14px; border-bottom: 1px solid var(--k-bd-f0f1f6, #f0f1f6); }
+  .cwt .lv-table tbody tr { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 14px 12px 14px 44px; border-bottom: 1px solid var(--k-bd-f0f1f6, #f0f1f6); }
+  .cwt .lv-table tbody tr:last-child { border-bottom: 0; }
   .cwt .lv-table tbody tr::after { content: ""; order: 3; flex-basis: 100%; height: 0; }
   .cwt .lv-table tbody tr.picked { background: var(--k-bg-f0f4fe, #f0f4fe); }
-  .cwt .lv-table td, .cwt .lv-table tbody tr:hover td, .cwt .lv-table tr.picked td { order: 4; padding: 0; border: 0; background: none; font-size: 12.5px; white-space: normal; }
-  .cwt .lv-table td:empty, .cwt .lv-table td.lv-m-hide { display: none; }
-  .cwt .lv-table td.lv-cb { order: 0; width: auto; padding: 0 !important; }
-  .cwt .lv-table td.lv-name { order: 1; flex: 1 1 0; min-width: 0; }
-  .cwt .lv-table td.lv-qcol { order: 2; width: auto; }
-  .cwt .lv-table td.lv-none { flex: 1 1 100%; padding: 20px 0; text-align: center; }
-  .cwt .lv-table td[data-label]::before { content: attr(data-label) " "; color: var(--r-muted); }
+  .cwt .lv-table tbody tr > td { order: 4; padding: 0; border: 0; background: none !important; font-size: 12.5px; white-space: normal; }
+  .cwt .lv-table tbody tr > td:empty, .cwt .lv-table tbody tr > td.lv-m-hide { display: none; }
+  .cwt .lv-table tbody tr > td.lv-cb { position: absolute; left: 16px; top: 24px; width: auto; padding: 0 !important; }
+  .cwt .lv-table tbody tr > td.lv-cb input { width: 17px; height: 17px; margin: 0; }
+  .cwt .lv-table tbody tr > td.lv-name { order: 1; flex: 1 1 0; min-width: 0; }
+  .cwt .lv-table tbody tr > td.lv-qcol { order: 2; width: auto; }
+  .cwt .lv-table tbody tr > td.lv-none { flex: 1 1 100%; margin-left: -32px; padding: 20px 0; text-align: center; }
+  .cwt .lv-table tbody tr > td[data-label]::before { content: attr(data-label) " "; color: var(--r-muted); }
+  .cwt .lv-table tbody tr > td.lv-m-owner .lv-muted { font-size: 12.5px; }
+  .cwt .lv-table tbody tr > td.lv-m-due:has(.lv-due.none) { display: none; }
   .cwt .lv-who { gap: 10px; }
+  .cwt .lv-av { width: 38px; height: 38px; font-size: 13px; }
   .cwt .lv-who-text { flex: 1; overflow: hidden; }
   .cwt .lv-line { flex-wrap: wrap; row-gap: 2px; }
-  .cwt .lv-link { overflow-wrap: anywhere; }
-  .cwt .lv-qa { opacity: 1; }
-  .cwt .lv-q { width: 38px; height: 38px; }
+  .cwt .lv-link { font-size: 15px; overflow-wrap: anywhere; }
+  .cwt .lv-sub { margin-top: 3px; font-size: 12.5px; }
+  .cwt .lv-qa { gap: 8px; opacity: 1; }
+  .cwt .lv-q { width: 40px; height: 40px; border-radius: 12px; }
+  .cwt .lv-q svg { width: 18px; height: 18px; }
   .cwt .lv-table .st, .cwt .lv-due { height: 24px; }
   .cwt .lv-person .av { width: 22px; height: 22px; font-size: 9px; }
 }
