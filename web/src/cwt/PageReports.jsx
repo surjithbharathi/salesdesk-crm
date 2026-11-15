@@ -166,13 +166,13 @@ export default function CwtReports({ params }) {
               <thead><tr><th>#</th><th>MEMBER</th><th>LEADS</th><th>WON</th><th>CALLS</th><th>CONNECTED</th><th>TALK TIME</th></tr></thead>
               <tbody>{byWon.map((r, i) => (
                 <tr key={r.id}>
-                  <td>{i + 1}</td>
-                  <td><div className="rp-user"><span className={`av rp-av sm ${avClass(r.name)}`}>{initials(r.name)}</span><b>{r.name}</b></div></td>
-                  <td>{r.leads}</td>
-                  <td className={r.won ? "won" : "nil"}>{r.won}</td>
-                  <td><b>{r.calls.toLocaleString("en-IN")}</b></td>
-                  <td>{r.connected.toLocaleString("en-IN")} · {pct(r.connected, r.calls)}%</td>
-                  <td>{talkText(r.talk)}</td>
+                  <td className="rp-m-rank">{i + 1}</td>
+                  <td className="rp-m-who"><div className="rp-user"><span className={`av rp-av sm ${avClass(r.name)}`}>{initials(r.name)}</span><b>{r.name}</b></div></td>
+                  <td data-label="Leads">{r.leads}</td>
+                  <td data-label="Won" className={r.won ? "won" : "nil"}>{r.won}</td>
+                  <td data-label="Calls"><b>{r.calls.toLocaleString("en-IN")}</b></td>
+                  <td data-label="Connected">{r.connected.toLocaleString("en-IN")} · {pct(r.connected, r.calls)}%</td>
+                  <td data-label="Talk time">{talkText(r.talk)}</td>
                 </tr>
               ))}{!byWon.length && <tr><td colSpan={7} className="r-empty">No team members yet.</td></tr>}</tbody>
             </table>
@@ -208,14 +208,14 @@ export default function CwtReports({ params }) {
               <thead><tr><th>#</th><th>CALLER</th><th>LEADS</th><th>CALLS</th><th>CONNECTED</th><th>TALK TIME</th><th>AVG CALL</th><th>WON</th></tr></thead>
               <tbody>{byCalls.map((r, i) => (
                 <tr key={r.id}>
-                  <td>{i + 1}</td>
-                  <td><div className="rp-user"><span className={`av rp-av sm ${avClass(r.name)}`}>{initials(r.name)}</span><b>{r.name}</b></div></td>
-                  <td>{r.leads}</td>
-                  <td><b>{r.calls.toLocaleString("en-IN")}</b></td>
-                  <td>{r.connected.toLocaleString("en-IN")} · {pct(r.connected, r.calls)}%</td>
-                  <td>{talkText(r.talk)}</td>
-                  <td>{talkText(r.connected ? Math.round(r.talk / r.connected) : 0)}</td>
-                  <td className={r.won ? "won" : "nil"}>{r.won}</td>
+                  <td className="rp-m-rank">{i + 1}</td>
+                  <td className="rp-m-who"><div className="rp-user"><span className={`av rp-av sm ${avClass(r.name)}`}>{initials(r.name)}</span><b>{r.name}</b></div></td>
+                  <td data-label="Leads">{r.leads}</td>
+                  <td data-label="Calls"><b>{r.calls.toLocaleString("en-IN")}</b></td>
+                  <td data-label="Connected">{r.connected.toLocaleString("en-IN")} · {pct(r.connected, r.calls)}%</td>
+                  <td data-label="Talk time">{talkText(r.talk)}</td>
+                  <td data-label="Avg call">{talkText(r.connected ? Math.round(r.talk / r.connected) : 0)}</td>
+                  <td data-label="Won" className={r.won ? "won" : "nil"}>{r.won}</td>
                 </tr>
               ))}{!byCalls.length && <tr><td colSpan={8} className="r-empty">No team members yet.</td></tr>}</tbody>
             </table>
