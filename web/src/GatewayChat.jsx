@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { crmGet, crmSend } from "./api.js";
 import { useCrm } from "./crm.jsx";
 import { useToast } from "./toast.jsx";
+import { waThreads } from "./waThreads.js";
 
 // A lead's WhatsApp chat with the Devi WhatsApp gateway: what was said in both directions, and a box to answer.
 // Free text works inside WhatsApp's 24 hours after the customer's last message; after that an approved template is needed.
@@ -113,8 +114,9 @@ export default function GatewayChat({ leadId, className = "" }) {
   const [useTemplate, setUseTemplate] = useState(false);
   const thread = useMemo(() => {
     if (!crm.state) return [];
-    const ids = new Set((crm.state.conversations || []).filter((c) => c.leadId === leadId && c.channel === "WhatsApp").map((c) => c.id));
-    return (crm.state.messages || []).filter((m) => ids.has(m.conversationId)).sort((a, b) => stamp(a) - stamp(b));
+    // every WhatsApp conversation of this lead (all our numbers, gateway and TeleCRM) as one thread
+    const convs = (crm.state.conversations || []).filter((c) => c.leadId === leadId);
+    return waThreads(convs, crm.state.messages, stamp)[0]?.messages || [];
   }, [crm.state, leadId]);
   const inside = insideWindow(thread);
   async function send(event) {
