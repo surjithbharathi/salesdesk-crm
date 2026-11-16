@@ -255,7 +255,8 @@ export default function ChatEntry({ e }) {
     body = (
       <article className={`gwchat-msg ${out ? "out" : ""}`}>
         <p>{e.text}</p>
-        <small>{e.sender || e.by || (out ? "Our team" : "Customer")}{e.via ? ` · via ${e.via}` : ""}{e.label ? ` · ${e.label}` : ""}{e.at ? `, ${e.at}` : ""}</small>
+        {/* who: our person who sent it, or the customer and whose number they wrote to; several people can message one customer */}
+        <small>{out ? e.sender || e.by || "Our team" : `${e.customer || "Customer"}${e.by ? ` to ${e.by}` : ""}`}{e.via ? ` · via ${e.via}` : ""}{e.label ? ` · ${e.label}` : ""}{e.at ? `, ${e.at}` : ""}</small>
       </article>
     );
   } else if (e.kind === "call") {

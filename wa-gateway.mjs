@@ -129,11 +129,14 @@ export function createWaGateway({ db, all, get, put, stamp, tx, log, keyPath, sy
   }
   function record(lead, m, seen) {
     if (all("messages").some((x) => x.provider === "gateway" && x.providerId === m.providerId)) return { duplicate: true };
+    // a message sent from the CRM or pulled from history carries only the number's ID: name it as the gateway does
+    if (!m.numberLabel && m.phoneId && raw().seenNumbers[m.phoneId]) m = { ...m, numberLabel: raw().seenNumbers[m.phoneId] };
     const conversation = conversationOf(lead.id);
     const message = stamp({ ...m, provider: "gateway", leadId: lead.id, conversationId: conversation.id });
     put("messages", message);
     put("conversations", { ...conversation, status: "Open", updatedAt: new Date(now()).toISOString() });
-    log(lead.id, "Message", m.text, { direction: m.direction, provider: "gateway", occurredAt: m.occurredAt, ...(m.userId ? { userId: m.userId } : {}) });
+    // which of our numbers it went through, so the lead's history can say whose number the customer wrote to
+    log(lead.id, "Message", m.text, { direction: m.direction, provider: "gateway", occurredAt: m.occurredAt, ...(m.numberLabel ? { numberLabel: m.numberLabel } : {}), ...(m.phoneId ? { phoneId: m.phoneId } : {}), ...(m.userId ? { userId: m.userId } : {}) });
     if (seen) noteNumber(seen.phoneId, seen.label);
     return { id: message.id };
   }

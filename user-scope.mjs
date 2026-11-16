@@ -13,6 +13,8 @@ export function scopedState(all, userId) {
     deals,
     conversations,
     users: all("users").filter((u) => u.id === userId),
+    // colleagues by name and number only, so a chat can say which of them a message went to or came from
+    team: all("users").filter((u) => u.active !== false).map((u) => ({ id: u.id, name: u.name || "", numbers: u.numbers || [], active: true })),
     activities: all("activities").filter((a) => leadIds.has(a.leadId)),
     tasks: all("tasks").filter((t) => t.owner === userId && (!t.leadId || leadIds.has(t.leadId))),
     payments: all("payments").filter((p) => dealIds.has(p.dealId)),

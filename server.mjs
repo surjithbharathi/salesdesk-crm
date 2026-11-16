@@ -528,13 +528,16 @@ function withBadges(state) {
   if (!state || !Array.isArray(state.users)) return state;
   const names = new Map(userAuth.listAccounts().map((a) => [a.id, a.username]));
   const clean = (s) => String(s || "").replace(/[^\p{L}\p{N}]/gu, "").toUpperCase();
-  const base = state.users.map((u) => clean(names.get(u.id) || u.email?.split("@")[0] || u.name) || "?");
+  // badges are worked out over the whole team when a staff member's state carries it, so they match everyone else's
+  const people = Array.isArray(state.team) ? state.team : state.users;
+  const base = people.map((u) => clean(names.get(u.id) || u.email?.split("@")[0] || u.name) || "?");
   const badges = base.map((b) => b.slice(0, 2));
   // A badge fits a small circle: two letters, a third only when two clash, then a number (SU, SUR, SU2).
   const group = () => { const seen = new Map(); badges.forEach((b, i) => seen.set(b, [...(seen.get(b) || []), i])); return [...seen.values()].filter((idx) => idx.length > 1); };
   for (const idx of group()) for (const i of idx) if (base[i].length >= 3) badges[i] = base[i].slice(0, 3);
   for (const idx of group()) idx.forEach((i, n) => { if (n) badges[i] = base[i].slice(0, 2) + (n + 1); });
-  return { ...state, users: state.users.map((u, i) => ({ ...u, badge: badges[i] })) };
+  const badgeOf = new Map(people.map((u, i) => [u.id, badges[i]]));
+  return { ...state, users: state.users.map((u) => ({ ...u, badge: badgeOf.get(u.id) || "" })), ...(Array.isArray(state.team) ? { team: state.team.map((u) => ({ ...u, badge: badgeOf.get(u.id) || "" })) } : {}) };
 }
 // Call AI heard the customer's language: it becomes the lead's language, replacing a guess or an earlier call's answer,
 // never a language someone chose by hand
