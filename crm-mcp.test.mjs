@@ -118,3 +118,16 @@ test('MCP leads_list filters unassigned leads, counts without rows and returns c
   await assert.rejects(() => f.mcp.call(f.header, 'leads_list', { countOnly: 'yes' }), /boolean/);
   f.db.close();
 });
+
+test('MCP lead_edit can archive and restore a lead after browser approval', async () => {
+  const f = fixture();
+  const args = { leadId: 'lead', expectedUpdatedAt: f.get('leads', 'lead').updatedAt, changes: { archived: true } };
+  const proposal = await f.mcp.call(f.header, 'lead_edit', args);
+  assert.equal(proposal.approvalRequired, true);
+  assert.equal(f.get('leads', 'lead').archived, undefined);
+  f.mcp.approve(f.identity, proposal.approvalId);
+  const archived = await f.mcp.call(f.header, 'lead_edit', { ...args, approvalId: proposal.approvalId });
+  assert.equal(archived.archived, true);
+  await assert.rejects(() => f.mcp.call(f.header, 'lead_edit', { leadId: 'lead', expectedUpdatedAt: archived.updatedAt, changes: { archived: 'yes' } }), /true or false/);
+  f.db.close();
+});
