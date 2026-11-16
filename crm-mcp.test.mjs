@@ -100,3 +100,21 @@ test('MCP 2026-07-28 clients (no initialize) discover the server and list tools;
   assert.equal(init.result.resultType, undefined);
   f.db.close();
 });
+
+test('MCP leads_list filters unassigned leads, counts without rows and returns compact rows', async () => {
+  const f = fixture(['leads:read']);
+  f.put('leads', { id: 'u1', name: 'No Owner One', owner: '', stage: 'New', createdAt: '2026-10-27T08:00:00Z' });
+  f.put('leads', { id: 'u2', name: 'No Owner Two', stage: 'Lost', createdAt: '2026-10-27T09:00:00Z' });
+  const counts = await f.mcp.call(f.header, 'leads_list', { countOnly: true });
+  assert.equal(counts.total, 3);
+  assert.equal(counts.byOwner.unassigned, 2);
+  assert.equal(counts.data, undefined);
+  const free = await f.mcp.call(f.header, 'leads_list', { owner: 'unassigned', compact: true });
+  assert.deepEqual(free.data.map(l => l.id), ['u2', 'u1']);
+  assert.equal(free.data[0].owner, '');
+  assert.equal(free.nextOffset, null);
+  assert.equal((await f.mcp.call(f.header, 'leads_list', { owner: 'unassigned', stage: 'New', countOnly: true })).total, 1);
+  assert.equal((await f.mcp.call(f.header, 'leads_list', { owner: 'admin' })).total, 1);
+  await assert.rejects(() => f.mcp.call(f.header, 'leads_list', { countOnly: 'yes' }), /boolean/);
+  f.db.close();
+});
