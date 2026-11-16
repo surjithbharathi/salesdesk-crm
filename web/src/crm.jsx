@@ -106,11 +106,14 @@ export function CrmProvider({ me, children }) {
     const leads = state.leads || [];
     const tasks = state.tasks || [];
     const users = new Map((state.users || []).map((u) => [u.id, u]));
+    // everyone in the team (name, numbers, badge), to say who sent a message or whose number it came to; a staff member's
+    // own state has only themselves in `users`, so the server adds `team` for them
+    const staff = state.team ? new Map(state.team.map((u) => [u.id, u])) : users;
     const leadById = new Map(leads.map((l) => [l.id, l]));
     const openTasks = tasks.filter((t) => t.status !== "Done");
     const nextDue = new Map();
     for (const t of openTasks) if (t.leadId && (!nextDue.has(t.leadId) || t.due < nextDue.get(t.leadId))) nextDue.set(t.leadId, t.due);
-    return { me, state, error, reload, leads, tasks, openTasks, users, leadById, nextDue, activities: state.activities || [], calls: state.mobileCalls || [], isOpen: open };
+    return { me, state, error, reload, leads, tasks, openTasks, users, staff, leadById, nextDue, activities: state.activities || [], calls: state.mobileCalls || [], isOpen: open };
   }, [state, error, me, reload]);
   return <CrmContext.Provider value={value}><PhoneDial />{children}</CrmContext.Provider>;
 }

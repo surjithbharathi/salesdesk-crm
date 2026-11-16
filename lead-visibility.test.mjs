@@ -39,3 +39,11 @@ test("WhatsApp chats of one lead through several numbers and systems are one thr
   assert.deepEqual(lead.messages.map((m) => m.id), [1, 3]);
   assert.deepEqual(lead.conversationIds, ["g", "t"]);
 });
+
+test("a staff member's state names the whole team by name and number only, for who sent or got a message", async () => {
+  const { scopedState } = await import("./user-scope.mjs");
+  const users = [{ id: "u1", name: "Priya", numbers: ["9039036589"], email: "p@x", role: "member" }, { id: "u2", name: "Balaji", numbers: ["9039036583"], active: true, email: "b@x" }, { id: "u3", name: "Gone", active: false }];
+  const s = scopedState((k) => (k === "users" ? users : []), "u1");
+  assert.deepEqual(s.users.map((u) => u.id), ["u1"]);
+  assert.deepEqual(s.team, [{ id: "u1", name: "Priya", numbers: ["9039036589"], active: true }, { id: "u2", name: "Balaji", numbers: ["9039036583"], active: true }]);
+});

@@ -33,6 +33,8 @@ const FU_TYPES = ["Call", "WhatsApp", "Visit"];
 const when = (iso) => new Date(iso).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
 const clock = (iso) => new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 const stampOf = (a) => a.occurredAt || a.createdAt;
+// the same WhatsApp message as a history line and as a chat message: its direction, text and minute
+const msgKey = (m) => `${m.direction === "Outgoing" ? "o" : "i"}|${String(m.text || "").trim()}|${Math.floor(new Date(m.occurredAt || m.createdAt).getTime() / 60000)}`;
 
 // Quick time chips with a "Pick date" choice; `value` is a chip label or "pick".
 function TimeChips({ value, onChange, pick, onPick }) {
@@ -101,6 +103,14 @@ export function LeadDetail({ id, nav = null, compose: startWith = "" }) {
         }
     return hide;
   }, [crm.calls, id]);
+  // which of our numbers each WhatsApp message went through: on the message line itself, or (older lines) on the
+  // matching message of this lead's chats, found by its text and minute
+  const numberOfMessage = useMemo(() => {
+    const ids = new Set((crm.state?.conversations || []).filter((c) => c.leadId === id).map((c) => c.id));
+    const map = new Map();
+    for (const m of crm.state?.messages || []) if (ids.has(m.conversationId) && m.numberLabel) map.set(msgKey(m), m.numberLabel);
+    return map;
+  }, [crm.state, id]);
   const acts = useMemo(() => [...(crm.activities || []).filter((a) => a.leadId === id && !twins.has(a.id)), ...history.filter((a) => !twins.has(a.id))].sort((a, b) => String(stampOf(b)).localeCompare(String(stampOf(a)))), [crm.activities, id, history, twins]);
   // the enquiry the lead came with (IndiaMART buy lead, a TeleCRM "lead arrived" line): the latest one
   // every enquiry, newest first: how the buyer came (buy lead, call, direct...) and how often
@@ -207,9 +217,16 @@ export function LeadDetail({ id, nav = null, compose: startWith = "" }) {
     const dayKey = new Date(iso).toDateString();
     if (dayKey !== lastDay) { chat.push(<span key={`d-${dayKey}`} className="ld-day">{dayLabel(iso)}</span>); lastDay = dayKey; }
     // whose number it happened on (Settings, People, Numbers) wins; then who logged it; then the lead owner
-    const onNumber = userForNumber(crm.users, a.numberLabel);
-    const by = onNumber?.name || crm.users.get(a.userId)?.name || ownerName;
-    chat.push(<div key={a.id} className="ld-entry"><ChatEntry e={fromActivity(a, { by, customer: raw.name, badge: onNumber?.badge || crm.users.get(a.senderId || a.userId || raw.owner)?.badge || "", at: clock(iso), recordingId: recordings.get(a.id) || "", recordingPending: pendingRec.get(a.id) || false, said })} /></div>);
+    const isMsg = a.type === "Message";
+    const label = isMsg ? a.numberLabel || numberOfMessage.get(msgKey(a)) || "" : a.numberLabel;
+    const onNumber = userForNumber(crm.staff, label);
+    // a message: who sent it (the person in the CRM, else whose number it went from), or whose number the customer wrote to;
+    // never just the lead's owner, since several people can message the same customer
+    const by = isMsg
+      ? (a.direction === "Outgoing" ? crm.staff.get(a.userId)?.name || onNumber?.name || "" : onNumber?.name || "")
+      : onNumber?.name || crm.users.get(a.userId)?.name || ownerName;
+    const entry = isMsg && label !== a.numberLabel ? { ...a, numberLabel: label } : a;
+    chat.push(<div key={a.id} className="ld-entry"><ChatEntry e={fromActivity(entry, { by, customer: raw.name, badge: (isMsg && a.direction === "Outgoing" ? crm.staff.get(a.userId)?.badge : "") || onNumber?.badge || crm.staff.get(a.senderId || a.userId || raw.owner)?.badge || "", at: clock(iso), recordingId: recordings.get(a.id) || "", recordingPending: pendingRec.get(a.id) || false, said })} /></div>);
   }
   const lateNote = tab === "history" && filter === "all" && lateTasks[0];
 
