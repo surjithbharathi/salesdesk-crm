@@ -3,6 +3,7 @@ import { useCrm } from "../crm.jsx";
 import { hashFor } from "../format.js";
 import { pipelineStep } from "../pipeline.js";
 import { TIcon } from "./icons.jsx";
+import { useOthersLeads, OthersLeads } from "./OthersLeads.jsx";
 
 // The search box at the top of every page. It searches as you type and matches anything about a lead: name, phone (any
 // part of the number), business, city, state, language, source, email, owner, stage and TeleCRM's own fields.
@@ -55,6 +56,7 @@ export default function GlobalSearch() {
     return out.sort((a, b) => b.score - a.score || String(b.l.updatedAt || "").localeCompare(String(a.l.updatedAt || ""))).slice(0, 50);
   }, [q, crm.state, crm.leads, crm.users]);
   useEffect(() => setAt(0), [q]);
+  const others = useOthersLeads(open ? q : "");
 
   const go = (l) => { setOpen(false); setQ(""); input.current?.blur(); location.hash = hashFor("/leads", { lead: l.id }); };
   const seeAll = () => { setOpen(false); location.hash = hashFor("/search", { q: q.trim() }); };
@@ -81,7 +83,8 @@ export default function GlobalSearch() {
               <span className="gs-side"><span className="gs-stage">{statusOf(l)}</span><small>{why || owner || ""}</small></span>
             </button>
           ))}
-          {!shown.length && <p className="gs-none">No lead matches “{q.trim()}”.</p>}
+          {!shown.length && !others.length && <p className="gs-none">No lead matches “{q.trim()}”.</p>}
+          <OthersLeads leads={others} compact />
           <button type="button" className="gs-all" onClick={seeAll}>{results.length > shown.length ? `See all ${results.length >= 50 ? "50+" : results.length} results` : "Search deleted and blocked numbers too"}</button>
         </div>
       )}

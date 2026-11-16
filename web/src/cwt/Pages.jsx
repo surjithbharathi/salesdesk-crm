@@ -4,6 +4,7 @@ import { useCrm } from "../crm.jsx";
 import { hashFor } from "../format.js";
 import { TIcon } from "./icons.jsx";
 import LeadPanel from "./LeadDetail.jsx";
+import { useOthersLeads, OthersLeads } from "./OthersLeads.jsx";
 import { statusOf } from "./PageUtil.js";
 import CwtCalls from "./PageCalls.jsx";
 import CwtFollowups from "./PageFollowups.jsx";
@@ -36,6 +37,7 @@ export function CwtSearch({ params }) {
     load("blocked-numbers", setBlockedList);
     load("deleted-leads", setDeletedList);
   }, []);
+  const others = useOthersLeads(query);
   const digits = query.replace(/\D/g, "");
   const words = query.trim().toLowerCase();
   const sameNumber = (n) => digits.length >= 8 && (n.endsWith(digits.slice(-10)) || digits.endsWith(n));
@@ -68,9 +70,10 @@ export function CwtSearch({ params }) {
                 <span>{d.phone ? `${pretty(d.phone)}. ` : ""}Deleted on {dateOf(d.at)}{byName(d.by) ? ` by ${byName(d.by)}` : ""}. {d.blocked ? "The number was unblocked later, so" : "The number is not blocked, so"} a new call or chat from it creates a new lead.</span>
               </div>
             ))}
+            <OthersLeads leads={others} />
             <div className="results">
               {results.map((l) => <button key={l.id} type="button" className="res" onClick={() => setOpenId(l.id)}><b>{l.name}</b><span className="ph">{l.phone}</span><span className="row">Status: <span className="st">{statusOf(l)}</span>{l.archived && <span className="st archived">Archived</span>}<span className="as">{crm.users.get(l.owner)?.name || "No owner"}</span></span></button>)}
-              {!results.length && !blockedHit && !gone.length && <p className="hint">No leads found.</p>}
+              {!results.length && !blockedHit && !gone.length && !others.length && <p className="hint">No leads found.</p>}
             </div>
           </>
         )}

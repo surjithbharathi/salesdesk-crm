@@ -54,3 +54,21 @@ export function visibleTo(kind, v, userId, { leadOf, dealOf, conversationOf }) {
     default: return false;
   }
 }
+
+// A staff member searching a number or a name also learns when it is a colleague's lead: who has it and at what stage,
+// nothing more (no history, no calls, no editing). Only leads that person cannot already see; at most 10.
+// A number needs 6 digits or more, a name 3 letters or more.
+export function othersLeads(all, userId, query, nameOf) {
+  const q = String(query || "").trim().toLowerCase();
+  const digits = q.replace(/\D/g, "");
+  const byPhone = digits.length >= 6 && digits.length >= q.replace(/[\s+()-]/g, "").length - 1;
+  if (!byPhone && q.length < 3) return [];
+  const out = [];
+  for (const l of all("leads")) {
+    if (l.mergedInto || l.owner === userId || openUnassigned(l)) continue;
+    const hit = byPhone ? String(l.phone || "").replace(/\D/g, "").includes(digits) : String(l.name || "").toLowerCase().includes(q);
+    if (!hit) continue;
+    out.push({ id: l.id, name: l.name || "", phone: l.phone || "", owner: l.owner ? nameOf(l.owner) || "Someone else" : "Nobody", stage: l.deal || l.stage || "", archived: Boolean(l.archived), updatedAt: l.updatedAt || "" });
+  }
+  return out.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt))).slice(0, 10).map(({ updatedAt, ...rest }) => rest);
+}

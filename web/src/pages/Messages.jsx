@@ -6,6 +6,7 @@ import { useToast } from "../toast.jsx";
 import { GatewayReplyBar, insideWindow, useGatewaySend } from "../GatewayChat.jsx";
 import { sourceKeys, sourceLabel, secondsText } from "../ChatEntry.jsx";
 import DateTimePicker from "../DateTimePicker.jsx";
+import { waThreads } from "../waThreads.js";
 
 const stamp = (m) => m.occurredAt || m.createdAt || "";
 const dayStart = (t) => new Date(t).setHours(0, 0, 0, 0);
@@ -78,12 +79,10 @@ function LeadChats({ gatewayOn, tabs }) {
   const [only, setOnly] = useState("all");
   const threads = useMemo(() => {
     if (!crm.state) return [];
-    const byConversation = new Map();
-    for (const m of crm.state.messages || []) byConversation.set(m.conversationId, [...(byConversation.get(m.conversationId) || []), m]);
-    return (crm.state.conversations || [])
-      .filter((c) => c.channel === "WhatsApp")
+    // one chat per lead, whichever of our numbers or systems the messages came through
+    return waThreads(crm.state.conversations, crm.state.messages, stamp)
       .map((c) => {
-        const messages = (byConversation.get(c.id) || []).sort((a, b) => stamp(a).localeCompare(stamp(b)));
+        const messages = c.messages;
         // customer messages since our last answer: the chat is waiting for a reply
         let waiting = 0;
         for (let i = messages.length - 1; i >= 0 && messages[i].direction !== "Outgoing"; i--) waiting++;

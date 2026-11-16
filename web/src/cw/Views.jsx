@@ -9,6 +9,7 @@ import Recording from "../Recording.jsx";
 import { PIPELINE, pipelineStep, askLostReason } from "../pipeline.js";
 import { DAY, buildModel, initials, money, startOfDay } from "./model.js";
 import DateTimePicker from "../DateTimePicker.jsx";
+import { waThreads } from "../waThreads.js";
 
 // Opportunities, To-dos, Engagements and Conversations in the Salesmax style. The class names are the reference web app's,
 // so its style sheet (cw/views.css) applies as written; the data is this CRM's own.
@@ -385,10 +386,9 @@ export function CwConversations({ params }) {
   const [openLead, setOpenLead] = useState("");
   const threads = useMemo(() => {
     if (!m) return [];
-    const by = new Map();
-    for (const x of crm.state.messages || []) by.set(x.conversationId, [...(by.get(x.conversationId) || []), x]);
-    return (crm.state.conversations || []).filter((c) => c.channel === "WhatsApp").map((c) => {
-      const messages = (by.get(c.id) || []).sort((a, b) => stamp(a) - stamp(b));
+    // one chat per lead, whichever of our numbers or systems the messages came through
+    return waThreads(crm.state.conversations, crm.state.messages, stamp).map((c) => {
+      const messages = c.messages;
       const last = messages.at(-1);
       return { ...c, lead: m.byId.get(c.leadId), messages, last, waiting: Boolean(last) && last.direction !== "Outgoing" };
     }).sort((a, b) => (b.last ? stamp(b.last) : 0) - (a.last ? stamp(a.last) : 0));

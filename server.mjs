@@ -35,7 +35,7 @@ import { createWhatsApp, phoneDigits } from "./whatsapp.mjs";
 import { createMobileSync, MAX_AUDIO } from "./mobile-sync.mjs";
 import { PIPELINE } from "./pipeline.mjs";
 import { createUserAuth } from "./user-auth.mjs";
-import { scopedState, visibleTo } from "./user-scope.mjs";
+import { scopedState, visibleTo, othersLeads } from "./user-scope.mjs";
 import { createClickToCall } from "./click-to-call.mjs";
 import { bridgeConfig, createAutomationBridge } from "./automation-bridge.mjs";
 import { createWorkflows } from "./workflows.mjs";
@@ -1819,6 +1819,11 @@ const server = http.createServer(async (req, res) => {
         return send(200, { unread: 0 });
       }
       bad("Method not allowed", 405);
+    }
+    // a staff member's search: whose lead a number or name is, when it is not theirs (view only, see user-scope.mjs)
+    if (url.pathname === "/api/leads/whose" && req.method === "GET") {
+      if (!member) return send(200, []);
+      return send(200, othersLeads(all, identity.user.id, url.searchParams.get("q") || "", (id) => get("users", id)?.name || ""));
     }
     if (url.pathname === "/api/deleted-leads" && req.method === "GET") {
       if (identity && !["owner", "admin"].includes(workspaceAccess.profile(identity.user.id).role)) bad("Only an admin can see deleted leads", 403);

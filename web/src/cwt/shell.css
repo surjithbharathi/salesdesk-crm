@@ -196,3 +196,14 @@
   .cwt .gsearch:focus-within input::placeholder { color: var(--k-fg-64748b, #64748b); }
 }
 @media (max-width: 760px) { .cwt .gsearch { flex-basis: 160px; } .cwt .gs-kbd { display: none; } .cwt .ws-label { display: none; } .cwt .gs-pop { position: fixed; left: 8px; right: 8px; top: 54px; } }
+
+/* a colleague's lead found by search: whose it is, view only */
+.cwt .others-leads { margin: 8px 0 12px; padding: 10px 12px; border: 1px dashed var(--k-bd-e2e8f0, #e2e8f0); border-radius: 10px; background: var(--k-bg-f8fafc, #f8fafc); }
+.cwt .others-leads.compact { margin: 4px 0 0; padding: 8px 10px; border-width: 1px 0 0; border-style: solid; border-color: var(--k-bd-eef2f6, #eef2f6); border-radius: 0; background: none; }
+.cwt .others-head { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--k-fg-64748b, #64748b); }
+.cwt .others-row { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; cursor: default; }
+.cwt .others-row + .others-row { border-top: 1px solid var(--k-bd-eef2f6, #eef2f6); }
+.cwt .others-main, .cwt .others-side { display: flex; flex-direction: column; min-width: 0; }
+.cwt .others-side { align-items: flex-end; text-align: right; }
+.cwt .others-row b { font-size: 13px; color: var(--k-fg-0f172a, #0f172a); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cwt .others-row small { font-size: 12px; color: var(--k-fg-64748b, #64748b); }
