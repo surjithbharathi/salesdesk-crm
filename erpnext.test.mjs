@@ -71,6 +71,7 @@ test("the first read only takes stock; later quotations and invoices note the le
   assert.ok(notes.some((n) => n.leadId === "L1" && /reason: ERPNext quotation Q-1/.test(n.text)));
   assert.equal(get("leads", "L2").deal, "Won", "a won lead is not moved back by an unpaid invoice");
   assert.deepEqual(api.forLead("L2").invoices.map((i) => i.name), ["I-1"], "invoice found through the customer's mobile");
+  assert.equal(get("leads", "L2").city, "Coimbatore", "the read also brings the customer's address to the lead");
   assert.equal(notes.some((n) => /I-1|Invoice/.test(n.text)), false, "invoices are not written on the shared timeline");
   erp["Sales Invoice"].push({ name: "I-2", customer: "Durga", contact_mobile: "8639900016", grand_total: 224200, outstanding_amount: 100000, status: "Partly Paid", docstatus: 1, modified: "2026-11-12 11:00:00" });
   await api.sync();
@@ -110,7 +111,7 @@ test("a draft quotation is made from a lead, for an existing customer or a new o
 });
 
 test("a lead shows its ERPNext customer with address, and a new quotation opens in ERPNext", async (t) => {
-  const { api, erp, notes } = world(t);
+  const { api, erp, notes, get } = world(t);
   assert.equal(await api.customerFor("L2"), null, "nothing while ERPNext is off");
   await api.save({ baseUrl: "https://erp.example", apiKey: "k1", apiSecret: "s1", enabled: true });
   const c = await api.customerFor("L2");
@@ -118,6 +119,8 @@ test("a lead shows its ERPNext customer with address, and a new quotation opens 
   assert.equal(c.gstin, "33AAAAA0000A1Z5");
   assert.deepEqual(c.address.lines, ["12 Mill Road", "Peelamedu"]);
   assert.equal(c.address.pincode, "641004");
+  assert.deepEqual([get("leads", "L2").city, get("leads", "L2").state], ["Coimbatore", "Tamil Nadu"], "ERPNext's address replaces the lead's city and state");
+  assert.ok(notes.some((n) => /City and state from ERPNext customer Raj Machinery: Coimbatore, Tamil Nadu/.test(n.text)));
   const open = await api.createQuotation("L2", { open: true }, "Surjith");
   assert.equal(open.url, "https://erp.example/app/quotation/new?quotation_to=Customer&party_name=Raj%20Machinery");
   assert.equal(erp.made.length, 0, "nothing is made in ERPNext for a known customer");
