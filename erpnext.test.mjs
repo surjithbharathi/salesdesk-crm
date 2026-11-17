@@ -71,6 +71,7 @@ test("the first read only takes stock; later quotations and invoices note the le
   assert.ok(notes.some((n) => n.leadId === "L1" && /reason: ERPNext quotation Q-1/.test(n.text)));
   assert.equal(get("leads", "L2").deal, "Won", "a won lead is not moved back by an unpaid invoice");
   assert.deepEqual(api.forLead("L2").invoices.map((i) => i.name), ["I-1"], "invoice found through the customer's mobile");
+  await api.fillAddresses();
   assert.equal(get("leads", "L2").city, "Coimbatore", "the read also brings the customer's address to the lead");
   assert.equal(notes.some((n) => /I-1|Invoice/.test(n.text)), false, "invoices are not written on the shared timeline");
   erp["Sales Invoice"].push({ name: "I-2", customer: "Durga", contact_mobile: "8639900016", grand_total: 224200, outstanding_amount: 100000, status: "Partly Paid", docstatus: 1, modified: "2026-11-12 11:00:00" });

@@ -186,7 +186,7 @@ export function createErpnext({ db, all, get, put, log, keyPath, checkUrl = publ
       fresh.cursor = s.cursor;
       fresh.lastRun = { at, ok: true, firstRun, quotations: out.Quotation.read, invoices: out["Sales Invoice"].read, moved: out.Quotation.moved + out["Sales Invoice"].moved, noted: out.Quotation.noted + out["Sales Invoice"].noted };
       store(fresh);
-      await fillAddresses();
+      fillAddresses().catch((e) => report("ERPNext addresses failed: " + e.message));
       return fresh.lastRun;
     } catch (e) {
       const fresh = raw();
@@ -262,7 +262,13 @@ export function createErpnext({ db, all, get, put, log, keyPath, checkUrl = publ
     } else put("leads", next);
   }
   // after each read, a few leads with ERPNext documents get their customer's address (new ones first, then each again weekly)
-  async function fillAddresses(limit = 40) {
+  // ERPNext looks customers up slowly (about 20 seconds each), so this runs on its own, one batch at a time, never holding up a read
+  let filling = null;
+  function fillAddresses(limit = 40) {
+    if (!filling) filling = fillBatch(limit).finally(() => { filling = null; });
+    return filling;
+  }
+  async function fillBatch(limit) {
     const week = now() - 7 * 86400000, done = new Set();
     let n = 0;
     for (const { phone } of db.prepare("SELECT phone, MAX(modified) m FROM erp_docs WHERE phone<>'' GROUP BY phone ORDER BY m DESC").all()) {
@@ -320,5 +326,5 @@ export function createErpnext({ db, all, get, put, log, keyPath, checkUrl = publ
 
   const timer = setInterval(() => { void sync(); }, EVERY);
   timer.unref?.();
-  return { settings, save, test, sync, forLead, customerFor, items, createQuotation, close: () => clearInterval(timer) };
+  return { settings, save, test, sync, fillAddresses, forLead, customerFor, items, createQuotation, close: () => clearInterval(timer) };
 }
