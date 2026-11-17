@@ -374,4 +374,6 @@ test("a new lead without a state gets its probable state from the number, not on
   assert.equal(valueOf({ phone: "+919786000001", state: "Kerala" }, "probableState"), "");
   assert.equal(valueOf({ phone: "+919786000001", probableState: "Karnataka" }, "probableState"), "Karnataka");
   assert.equal(valueOf({ phone: "12345" }, "probableState"), "");
+  assert.equal(valueOf({ language: "Tamil", languageGuess: true }, "language"), "");
+  assert.equal(valueOf({ language: "Tamil", languageFrom: "call" }, "language"), "Tamil");
 });
