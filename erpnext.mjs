@@ -11,6 +11,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { PIPELINE } from "./pipeline.mjs";
+import { cleanState, withRegion } from "./lead-region.mjs";
 import { publicHttps } from "./wa-gateway.mjs";
 
 const DEFAULTS = { enabled: false, baseUrl: "", apiKey: "", apiSecret: "", autoStage: true, cursor: { Quotation: "", "Sales Invoice": "" }, lastRun: null };
@@ -185,6 +186,7 @@ export function createErpnext({ db, all, get, put, log, keyPath, checkUrl = publ
       fresh.cursor = s.cursor;
       fresh.lastRun = { at, ok: true, firstRun, quotations: out.Quotation.read, invoices: out["Sales Invoice"].read, moved: out.Quotation.moved + out["Sales Invoice"].moved, noted: out.Quotation.noted + out["Sales Invoice"].noted };
       store(fresh);
+      await fillAddresses();
       return fresh.lastRun;
     } catch (e) {
       const fresh = raw();
@@ -240,7 +242,37 @@ export function createErpnext({ db, all, get, put, log, keyPath, checkUrl = publ
       }
     }
     customers.set(phone, { at: now(), data });
+    useAddress(leadId, data);
     return data;
+  }
+  // ERPNext holds the customer's confirmed address: its city and state replace the lead's (a guessed language follows the state)
+  function useAddress(leadId, data) {
+    const lead = get("leads", leadId); if (!lead) return;
+    const a = data?.address, city = String(a?.city || "").trim().slice(0, 200), state = cleanState(a?.state || "");
+    let next = { ...lead, erpAddressAt: new Date(now()).toISOString() };
+    if ((city && city !== lead.city) || (state && state !== lead.state)) {
+      if (city) next.city = city;
+      if (state && state !== lead.state) {
+        next.state = state; delete next.probableState; delete next.probableStateFrom;
+        if (next.languageGuess || !next.language) { delete next.language; delete next.languageGuess; next = withRegion(next) || next; }
+      }
+      next.updatedAt = new Date(now()).toISOString();
+      put("leads", next);
+      log(lead.id, "System", `City and state from ERPNext customer ${data.customerName}: ${[city, state].filter(Boolean).join(", ")}${lead.city || lead.state ? ` (was ${[lead.city, lead.state].filter(Boolean).join(", ")})` : ""}`);
+    } else put("leads", next);
+  }
+  // after each read, a few leads with ERPNext documents get their customer's address (new ones first, then each again weekly)
+  async function fillAddresses(limit = 40) {
+    const week = now() - 7 * 86400000, done = new Set();
+    let n = 0;
+    for (const { phone } of db.prepare("SELECT phone, MAX(modified) m FROM erp_docs WHERE phone<>'' GROUP BY phone ORDER BY m DESC").all()) {
+      if (n >= limit) break;
+      const lead = leadFor(phone);
+      if (!lead || done.has(lead.id) || Date.parse(lead.erpAddressAt || 0) > week) continue;
+      done.add(lead.id); n++;
+      try { await customerFor(lead.id); } catch (e) { report("ERPNext address for a lead failed: " + e.message); }
+    }
+    return n;
   }
 
   // ---------------------------------------------------------------- making a quotation
