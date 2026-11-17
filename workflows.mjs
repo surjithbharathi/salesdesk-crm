@@ -41,6 +41,8 @@ export function valueOf(lead, key) {
   // a new lead has no probable state yet (it is filled every few hours), so a flow works it out from the number's telecom circle
   if (key === "probableState" && !lead.state && !lead.probableState) return CIRCLE_STATE[circleOf(mobileOf(lead))] || "";
   if (key === "probableState" && lead.state) return "";
+  // a language guessed from the state is not the customer's language: flows see only one the Call AI heard or someone chose
+  if (key === "language" && lead.languageGuess) return "";
   return shown(lead[key]);
 }
 // webhook addresses: https on the public internet only, so a flow cannot reach anything inside the server
