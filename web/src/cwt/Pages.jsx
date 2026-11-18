@@ -18,6 +18,8 @@ const MODES = [["auto", "Auto", ""], ["whatsapp", "Phone", "whatsapp"], ["text",
 export function CwtSearch({ params }) {
   const crm = useCrm();
   const [query, setQuery] = useState(params.q || "");
+  // the top search bar's "See all" changes ?q= while this page is open: show that search, not the old box
+  useEffect(() => { if (params.q != null) setQuery(params.q); }, [params.q]);
   const [mode, setMode] = useState("auto");
   const [openId, setOpenId] = useState("");
   const results = useMemo(() => {
