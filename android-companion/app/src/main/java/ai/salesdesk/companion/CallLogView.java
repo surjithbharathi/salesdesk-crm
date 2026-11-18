@@ -30,6 +30,24 @@ final class CallLogView {
         final JSONObject r; final boolean local; final long time;
         Entry(JSONObject r, boolean local, long time) { this.r = r; this.local = local; this.time = time; }
         String key() { return (local ? "l:" : "s:") + r.optString("id") + ":" + time; }
+        // the same call whichever list it comes from: the phone's call id for a call made here, else the CRM's id
+        String hideKey() { String l = r.optString("local_id"); return l.isEmpty() ? "s:" + r.optString("id") : "l:" + l; }
+    }
+
+    // calls deleted from this list: kept on this phone only; the CRM keeps its copy of a synced call
+    private static Set<String> hiddenKeys(MainActivity a) { return new HashSet<>(SecureConfig.prefs(a).getStringSet("hiddenCalls", new HashSet<>())); }
+    static void dropHidden(MainActivity a, List<Entry> calls) { Set<String> h = hiddenKeys(a); if (!h.isEmpty()) calls.removeIf(e -> h.contains(e.hideKey())); }
+    private void delete(Entry e, String who) {
+        boolean synced = !e.r.optBoolean("device") && !(e.local ? e.r.optString("remote_id") : e.r.optString("id")).isEmpty();
+        new android.app.AlertDialog.Builder(a).setTitle("Delete this call?")
+            .setMessage(who + " · " + clock(e.time) + "\n\nIt goes from this list on your phone." + (synced ? " The CRM keeps its copy for the lead's history." : ""))
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Delete", (d, w) -> {
+                Set<String> h = hiddenKeys(a); h.add(e.hideKey());
+                SecureConfig.prefs(a).edit().putStringSet("hiddenCalls", h).apply();
+                expanded = ""; a.render();
+                android.widget.Toast.makeText(a, "Call deleted", android.widget.Toast.LENGTH_SHORT).show();
+            }).show();
     }
 
     private final MainActivity a;
@@ -144,6 +162,8 @@ final class CallLogView {
 
         boolean open = expanded.equals(e.key());
         row.setOnClickListener(x -> { expanded = open ? "" : e.key(); a.render(); });
+        String person = who;
+        row.setOnLongClickListener(x -> { delete(e, person); return true; });
         row.setContentDescription(who + ", " + detail + ", " + clock(e.time) + ". Tap for details.");
         if (open) details(wrap, e, who, known);
         group.addView(wrap);
@@ -170,6 +190,7 @@ final class CallLogView {
         pill(actions, "Log outcome", () -> AfterCallSheet.open(a, lead, who, phone, r.optLong("duration", 0)));
         if (!remote.isEmpty()) pill(actions, "Feedback", () -> a.startActivity(new Intent(a, FeedbackActivity.class).putExtra("callId", remote).putExtra("userId", SecureConfig.prefs(a).getString("userId", ""))));
         pill(actions, "WhatsApp", () -> whatsApp(phone));
+        pill(actions, "Delete", () -> delete(e, who));
         box.addView(scroll);
         wrap.addView(box);
     }
