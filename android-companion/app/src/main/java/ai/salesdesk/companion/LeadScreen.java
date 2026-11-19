@@ -329,8 +329,7 @@ final class LeadScreen {
     private void whatsApp() {
         String d = digits();
         if (d.isEmpty()) { note("This lead has no phone number."); return; }
-        try { a.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/" + d))); }
-        catch (Exception e) { note("WhatsApp is not installed on this phone."); }
+        if (!WhatsAppApp.open(a, d, null)) note("WhatsApp is not installed on this phone.");
     }
 
     private boolean owned() {

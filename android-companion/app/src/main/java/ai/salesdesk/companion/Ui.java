@@ -69,8 +69,7 @@ final class Ui {
     static void whatsApp(MainActivity a, String phone, String text) {
         String d = String.valueOf(phone).replaceAll("[^0-9]", "");
         if (d.length() == 10) d = SecureConfig.prefs(a).getString("country", "91") + d;
-        try { a.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/" + d + (text == null || text.isEmpty() ? "" : "?text=" + Uri.encode(text))))); }
-        catch (Exception e) { a.notice("WhatsApp is not installed on this phone."); }
+        if (!WhatsAppApp.open(a, d, text)) a.notice("WhatsApp is not installed on this phone.");
     }
 
     // ---- stages ----

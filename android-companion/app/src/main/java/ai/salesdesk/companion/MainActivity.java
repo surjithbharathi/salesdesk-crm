@@ -122,6 +122,10 @@ public class MainActivity extends Activity {
         // dark mode: light, dark, or the same as the phone; the screens are built again in the new colours
         text(box,"Dark mode",16,true).setPadding(0,dp(14),0,0);
         for(String[] m:Theme.MODES){boolean on=Theme.mode.equals(m[0]);button(box,(on?"✓  ":"")+m[1],()->{if(on)return;Theme.saveMode(this,m[0]);recreate();});}
+        // which WhatsApp the WhatsApp buttons open, kept on this phone
+        text(box,"Open chats in",16,true).setPadding(0,dp(14),0,0);
+        for(String[] w:WhatsAppApp.CHOICES){boolean on=WhatsAppApp.chosen(this).equals(w[0]);button(box,(on?"✓  ":"")+w[1],()->{if(on)return;WhatsAppApp.choose(this,w[0]);render();});}
+        caption(box,"WhatsApp buttons open this app. If it is not on the phone, the other WhatsApp opens.");
     }
     void render(){applyBars();syncStatus=null;root=column();root.setBackgroundColor(BG);root.setOnApplyWindowInsetsListener((v,insets)->{if(android.os.Build.VERSION.SDK_INT>=30){android.graphics.Insets bars=insets.getInsets(WindowInsets.Type.systemBars()),ime=insets.getInsets(WindowInsets.Type.ime());v.setPadding(bars.left,bars.top,bars.right,Math.max(bars.bottom,ime.bottom));}else v.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());return insets;});setContentView(root);root.requestApplyInsets();if(!SecureConfig.loggedIn(this)){login();return;}
         // the top bar: a large title on white (My day shows the date over a greeting) and one round refresh button

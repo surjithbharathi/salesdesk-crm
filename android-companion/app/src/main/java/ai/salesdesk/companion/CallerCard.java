@@ -136,8 +136,7 @@ final class CallerCard {
         String from = me.isEmpty() ? "" : ", this is " + me.trim().split("\\s+")[0] + (company.isEmpty() ? "" : " from " + company);
         String text = answered ? "Hi" + first + from + ". Thank you for speaking with us. " : out ? "Hi" + first + from + ". I tried calling you just now. " : "Hi" + first + from + ". Sorry I missed your call. ";
         dismiss();
-        try { c.startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://wa.me/" + digits + "?text=" + android.net.Uri.encode(text))).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); }
-        catch (Exception e) { Toast.makeText(c, "WhatsApp is not installed on this phone.", Toast.LENGTH_SHORT).show(); }
+        if (!WhatsAppApp.open(c, digits, text)) Toast.makeText(c, "WhatsApp is not installed on this phone.", Toast.LENGTH_SHORT).show();
     }
     private static String talk(long s) { return s < 60 ? s + " s" : (s / 60) + " min " + (s % 60) + " s"; }
     private static Button plain(Context c, String text, Runnable run) {

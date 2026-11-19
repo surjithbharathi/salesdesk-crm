@@ -79,7 +79,7 @@ final class TodoView {
                 main = Ui.pill(a, it.leadId == null ? "Call back" : "Call now", true, Ui.CALL, () -> Ui.dial(a, it.phone));
                 main.setCompoundDrawablesRelativeWithIntrinsicBounds(MyDayView.tinted(a, R.drawable.ic_phone, Color.WHITE), null, null, null); main.setCompoundDrawablePadding(a.dp(6));
             } else if ("whatsapp".equals(it.action) && it.phone != null && !it.phone.isEmpty()) {
-                main = Ui.pill(a, "WhatsApp", true, 0xff25a35e, () -> { try { a.startActivity(new android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://wa.me/" + it.phone.replaceAll("\\D", "")))); } catch (Exception e) { a.notice("WhatsApp is not on this phone."); } });
+                main = Ui.pill(a, "WhatsApp", true, 0xff25a35e, () -> Ui.whatsApp(a, it.phone, null));
             } else main = Ui.pill(a, "Add follow-up", true, MainActivity.ACCENT, () -> FollowUpSheet.open(a, it.leadId, it.leadName, it.serverId != null ? it.title : it.title.startsWith("Follow up on") ? "Follow up on the quotation" : "Check in", () -> { dismiss(a, it.key, 30 * DAY); serverDismiss(a, it.serverId); a.render(); }));
             main.setTextSize(13); main.setMinHeight(a.dp(40));
             acts.addView(main, new LinearLayout.LayoutParams(-2, a.dp(40)));

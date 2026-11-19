@@ -223,7 +223,7 @@ final class CallLogView {
     }
     private void whatsApp(String phone) {
         String d = phone.replaceAll("[^0-9]", ""); if (d.length() == 10) d = SecureConfig.prefs(a).getString("country", "91") + d;
-        try { a.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/" + d))); } catch (Exception ignored) {}
+        if (!WhatsAppApp.open(a, d, null)) a.notice("WhatsApp is not installed on this phone.");
     }
 
     private static String talk(long s) { return s >= 3600 ? s / 3600 + "h " + (s % 3600) / 60 + "m" : s >= 60 ? s / 60 + "m " + s % 60 + "s" : s + "s"; }
